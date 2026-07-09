@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>CONSPACE ROOMS — a collaboration between Sinaida and UVALISS</title>
+<meta name="description" content="CONSPACE ROOMS — an interactive web installation, a collaboration between Sinaida and UVALISS.">
+<meta name="theme-color" content="#0a0a0a">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="welcome">
+  <h1>CONSPACE ROOMS</h1>
+  <p class="statement">A collaboration between Sinaida and UVALISS.</p>
+  <p class="bio">UVALISS is a visual artist from Saint Petersburg exploring themes of light and
+    darkness, childhood and dreams. Her works are a way of looking into one's own inner world and
+    accepting it as it is.</p>
+
+  <div class="links">
+    <a href="https://sinaida.eu/" target="_blank" rel="noopener">Sinaida</a>
+    <a href="https://www.instagram.com/sin.ai.da" target="_blank" rel="noopener">Sinaida — Instagram</a>
+    <a href="https://uvaliss.ru/" target="_blank" rel="noopener">UVALISS</a>
+    <a href="https://www.instagram.com/uvaliss/" target="_blank" rel="noopener">UVALISS — Instagram</a>
+  </div>
+
+  <p id="capability-result" class="capability">checking your machine…</p>
+
+  <div id="mode-select">
+    <button type="button" data-mode="hands">Gestures (webcam)</button>
+    <button type="button" data-mode="keys">Keyboard + mouse</button>
+    <button type="button" data-mode="light">Light mode (mobile)</button>
+  </div>
+
+  <button type="button" id="btn-enter" class="btn-enter">Enter</button>
+</div>
+
+<div id="webgl-error" class="hidden">
+  <p>Your browser or device doesn't support WebGL2, which this piece needs to run. Try a recent
+  version of Chrome, Firefox, Safari, or Edge on a desktop or modern mobile device.</p>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
