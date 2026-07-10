@@ -67,12 +67,16 @@ async function boot() {
   });
 
   const clock = new THREE.Clock();
+  let t = 0, atmo = null;
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
+    t += dt;
     quality.govern(dt);
     if (player) {
       player.update(dt);
       world.update(player.pos.x, player.pos.y);
+      atmo = atmo ?? window.__app.atmo;
+      if (atmo) atmo.update(dt, t, camera.position);
     } else {
       box.rotation.y += dt * 0.4; // pre-Enter idle
     }
@@ -103,23 +107,22 @@ async function boot() {
   async function startWorld(mode) {
     const { World } = await import('./world.js');
     const { Player } = await import('./player.js');
+    const { createMaterials } = await import('./materials.js');
 
     // swap the placeholder scaffold for labyrinth-appropriate lighting
     scene.remove(ground); ground.geometry.dispose(); ground.material.dispose();
     scene.remove(box); box.geometry.dispose(); box.material.dispose();
-    scene.remove(light); // directional sun makes no sense indoors
+    scene.remove(light); scene.remove(ambient); // sunlit/flat lighting makes no sense indoors; panels light the scene
+    scene.fog = new THREE.FogExp2(0x9aa79a, quality.tier === 0 ? 0.045 : 0.03); // visibility fades ~35m at tier 2
 
-    // camera-attached point light (flat placeholder lighting; #3 refines)
-    const lamp = new THREE.PointLight(0xfff2e6, 9, 22, 1.2);
-    camera.add(lamp);
-    scene.add(camera);
-
+    const atmo = createMaterials(quality);
     const radius = quality.tier === 0 ? 1 : 2;
-    world = new World(scene, { buildRadius: radius, disposeRadius: radius + 1 });
+    world = new World(scene, { buildRadius: radius, disposeRadius: radius + 1, materials: atmo.materials });
     player = new Player(world, camera, canvas, { mode });
     world.update(player.pos.x, player.pos.y); // build initial chunks before first frame
 
     window.__app.world = world;
     window.__app.player = player;
+    window.__app.atmo = atmo;
   }
 }

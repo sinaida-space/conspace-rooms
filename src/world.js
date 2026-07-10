@@ -127,10 +127,11 @@ export class World {
     this.chunks = new Map(); // key "cx:cz" -> THREE.Group
     this._cx = null; this._cz = null;
 
-    // Shared placeholder materials (distinct colours, flat lambert). Shared
-    // across chunks so per-chunk disposal only frees geometry — materials and
-    // geometry count both stay bounded as chunks churn. Aesthetic pass is #3.
-    this.mat = {
+    // Shared materials, one set per chunk-face type so per-chunk disposal only
+    // frees geometry — materials and geometry count both stay bounded as chunks
+    // churn. Caller may pass procedural {wall,floor,ceil} ShaderMaterials
+    // (see materials.js); falls back to flat lambert if none given.
+    this.mat = opts.materials ?? {
       wall: new THREE.MeshLambertMaterial({ color: 0x8b93a3, side: THREE.DoubleSide }),
       floor: new THREE.MeshLambertMaterial({ color: 0x53585f, side: THREE.DoubleSide }),
       ceil: new THREE.MeshLambertMaterial({ color: 0x393c42, side: THREE.DoubleSide }),
