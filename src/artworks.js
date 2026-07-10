@@ -321,19 +321,28 @@ export class Artworks {
     });
   }
 
+  // Cache the in-flight *promise* (not just the resolved value) so concurrent
+  // callers for the same artwork — e.g. multiple chunks that finish their
+  // deck lookup to the same index and build in parallel off sync()'s
+  // un-awaited loop — share one load instead of racing to overwrite each
+  // other's cache entry (which used to leak one GPU texture and could cause
+  // the surviving placement's texture to be disposed out from under it).
   _getTexture(art) {
     const cached = this.texCache.get(art.id);
-    if (cached) { cached.refs++; return Promise.resolve(cached.tex); }
+    if (cached) { cached.refs++; return cached.promise; }
     const halfRes = this.quality.tier === 0;
-    return loadTexture(art.file, halfRes).then(tex => {
-      this.texCache.set(art.id, { tex, refs: 1 });
-      return tex;
-    });
+    const entry = { tex: null, refs: 1, promise: null };
+    entry.promise = loadTexture(art.file, halfRes).then(tex => { entry.tex = tex; return tex; });
+    this.texCache.set(art.id, entry);
+    return entry.promise;
   }
   _releaseTexture(id) {
     const e = this.texCache.get(id);
     if (!e) return;
-    if (--e.refs <= 0) { e.tex.dispose(); this.texCache.delete(id); }
+    if (--e.refs <= 0) {
+      this.texCache.delete(id);
+      e.promise.then(tex => tex.dispose()); // safe even if already resolved
+    }
   }
   _getPlacard(art) {
     const cached = this.placardCache.get(art.id);

@@ -195,6 +195,7 @@ export class World {
     this.scene.remove(group);
     group.traverse(o => { if (o.geometry) o.geometry.dispose(); }); // materials shared → keep
     this.chunks.delete(key);
+    _roomCache.delete(key); // bound the room-layout cache to live chunks (long-run leak fix)
   }
 
   // ── queries ────────────────────────────────────────────────────────────────
