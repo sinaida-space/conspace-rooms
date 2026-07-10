@@ -112,17 +112,17 @@ void main(){
   // plaster: broad tone + fine tooth
   float plaster = fbm(vec2(h, y) * 1.6, oct);
   float tooth   = fbm(vec2(h, y) * 7.5, uTier > 0 ? 3 : 2);
-  float patch   = fbm(vec2(h, y) * 0.32 + 11.0, 3);   // one low-freq field → stain + peel
+  float stainField   = fbm(vec2(h, y) * 0.32 + 11.0, 3);   // one low-freq field → stain + peel
 
   vec3 sage = vec3(0.55, 0.60, 0.53);
   vec3 col = sage * (0.72 + 0.5 * plaster);
   col *= 0.92 + 0.10 * tooth;
 
   // brown water stains
-  float stain = smoothstep(0.55, 0.82, patch);
+  float stain = smoothstep(0.55, 0.82, stainField);
   col = mix(col, vec3(0.30, 0.28, 0.22), stain * 0.55);
   // peeled plaster revealing darker substrate
-  float peel = smoothstep(0.30, 0.16, patch);
+  float peel = smoothstep(0.30, 0.16, stainField);
   col = mix(col, vec3(0.42, 0.38, 0.32), peel * 0.5);
 
   // dark wainscot below 1.0m with vertical panel grooves
@@ -189,9 +189,9 @@ void main(){
 
   vec2 tile = floor(p / SPACING);
   vec2 f = fract(p / SPACING) - 0.5;                    // -0.5..0.5 within a tile
-  vec2 half = 0.5 * vec2(1.6, 0.45) / SPACING;          // panel footprint (m → tile units)
-  float inPanel = step(abs(f.x), half.x) * step(abs(f.y), half.y);
-  float diffuser = 0.6 + 0.4 * smoothstep(half.y, 0.0, abs(f.y)); // tube striping
+  vec2 panelHalf = 0.5 * vec2(1.6, 0.45) / SPACING;          // panel footprint (m → tile units)
+  float inPanel = step(abs(f.x), panelHalf.x) * step(abs(f.y), panelHalf.y);
+  float diffuser = 0.6 + 0.4 * smoothstep(panelHalf.y, 0.0, abs(f.y)); // tube striping
 
   float fl = 1.0;
   if (abs(tile.x - uFlickerTile.x) < 0.5 && abs(tile.y - uFlickerTile.y) < 0.5) fl = uFlickerAmt;
