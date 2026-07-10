@@ -1,0 +1,20 @@
+[
+  { "id": "01", "file": "assets/artworks/01.jpg", "title_ru": "Последнее слово", "title_en": "The Last Word", "orientation": "portrait" },
+  { "id": "02", "file": "assets/artworks/02.jpg", "title_ru": "Детство", "title_en": "Childhood", "orientation": "portrait" },
+  { "id": "03", "file": "assets/artworks/03.jpg", "title_ru": "Движение", "title_en": "Movement", "orientation": "landscape" },
+  { "id": "04", "file": "assets/artworks/04.jpg", "title_ru": "Общественное мнение", "title_en": "Public Opinion", "orientation": "portrait" },
+  { "id": "05", "file": "assets/artworks/05.jpg", "title_ru": "Свобода", "title_en": "Freedom", "orientation": "portrait" },
+  { "id": "06", "file": "assets/artworks/06.jpg", "title_ru": "Я тебя жду", "title_en": "I Am Waiting for You", "orientation": "landscape" },
+  { "id": "07", "file": "assets/artworks/07.jpg", "title_ru": "Воспоминание", "title_en": "Remembrance", "orientation": "landscape" },
+  { "id": "08", "file": "assets/artworks/08.jpg", "title_ru": "Страхи", "title_en": "Fears", "orientation": "portrait" },
+  { "id": "09", "file": "assets/artworks/09.jpg", "title_ru": "Ты только борись", "title_en": "Just Keep Fighting", "orientation": "landscape" },
+  { "id": "10", "file": "assets/artworks/10.jpg", "title_ru": "Рассвет", "title_en": "Dawn", "orientation": "landscape" },
+  { "id": "11", "file": "assets/artworks/11.jpg", "title_ru": "Свети", "title_en": "Shine", "orientation": "portrait" },
+  { "id": "12", "file": "assets/artworks/12.jpg", "title_ru": "Ломо", "title_en": "Lomo", "orientation": "landscape" },
+  { "id": "13", "file": "assets/artworks/13.jpg", "title_ru": "Береги свою свободу", "title_en": "Guard Your Freedom", "orientation": "landscape" },
+  { "id": "14", "file": "assets/artworks/14.jpg", "title_ru": "Место", "title_en": "Place", "orientation": "portrait" },
+  { "id": "15", "file": "assets/artworks/15.jpg", "title_ru": "Мы — многогранник", "title_en": "We Are a Polyhedron", "orientation": "portrait" },
+  { "id": "16", "file": "assets/artworks/16.jpg", "title_ru": "Ограничение", "title_en": "Limitation", "orientation": "portrait" },
+  { "id": "17", "file": "assets/artworks/17.jpg", "title_ru": "Боль", "title_en": "Pain", "orientation": "landscape" },
+  { "id": "18", "file": "assets/artworks/18.jpg", "title_ru": "Обещание", "title_en": "Promise", "orientation": "portrait" }
+]

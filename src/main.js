@@ -57,6 +57,7 @@ async function boot() {
   let hands = null;
   let world = null;
   let player = null;
+  let artworks = null;
 
   window.__app = { scene, camera, renderer, quality };
 
@@ -77,6 +78,7 @@ async function boot() {
       world.update(player.pos.x, player.pos.y);
       atmo = atmo ?? window.__app.atmo;
       if (atmo) atmo.update(dt, t, camera.position);
+      if (artworks) { artworks.sync(); artworks.update(dt); }
     } else {
       box.rotation.y += dt * 0.4; // pre-Enter idle
     }
@@ -108,6 +110,7 @@ async function boot() {
     const { World } = await import('./world.js');
     const { Player } = await import('./player.js');
     const { createMaterials } = await import('./materials.js');
+    const { Artworks } = await import('./artworks.js');
 
     // swap the placeholder scaffold for labyrinth-appropriate lighting
     scene.remove(ground); ground.geometry.dispose(); ground.material.dispose();
@@ -120,9 +123,12 @@ async function boot() {
     world = new World(scene, { buildRadius: radius, disposeRadius: radius + 1, materials: atmo.materials });
     player = new Player(world, camera, canvas, { mode });
     world.update(player.pos.x, player.pos.y); // build initial chunks before first frame
+    artworks = await Artworks.create(scene, world, quality, camera, player, router);
+    artworks.sync();
 
     window.__app.world = world;
     window.__app.player = player;
     window.__app.atmo = atmo;
+    window.__app.artworks = artworks;
   }
 }

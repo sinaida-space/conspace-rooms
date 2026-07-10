@@ -37,6 +37,7 @@ export class Player {
 
     this.keys = Object.create(null);
     this.hand = { palmX: 0, fist: false, present: false };
+    this.locked = false; // set true during artwork inspect (#4) — update() becomes a no-op
 
     this._attach();
     this._apply();
@@ -63,6 +64,8 @@ export class Player {
   }
 
   update(dt) {
+    if (this.locked) return; // inspect mode owns the camera; leave pos/yaw/pitch untouched
+
     // ── yaw from gesture palm (rate control, with deadzone) ──
     if (this.hand.present && Math.abs(this.hand.palmX) > DEADZONE) {
       const p = this.hand.palmX;
