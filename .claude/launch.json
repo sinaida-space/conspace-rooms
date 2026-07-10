@@ -4,8 +4,8 @@
     {
       "name": "conspace",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "4802"],
-      "port": 4802
+      "runtimeArgs": ["-m", "http.server", "4804"],
+      "port": 4804
     }
   ]
 }

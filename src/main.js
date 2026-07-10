@@ -68,21 +68,27 @@ async function boot() {
   });
 
   const clock = new THREE.Clock();
-  let t = 0, atmo = null;
+  let t = 0, atmo = null, post = null, audio = null;
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
     t += dt;
     quality.govern(dt);
+    let speed = 0;
     if (player) {
       player.update(dt);
       world.update(player.pos.x, player.pos.y);
       atmo = atmo ?? window.__app.atmo;
       if (atmo) atmo.update(dt, t, camera.position);
       if (artworks) { artworks.sync(); artworks.update(dt); }
+      speed = player.vel.length();
     } else {
       box.rotation.y += dt * 0.4; // pre-Enter idle
     }
-    renderer.render(scene, camera);
+    post = post ?? window.__app.post;
+    audio = audio ?? window.__app.audio;
+    if (audio) audio.motion(speed);
+    if (post) post.render(scene, camera, dt, t, speed);
+    else renderer.render(scene, camera);
   });
 
   const mode = await ui.waitForEnter();
@@ -91,6 +97,24 @@ async function boot() {
   if (mode === 'light') {
     quality.tier = 0; // light mode contract: tier 0, radius 1, no post, half-res, no webcam
   }
+
+  const { createPost } = await import('./post.js');
+  post = createPost(renderer, quality);
+  addEventListener('resize', () => post.resize());
+  window.__app.post = post;
+
+  const { AudioEngine } = await import('./audio.js');
+  audio = new AudioEngine();
+  audio.start(); // called from the Enter click handler chain — counts as a user gesture
+  window.__app.audio = audio;
+  const muteBtn = document.getElementById('btn-mute');
+  muteBtn.classList.remove('hidden');
+  let muted = false;
+  muteBtn.addEventListener('click', () => {
+    muted = !muted;
+    audio.setMuted(muted);
+    muteBtn.classList.toggle('muted', muted);
+  });
 
   router.attachKeyboardMouse(canvas);
   if (mode === 'light') {

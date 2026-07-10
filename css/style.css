@@ -94,6 +94,15 @@ a:hover { color: var(--fg); }
 
 .mode-legend { display: block; font-size: 0.75em; color: var(--dim); margin-top: 0.3em; letter-spacing: 0.02em; }
 
+.btn-mute {
+  position: fixed; right: 1.2em; bottom: 1.2em; z-index: 8;
+  font-family: inherit; font-size: 1.1em;
+  background: rgba(10,10,10,0.6); color: var(--fg);
+  border: 1px solid var(--dim); border-radius: 50%;
+  width: 2.4em; height: 2.4em; cursor: pointer;
+}
+.btn-mute.muted { color: var(--dim); }
+
 #webgl-error {
   position: fixed; inset: 0; z-index: 20;
   background: var(--bg);
