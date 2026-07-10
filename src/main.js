@@ -15,7 +15,7 @@ if (!caps.webgl2) {
 
 async function boot() {
   ui.showCapabilityResult(caps);
-  ui.initModeSelect(caps.recommendedMode);
+  ui.initModeSelect(caps.recommendedMode, caps);
 
   const quality = new Quality();
 
@@ -88,8 +88,17 @@ async function boot() {
   const mode = await ui.waitForEnter();
   ui.hideWelcome();
 
+  if (mode === 'light') {
+    quality.tier = 0; // light mode contract: tier 0, radius 1, no post, half-res, no webcam
+  }
+
   router.attachKeyboardMouse(canvas);
-  if (caps.touch) router.attachTouch(canvas);
+  if (mode === 'light') {
+    router.attachLightTouch(canvas, state => { if (player) player.setTouch(state); });
+    ui.showTouchHint();
+  } else if (caps.touch) {
+    router.attachTouch(canvas);
+  }
 
   startWorld(mode);
 
@@ -100,6 +109,8 @@ async function boot() {
       await hands.start(); // requests webcam permission, opt-in only
     } catch (e) {
       console.warn('hand tracking unavailable, falling back:', e);
+      if (player) player.mode = 'keys'; // webcam denied/unavailable: fall back to keyboard
+      ui.showToast('Webcam unavailable — switched to keyboard controls.');
     }
   }
 

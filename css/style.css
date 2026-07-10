@@ -56,10 +56,13 @@ a:hover { color: var(--fg); }
   border: 1px solid var(--dim);
   padding: 0.5em 1em;
   cursor: pointer;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.15em;
+  text-align: left;
 }
 #mode-select button.selected {
   color: var(--bg); background: var(--accent); border-color: var(--accent);
 }
+#mode-select button.selected .mode-legend { color: rgba(10,10,10,0.7); }
 
 .btn-enter {
   font-family: inherit; font-size: 1em;
@@ -69,6 +72,27 @@ a:hover { color: var(--fg); }
   cursor: pointer;
 }
 .btn-enter:hover { background: var(--accent); color: var(--bg); }
+
+#touch-hint {
+  position: fixed; left: 50%; top: 6vh; transform: translateX(-50%) translateY(-6px);
+  z-index: 8; max-width: 80vw; text-align: center;
+  font-size: 0.8em; letter-spacing: 0.03em; color: var(--fg);
+  background: rgba(10,10,10,0.6); border: 1px solid rgba(242,242,242,0.3);
+  padding: 0.5em 1em; opacity: 0; pointer-events: none;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+#touch-hint.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.toast {
+  position: fixed; left: 50%; bottom: 6vh; transform: translateX(-50%) translateY(6px);
+  z-index: 9; font-size: 0.85em; color: var(--fg);
+  background: rgba(10,10,10,0.75); border: 1px solid var(--dim);
+  padding: 0.6em 1.2em; opacity: 0; pointer-events: none;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.mode-legend { display: block; font-size: 0.75em; color: var(--dim); margin-top: 0.3em; letter-spacing: 0.02em; }
 
 #webgl-error {
   position: fixed; inset: 0; z-index: 20;

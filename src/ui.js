@@ -46,11 +46,25 @@ export class UI {
       + `${caps.touch ? 'touch detected' : 'no touch'}`;
   }
 
-  initModeSelect(recommendedMode) {
+  initModeSelect(recommendedMode, caps = {}) {
     this.selectedMode = recommendedMode;
     const buttons = Array.from(document.querySelectorAll('#mode-select button'));
+    const hasWebcam = !!navigator.mediaDevices?.getUserMedia;
     buttons.forEach(btn => {
-      btn.classList.toggle('selected', btn.dataset.mode === recommendedMode);
+      const isRecommended = btn.dataset.mode === recommendedMode;
+      btn.classList.toggle('selected', isRecommended);
+      if (isRecommended) {
+        const tag = document.createElement('span');
+        tag.className = 'mode-legend';
+        tag.textContent = 'recommended for this device';
+        btn.appendChild(tag);
+      }
+      if (btn.dataset.mode === 'hands' && !hasWebcam) {
+        const tag = document.createElement('span');
+        tag.className = 'mode-legend';
+        tag.textContent = 'no webcam detected — will fall back to keyboard';
+        btn.appendChild(tag);
+      }
       btn.addEventListener('click', () => {
         buttons.forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
@@ -72,5 +86,31 @@ export class UI {
 
   hideWelcome() {
     $('welcome')?.classList.add('hidden');
+  }
+
+  // Shown once for light-mode touch controls; fades on its own or on first touch.
+  showTouchHint() {
+    if ($('touch-hint')) return;
+    const el = document.createElement('div');
+    el.id = 'touch-hint';
+    el.textContent = 'hold top half to walk · drag to turn · tap artwork to inspect';
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('visible'));
+    const hide = () => { el.classList.remove('visible'); setTimeout(() => el.remove(), 600); };
+    const timer = setTimeout(hide, 5000);
+    addEventListener('touchstart', () => { clearTimeout(timer); hide(); }, { once: true });
+  }
+
+  // Small transient message (e.g. webcam-denied fallback notice).
+  showToast(text) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = text;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('visible'));
+    setTimeout(() => {
+      el.classList.remove('visible');
+      setTimeout(() => el.remove(), 600);
+    }, 3500);
   }
 }

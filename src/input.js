@@ -29,6 +29,38 @@ export class InputRouter {
     canvas.addEventListener('click', () => this.emit('pick'));
   }
 
+  // Light mode: single-touch. Hold anywhere in the top half of the screen to
+  // walk forward; horizontal drag distance from the touch start sets turn
+  // rate; a quick tap (little movement) inspects an artwork.
+  attachLightTouch(canvas, onState) {
+    let id = null, x0 = 0, moved = 0;
+    const state = { forward: false, turn: 0 };
+    const reset = () => { state.forward = false; state.turn = 0; onState(state); };
+    canvas.addEventListener('touchstart', e => {
+      const t = e.changedTouches[0];
+      id = t.identifier; x0 = t.clientX; moved = 0;
+      state.forward = t.clientY < innerHeight / 2;
+      onState(state);
+    }, { passive: true });
+    canvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      const t = Array.from(e.touches).find(tt => tt.identifier === id);
+      if (!t) return;
+      moved += 1;
+      const dx = (t.clientX - x0) / (innerWidth * 0.25);
+      state.turn = Math.max(-1, Math.min(1, dx));
+      state.forward = t.clientY < innerHeight / 2;
+      onState(state);
+    }, { passive: false });
+    canvas.addEventListener('touchend', e => {
+      const t = Array.from(e.changedTouches).find(tt => tt.identifier === id);
+      if (t && moved < 4) this.emit('pick');
+      id = null;
+      reset();
+    });
+    canvas.addEventListener('touchcancel', () => { id = null; reset(); });
+  }
+
   attachTouch(canvas) {
     let drag = null, pinchD = null, moved = false;
     canvas.addEventListener('touchstart', e => {

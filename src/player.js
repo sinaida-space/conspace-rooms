@@ -37,6 +37,7 @@ export class Player {
 
     this.keys = Object.create(null);
     this.hand = { palmX: 0, fist: false, present: false };
+    this.touch = { forward: false, turn: 0 };
     this.locked = false; // set true during artwork inspect (#4) — update() becomes a no-op
 
     this._attach();
@@ -44,6 +45,7 @@ export class Player {
   }
 
   setHand(state) { this.hand = state; }
+  setTouch(state) { this.touch = state; }
 
   _attach() {
     addEventListener('keydown', e => {
@@ -54,7 +56,7 @@ export class Player {
 
     // pointer-lock mouse look (keyboard mode)
     this.canvas.addEventListener('click', () => {
-      if (this.mode !== 'hands') this.canvas.requestPointerLock?.();
+      if (this.mode === 'keys') this.canvas.requestPointerLock?.();
     });
     addEventListener('mousemove', e => {
       if (document.pointerLockElement !== this.canvas) return;
@@ -71,12 +73,19 @@ export class Player {
       const p = this.hand.palmX;
       const s = (p - Math.sign(p) * DEADZONE) / (1 - DEADZONE); // -1..1
       this.yaw -= s * YAW_RATE * dt; // palm-right → turn right
+    } else if (this.mode === 'light' && Math.abs(this.touch.turn) > DEADZONE) {
+      const p = this.touch.turn;
+      const s = (p - Math.sign(p) * DEADZONE) / (1 - DEADZONE);
+      this.yaw -= s * YAW_RATE * dt;
     }
 
     // ── movement intent ──
     let walk, strafe;
     if (this.hand.present) {
       walk = this.hand.fist ? 1 : 0;   // fist walks forward; open hand stops
+      strafe = 0;
+    } else if (this.mode === 'light') {
+      walk = this.touch.forward ? 1 : 0; // hold top half of screen to walk
       strafe = 0;
     } else {
       walk = (this.keys.KeyW || this.keys.ArrowUp ? 1 : 0) - (this.keys.KeyS || this.keys.ArrowDown ? 1 : 0);
