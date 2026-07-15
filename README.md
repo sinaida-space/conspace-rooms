@@ -25,8 +25,8 @@ accepts it as it is.
 | Action                | Desktop (gestures)         | Desktop (keyboard)          | Mobile (light mode)          |
 |------------------------|-----------------------------|-------------------------------|---------------------------------|
 | Walk                   | close a fist                | W / ↑, S / ↓                  | hold top half of the screen     |
-| Turn                   | move palm left/right        | mouse look (click to lock)    | horizontal drag                 |
-| Strafe                 | —                            | A / ←, D / →                  | —                                |
+| Turn                   | move palm left/right        | ← / →, or mouse look (click to lock) | horizontal drag           |
+| Strafe                 | —                            | A / D                         | —                                |
 | Inspect                | pinch                       | E or Space, click             | tap an artwork                  |
 | Close inspect / stop   | open hand / release         | Escape                        | tap again                       |
 

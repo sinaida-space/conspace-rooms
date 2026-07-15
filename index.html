@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>CONSPACE ROOMS — a collaboration between Sinaida and UVALISS</title>
 <meta name="description" content="CONSPACE ROOMS — an interactive web installation, a collaboration between Sinaida and UVALISS.">
-<meta name="theme-color" content="#0a0a0a">
+<meta name="theme-color" content="#010805">
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
 </head>
@@ -15,28 +15,42 @@
 <div id="welcome">
   <h1>CONSPACE ROOMS</h1>
   <p class="statement">A collaboration between Sinaida and UVALISS.</p>
-  <p class="bio">UVALISS is a visual artist from Saint Petersburg exploring themes of light and
-    darkness, childhood and dreams. Her works are a way of looking into one's own inner world and
-    accepting it as it is.</p>
 
-  <div class="links">
-    <a href="https://sinaida.eu/" target="_blank" rel="noopener">Sinaida</a>
-    <a href="https://www.instagram.com/sin.ai.da" target="_blank" rel="noopener">Sinaida — Instagram</a>
-    <a href="https://uvaliss.ru/" target="_blank" rel="noopener">UVALISS</a>
-    <a href="https://www.instagram.com/uvaliss/" target="_blank" rel="noopener">UVALISS — Instagram</a>
+  <div class="credits-panel">
+    <h2>Credits</h2>
+    <div class="artist">
+      <p class="role">Concept &amp; experience design</p>
+      <p class="name">Sinaida</p>
+      <p>Visual artist and digital strategist working across interactive projection, generative
+        systems, and code. This piece is built as a space to walk through, not a level to solve.</p>
+      <div class="links">
+        <a href="https://sinaida.eu/" target="_blank" rel="noopener">sinaida.eu</a>
+        <a href="https://www.instagram.com/sin.ai.da" target="_blank" rel="noopener">@sin.ai.da</a>
+      </div>
+    </div>
+    <div class="artist">
+      <p class="role">Artworks — SOULS series</p>
+      <p class="name">UVALISS (Alisa Feer)</p>
+      <p>Visual artist from Saint Petersburg exploring themes of light and darkness, childhood and
+        dreams. Her works are a way of looking into one's own inner world and accepting it as it
+        is.</p>
+      <div class="links">
+        <a href="https://uvaliss.ru/" target="_blank" rel="noopener">uvaliss.ru</a>
+        <a href="https://www.instagram.com/uvaliss/" target="_blank" rel="noopener">@uvaliss</a>
+      </div>
+    </div>
   </div>
 
-  <p class="credit">Made by Sinaida, with artworks by Alisa Feer.</p>
+  <div id="boot-sequence" aria-live="polite"></div>
+  <p id="capability-result" class="capability hidden">checking your machine…</p>
 
-  <p id="capability-result" class="capability">checking your machine…</p>
-
-  <div id="mode-select">
+  <div id="mode-select" class="hidden">
     <button type="button" data-mode="hands">Gestures (webcam)<span class="mode-legend">palm = steer · fist = walk · pinch = inspect</span></button>
-    <button type="button" data-mode="keys">Keyboard + mouse<span class="mode-legend">WASD/arrows = walk · mouse = look · E = inspect</span></button>
+    <button type="button" data-mode="keys">Keyboard + mouse<span class="mode-legend">WASD/arrows = walk · turn/look = ←/→ or mouse · E = inspect</span></button>
     <button type="button" data-mode="light">Light mode (mobile)<span class="mode-legend">hold top half = walk · drag = turn · tap = inspect</span></button>
   </div>
 
-  <button type="button" id="btn-enter" class="btn-enter">Enter</button>
+  <button type="button" id="btn-enter" class="btn-enter hidden">Enter</button>
 </div>
 
 <button type="button" id="btn-mute" class="btn-mute hidden" aria-label="Mute ambient audio">♪</button>
