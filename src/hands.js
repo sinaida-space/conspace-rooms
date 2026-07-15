@@ -80,9 +80,9 @@ export class HandInput {
           if (g.pinch) anyPinch = true;
           // MediaPipe's handedness label assumes a mirrored (selfie) input
           // frame; our raw getUserMedia frame isn't mirrored, so the label
-          // is the opposite of the user's physical hand — swap it back.
+          // already matches the user's physical hand.
           const rawLabel = res.handednesses?.[i]?.[0]?.categoryName;
-          const side = rawLabel === 'Left' ? 'right' : 'left';
+          const side = rawLabel === 'Left' ? 'left' : 'right';
           if (side === 'left' && !left) left = g;
           else if (side === 'right' && !right) right = g;
         }
