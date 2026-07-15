@@ -10,7 +10,10 @@ const ui = new UI();
 if (!caps.webgl2) {
   ui.showWebglError();
 } else {
-  boot();
+  ui.gateConsent().then(() => {
+    document.getElementById('welcome')?.classList.remove('hidden');
+    boot();
+  });
 }
 
 async function boot() {

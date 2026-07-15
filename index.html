@@ -15,7 +15,20 @@
 <body>
 <canvas id="gl"></canvas>
 
-<div id="welcome">
+<div id="cookie-gate">
+  <div class="consent-panel">
+    <div id="cookie-boot" aria-live="polite"></div>
+    <p class="consent-copy">This experience keeps exactly one small file on your machine — your graphics-quality
+      preference. Nothing else. No trackers, no ad networks, no cookies sold to a stranger. If you choose gesture
+      mode later, your webcam feed is read locally by your browser and is never recorded or sent anywhere.</p>
+    <div class="consent-actions">
+      <button type="button" id="btn-consent" class="btn-enter">Accept necessary only</button>
+      <a href="privacy.html" target="_blank" rel="noopener" class="privacy-link">Privacy policy →</a>
+    </div>
+  </div>
+</div>
+
+<div id="welcome" class="hidden">
   <h1>CONSPACE ROOMS</h1>
   <p class="statement">A collaboration between Sinaida and UVALISS.</p>
 

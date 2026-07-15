@@ -36,6 +36,40 @@ export class UI {
     this.selectedMode = null;
   }
 
+  // Cookie/consent gate: shown once (persisted in localStorage) before the
+  // welcome screen. Resolves immediately if consent was already given.
+  async gateConsent() {
+    let consented = false;
+    try { consented = localStorage.getItem('conspace-consent') === '1'; } catch (e) { /* storage blocked */ }
+    if (consented) {
+      $('cookie-gate')?.classList.add('hidden');
+      return;
+    }
+    await this._typeCookieBoot();
+    await new Promise(res => {
+      $('btn-consent')?.addEventListener('click', () => {
+        try { localStorage.setItem('conspace-consent', '1'); } catch (e) { /* storage blocked */ }
+        res();
+      }, { once: true });
+    });
+    $('cookie-gate')?.classList.add('hidden');
+  }
+
+  async _typeCookieBoot() {
+    const el = $('cookie-boot');
+    if (!el) return;
+    const lines = [
+      'C:\\CONSPACE>SCANNING VISITOR...',
+      'C:\\CONSPACE>GETTING INSIDE YOUR MIND...',
+      'C:\\CONSPACE>LOCATING CONSENT.SYS...',
+      'C:\\CONSPACE>AWAITING PERMISSION_',
+    ];
+    for (const line of lines) {
+      await this._typeLine(el, line);
+      await wait(120);
+    }
+  }
+
   showCapabilityResult(caps) {
     const el = $('capability-result');
     if (!el) return;
@@ -108,6 +142,7 @@ export class UI {
   }
 
   showWebglError() {
+    $('cookie-gate')?.classList.add('hidden');
     $('welcome')?.classList.add('hidden');
     $('webgl-error')?.classList.remove('hidden');
   }
