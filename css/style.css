@@ -61,7 +61,7 @@ body::after {
 }
 
 #mode-select {
-  display: flex; flex-wrap: wrap; gap: 0.6em;
+  display: flex; flex-direction: column; gap: 0.6em;
   margin-bottom: 1.6em;
 }
 #mode-select button {
