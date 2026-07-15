@@ -1,8 +1,9 @@
 :root {
-  --bg: #0a0a0a;
-  --fg: #f2f2f2;
-  --dim: #8a8a8a;
-  --accent: #c1121f;
+  --bg: #010805;
+  --fg: #baffc9;
+  --dim: #3f8a5a;
+  --accent: #39ff6a;
+  --glow: 0 0 4px rgba(57, 255, 106, 0.55), 0 0 12px rgba(57, 255, 106, 0.25);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; background: var(--bg); }
@@ -11,6 +12,8 @@ body {
   color: var(--fg);
   font-size: 16px;
   line-height: 1.5;
+  text-shadow: var(--glow);
+  letter-spacing: 0.02em;
 }
 a { color: var(--accent); }
 a:hover { color: var(--fg); }
@@ -18,9 +21,19 @@ a:hover { color: var(--fg); }
 
 #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 
+/* CRT scanline overlay over the whole DOM layer */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 30; pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 1px, rgba(0,0,0,0.18) 2px, rgba(0,0,0,0) 3px
+  );
+  mix-blend-mode: multiply;
+}
+
 #welcome {
   position: fixed; inset: 0; z-index: 10;
-  background: rgba(10, 10, 10, 0.92);
+  background: rgba(1, 8, 5, 0.92);
   display: flex; flex-direction: column; justify-content: center;
   padding: 6vh 6vw;
   overflow-y: auto;
@@ -62,7 +75,7 @@ a:hover { color: var(--fg); }
 #mode-select button.selected {
   color: var(--bg); background: var(--accent); border-color: var(--accent);
 }
-#mode-select button.selected .mode-legend { color: rgba(10,10,10,0.7); }
+#mode-select button.selected .mode-legend { color: rgba(1,8,5,0.75); }
 
 .btn-enter {
   font-family: inherit; font-size: 1em;
@@ -77,7 +90,7 @@ a:hover { color: var(--fg); }
   position: fixed; left: 50%; top: 6vh; transform: translateX(-50%) translateY(-6px);
   z-index: 8; max-width: 80vw; text-align: center;
   font-size: 0.8em; letter-spacing: 0.03em; color: var(--fg);
-  background: rgba(10,10,10,0.6); border: 1px solid rgba(242,242,242,0.3);
+  background: rgba(1,8,5,0.7); border: 1px solid rgba(186,255,201,0.35);
   padding: 0.5em 1em; opacity: 0; pointer-events: none;
   transition: opacity 0.4s ease, transform 0.4s ease;
 }
@@ -86,7 +99,7 @@ a:hover { color: var(--fg); }
 .toast {
   position: fixed; left: 50%; bottom: 6vh; transform: translateX(-50%) translateY(6px);
   z-index: 9; font-size: 0.85em; color: var(--fg);
-  background: rgba(10,10,10,0.75); border: 1px solid var(--dim);
+  background: rgba(1,8,5,0.8); border: 1px solid var(--dim);
   padding: 0.6em 1.2em; opacity: 0; pointer-events: none;
   transition: opacity 0.4s ease, transform 0.4s ease;
 }
@@ -97,11 +110,48 @@ a:hover { color: var(--fg); }
 .btn-mute {
   position: fixed; right: 1.2em; bottom: 1.2em; z-index: 8;
   font-family: inherit; font-size: 1.1em;
-  background: rgba(10,10,10,0.6); color: var(--fg);
+  background: rgba(1,8,5,0.7); color: var(--fg);
   border: 1px solid var(--dim); border-radius: 50%;
   width: 2.4em; height: 2.4em; cursor: pointer;
 }
 .btn-mute.muted { color: var(--dim); }
+
+#boot-sequence {
+  font-size: 0.85em; color: var(--dim); margin-bottom: 1em;
+  min-height: 6.5em; white-space: pre-wrap;
+}
+#boot-sequence .cursor {
+  display: inline-block; width: 0.55em; background: var(--accent);
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.credits-panel {
+  border: 1px solid var(--dim); padding: 1em 1.2em; margin-bottom: 1.6em; max-width: 60ch;
+}
+.credits-panel h2 {
+  font-size: 0.75em; letter-spacing: 0.16em; color: var(--dim);
+  margin-bottom: 0.8em; text-transform: uppercase;
+}
+.credits-panel .artist { margin-bottom: 1em; }
+.credits-panel .artist:last-child { margin-bottom: 0; }
+.credits-panel .artist .role {
+  font-size: 0.75em; letter-spacing: 0.08em; color: var(--dim); text-transform: uppercase;
+}
+.credits-panel .artist .name { font-size: 1.05em; margin: 0.15em 0 0.3em; }
+.credits-panel .artist p { margin-bottom: 0.3em; font-size: 0.92em; }
+.credits-panel .artist .links { margin-bottom: 0; gap: 0.3em 1em; }
+.credits-panel .artist .links a { font-size: 0.9em; }
+
+#control-hud {
+  position: fixed; left: 50%; bottom: 2vh; transform: translateX(-50%) translateY(6px);
+  z-index: 7; display: flex; gap: 1.2em; flex-wrap: wrap; justify-content: center;
+  font-size: 0.72em; letter-spacing: 0.03em; color: var(--dim);
+  opacity: 0; transition: opacity 0.5s ease, transform 0.5s ease;
+  pointer-events: none; max-width: 90vw;
+}
+#control-hud.visible { opacity: 0.75; transform: translateX(-50%) translateY(0); }
+#control-hud span { border: 1px solid var(--dim); padding: 0.15em 0.6em; }
 
 #webgl-error {
   position: fixed; inset: 0; z-index: 20;

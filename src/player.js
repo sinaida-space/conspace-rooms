@@ -77,6 +77,11 @@ export class Player {
       const p = this.touch.turn;
       const s = (p - Math.sign(p) * DEADZONE) / (1 - DEADZONE);
       this.yaw -= s * YAW_RATE * dt;
+    } else if (this.mode !== 'light' && !this.hand.present) {
+      // arrow-left/right turn the camera directly (independent of pointer-lock
+      // mouse look, which stays optional) — A/D remain strafe below.
+      const turn = (this.keys.ArrowRight ? 1 : 0) - (this.keys.ArrowLeft ? 1 : 0);
+      if (turn) this.yaw -= turn * YAW_RATE * dt;
     }
 
     // ── movement intent ──
@@ -89,7 +94,7 @@ export class Player {
       strafe = 0;
     } else {
       walk = (this.keys.KeyW || this.keys.ArrowUp ? 1 : 0) - (this.keys.KeyS || this.keys.ArrowDown ? 1 : 0);
-      strafe = (this.keys.KeyD || this.keys.ArrowRight ? 1 : 0) - (this.keys.KeyA || this.keys.ArrowLeft ? 1 : 0);
+      strafe = (this.keys.KeyD ? 1 : 0) - (this.keys.KeyA ? 1 : 0);
     }
 
     // heading basis (camera faces -Z at yaw 0)

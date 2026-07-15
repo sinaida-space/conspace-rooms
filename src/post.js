@@ -22,6 +22,22 @@ void main(){
   c.r = texture2D(tScene, uv + vec2(s, 0.0)).r;
   c.g = texture2D(tScene, uv).g;
   c.b = texture2D(tScene, uv - vec2(s, 0.0)).b;
+
+  // cheap phosphor bloom: sample a small ring around this texel, keep only
+  // the brightest neighbours, add back tinted green — a poor-man's
+  // threshold+blur bloom in a single pass (no extra render targets needed)
+  vec3 glow = vec3(0.0);
+  float px = 1.0 / 720.0;
+  for (int i = 0; i < 8; i++) {
+    float a = float(i) * 0.7854; // 2*PI/8
+    vec2 o = vec2(cos(a), sin(a)) * px * 3.0;
+    vec3 samp = texture2D(tScene, uv + o).rgb;
+    float bright = max(samp.r, max(samp.g, samp.b));
+    glow += samp * smoothstep(0.55, 1.0, bright);
+  }
+  glow /= 8.0;
+  c += glow * vec3(0.25, 0.85, 0.45) * 0.55;
+
   // scanlines + noise
   c *= 0.90 + 0.10 * sin(uv.y * 900.0 + uTime * 8.0);
   c += (hash(uv * vec2(1441.0, 907.0) + fract(uTime)) - 0.5) * 0.055;

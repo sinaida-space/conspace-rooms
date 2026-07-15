@@ -14,8 +14,11 @@ if (!caps.webgl2) {
 }
 
 async function boot() {
+  await ui.runBootSequence(caps);
   ui.showCapabilityResult(caps);
   ui.initModeSelect(caps.recommendedMode, caps);
+  document.getElementById('mode-select')?.classList.remove('hidden');
+  document.getElementById('btn-enter')?.classList.remove('hidden');
 
   const quality = new Quality();
 
@@ -25,7 +28,7 @@ async function boot() {
 
   const far = quality.tier === 0 ? 60 : 120;
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x141414, 0.02); // placeholder, tuned by later tasks
+  scene.fog = new THREE.FogExp2(0x081008, 0.02); // placeholder, tuned by later tasks
 
   const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, far);
   camera.position.set(0, 1.6, 4);
@@ -69,10 +72,12 @@ async function boot() {
 
   const clock = new THREE.Clock();
   let t = 0, atmo = null, post = null, audio = null;
+  let prevBobSin = 0, prevYaw = 0;
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
     t += dt;
     quality.govern(dt);
+    audio = audio ?? window.__app.audio;
     let speed = 0;
     if (player) {
       player.update(dt);
@@ -81,11 +86,17 @@ async function boot() {
       if (atmo) atmo.update(dt, t, camera.position);
       if (artworks) { artworks.sync(); artworks.update(dt); }
       speed = player.vel.length();
+      if (audio) {
+        const bobSin = Math.sin(player.bob);
+        if (speed > 0.15 && bobSin > 0 && prevBobSin <= 0) audio.step();
+        prevBobSin = bobSin;
+        audio.turn((player.yaw - prevYaw) / dt);
+      }
+      prevYaw = player.yaw;
     } else {
       box.rotation.y += dt * 0.4; // pre-Enter idle
     }
     post = post ?? window.__app.post;
-    audio = audio ?? window.__app.audio;
     if (audio) audio.motion(speed);
     if (post) post.render(scene, camera, dt, t, speed);
     else renderer.render(scene, camera);
@@ -123,6 +134,7 @@ async function boot() {
   } else if (caps.touch) {
     router.attachTouch(canvas);
   }
+  if (mode === 'keys') ui.showControlHud();
 
   startWorld(mode);
 
@@ -151,7 +163,7 @@ async function boot() {
     scene.remove(ground); ground.geometry.dispose(); ground.material.dispose();
     scene.remove(box); box.geometry.dispose(); box.material.dispose();
     scene.remove(light); scene.remove(ambient); // sunlit/flat lighting makes no sense indoors; panels light the scene
-    scene.fog = new THREE.FogExp2(0x9aa79a, quality.tier === 0 ? 0.045 : 0.03); // visibility fades ~35m at tier 2
+    scene.fog = new THREE.FogExp2(0x0e1f14, quality.tier === 0 ? 0.045 : 0.03); // dreamcore-green haze, visibility fades ~35m at tier 2
 
     const atmo = createMaterials(quality);
     const radius = quality.tier === 0 ? 1 : 2;

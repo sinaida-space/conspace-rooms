@@ -1,5 +1,6 @@
 // Welcome screen: collab statement, links, machine capability check, mode select.
 const $ = id => document.getElementById(id);
+const wait = ms => new Promise(res => setTimeout(res, ms));
 
 // WebGL2 support (hard requirement) + GPU class heuristic + dpr + touch.
 export function detectCapabilities() {
@@ -38,12 +39,45 @@ export class UI {
   showCapabilityResult(caps) {
     const el = $('capability-result');
     if (!el) return;
+    el.classList.remove('hidden');
     if (!caps.webgl2) {
       el.textContent = 'WebGL2 is not available on this device or browser. This experience needs it to run.';
       return;
     }
     el.textContent = `capability check — GPU: ${caps.gpuClass} · pixel ratio: ${caps.dpr} · `
       + `${caps.touch ? 'touch detected' : 'no touch'}`;
+  }
+
+  // DOS-style typed boot sequence, run once on load before the capability
+  // line and mode-select settle in. Purely decorative — resolves regardless
+  // of typing state so it never blocks entry.
+  async runBootSequence(caps) {
+    const el = $('boot-sequence');
+    if (!el) return;
+    const lines = [
+      'C:\\CONSPACE>LOADING KERNEL.SYS...',
+      'C:\\CONSPACE>MOUNTING SOULS.DAT...',
+      `C:\\CONSPACE>GPU: ${(caps.gpuClass || 'unknown').toUpperCase()} — OK`,
+      'C:\\CONSPACE>ROOMS.EXE READY_',
+    ];
+    for (const line of lines) {
+      await this._typeLine(el, line);
+      await wait(120);
+    }
+  }
+
+  _typeLine(el, text) {
+    return new Promise(res => {
+      const row = document.createElement('div');
+      el.appendChild(row);
+      let i = 0;
+      const step = () => {
+        row.textContent = text.slice(0, i);
+        if (i < text.length) { i++; setTimeout(step, 14); }
+        else res();
+      };
+      step();
+    });
   }
 
   initModeSelect(recommendedMode, caps = {}) {
@@ -99,6 +133,19 @@ export class UI {
     const hide = () => { el.classList.remove('visible'); setTimeout(() => el.remove(), 600); };
     const timer = setTimeout(hide, 5000);
     addEventListener('touchstart', () => { clearTimeout(timer); hide(); }, { once: true });
+  }
+
+  // Persistent low-opacity key legend for keyboard mode — mirrors the
+  // touch-hint pattern above but stays up (no auto-fade) since keys mode has
+  // more bindings to remember than touch mode.
+  showControlHud() {
+    if ($('control-hud')) return;
+    const el = document.createElement('div');
+    el.id = 'control-hud';
+    el.innerHTML = '<span>&uarr;/W walk</span><span>&darr;/S back</span>'
+      + '<span>&larr;/&rarr; turn</span><span>A/D strafe</span><span>E inspect</span>';
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('visible'));
   }
 
   // Small transient message (e.g. webcam-denied fallback notice).
