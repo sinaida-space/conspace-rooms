@@ -6,6 +6,9 @@
 <title>CONSPACE ROOMS — a collaboration between Sinaida and UVALISS</title>
 <meta name="description" content="CONSPACE ROOMS — an interactive web installation, a collaboration between Sinaida and UVALISS.">
 <meta name="theme-color" content="#010805">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
 </head>
@@ -45,7 +48,7 @@
   <p id="capability-result" class="capability hidden">checking your machine…</p>
 
   <div id="mode-select" class="hidden">
-    <button type="button" data-mode="hands">Gestures (webcam)<span class="mode-legend">palm = steer · fist = walk · pinch = inspect</span></button>
+    <button type="button" data-mode="hands">Gestures (webcam)<span class="mode-legend">both fists = walk · point right/left hand = turn that way · both palms = stop · spread/pinch palms = zoom · finger pinch = inspect</span></button>
     <button type="button" data-mode="keys">Keyboard + mouse<span class="mode-legend">WASD/arrows = walk · turn/look = ←/→ or mouse · E = inspect</span></button>
     <button type="button" data-mode="light">Light mode (mobile)<span class="mode-legend">hold top half = walk · drag = turn · tap = inspect</span></button>
   </div>

@@ -3,7 +3,8 @@ import { CELL } from './world.js';
 
 // ── conspace-rooms · player.js ──────────────────────────────────────────────
 // First-person walker. Two input paths feeding one controller:
-//   • gestures (HandInput): palmX → yaw rate, fist → walk forward, no hand → stop
+//   • gestures (HandInput): both fists → walk, pointing hand → turn that way,
+//     both open palms → stop (and zoom while held), pinch → inspect
 //   • fallback: WASD + pointer-lock mouse look
 // Capsule-vs-wall collision slides along walls (never clips through). Motion is
 // liminal-calm: soft acceleration, gentle head-bob.
@@ -12,12 +13,15 @@ const EYE = 1.65;          // eye height (m)
 const RADIUS = 0.3;        // capsule radius (m)
 const MAX_SPEED = 2.2;     // m/s
 const ACCEL = 9;           // approach rate toward target velocity (1/s)
-const YAW_RATE = 1.8;      // rad/s at full palm deflection
-const DEADZONE = 0.15;     // palmX deadzone
+const YAW_RATE = 1.8;      // rad/s while turning
+const DEADZONE = 0.15;     // touch-turn deadzone
 const MOUSE_SENS = 0.0022; // rad per pixel
 const PITCH_LIMIT = 1.2;   // rad
 const BOB_AMP = 0.02;      // head-bob amplitude (m)
 const BOB_FREQ = 9;        // head-bob rate scaler
+const MIN_FOV = 35;        // deg — fully zoomed in
+const MAX_FOV = 70;        // deg — resting FOV, matches main.js's initial camera
+const ZOOM_SENS = 240;     // FOV degrees per unit of hand-distance change
 
 export class Player {
   constructor(world, camera, canvas, opts = {}) {
@@ -36,9 +40,13 @@ export class Player {
     this.bob = 0;
 
     this.keys = Object.create(null);
-    this.hand = { palmX: 0, fist: false, present: false };
+    this.hand = {
+      present: false, bothFists: false, pointLeft: false, pointRight: false,
+      stopped: false, pinch: false, zoomDelta: 0,
+    };
     this.touch = { forward: false, turn: 0 };
     this.locked = false; // set true during artwork inspect (#4) — update() becomes a no-op
+    this.fov = camera.fov; // gesture zoom target (both palms open + spread/pinch)
 
     this._attach();
     this._apply();
@@ -46,6 +54,15 @@ export class Player {
 
   setHand(state) { this.hand = state; }
   setTouch(state) { this.touch = state; }
+
+  // Mouse-wheel / two-finger touch pinch ('dive' events) drive the same FOV
+  // zoom as the gesture zoom below — negative delta (scroll up / spread
+  // fingers) zooms in.
+  zoom(delta) {
+    this.fov = clamp(this.fov + delta * 15, MIN_FOV, MAX_FOV);
+    this.camera.fov = this.fov;
+    this.camera.updateProjectionMatrix();
+  }
 
   _attach() {
     addEventListener('keydown', e => {
@@ -68,11 +85,10 @@ export class Player {
   update(dt) {
     if (this.locked) return; // inspect mode owns the camera; leave pos/yaw/pitch untouched
 
-    // ── yaw from gesture palm (rate control, with deadzone) ──
-    if (this.hand.present && Math.abs(this.hand.palmX) > DEADZONE) {
-      const p = this.hand.palmX;
-      const s = (p - Math.sign(p) * DEADZONE) / (1 - DEADZONE); // -1..1
-      this.yaw -= s * YAW_RATE * dt; // palm-right → turn right
+    // ── yaw from a pointing hand (fixed-rate turn, like arrow keys) ──
+    if (this.hand.present) {
+      if (this.hand.pointRight) this.yaw -= YAW_RATE * dt;   // right hand points → turn right
+      else if (this.hand.pointLeft) this.yaw += YAW_RATE * dt; // left hand points → turn left
     } else if (this.mode === 'light' && Math.abs(this.touch.turn) > DEADZONE) {
       const p = this.touch.turn;
       const s = (p - Math.sign(p) * DEADZONE) / (1 - DEADZONE);
@@ -84,10 +100,18 @@ export class Player {
       if (turn) this.yaw -= turn * YAW_RATE * dt;
     }
 
+    // ── gesture zoom: only while both palms are open ("stop"), spreading or
+    // pinching the two hands narrows/widens the FOV ──
+    if (this.hand.present && this.hand.stopped && this.hand.zoomDelta) {
+      this.fov = clamp(this.fov - this.hand.zoomDelta * ZOOM_SENS, MIN_FOV, MAX_FOV);
+      this.camera.fov = this.fov;
+      this.camera.updateProjectionMatrix();
+    }
+
     // ── movement intent ──
     let walk, strafe;
     if (this.hand.present) {
-      walk = this.hand.fist ? 1 : 0;   // fist walks forward; open hand stops
+      walk = this.hand.bothFists ? 1 : 0; // both hands as fists walks forward; anything else stops
       strafe = 0;
     } else if (this.mode === 'light') {
       walk = this.touch.forward ? 1 : 0; // hold top half of screen to walk

@@ -4,13 +4,14 @@
   --dim: #3f8a5a;
   --accent: #39ff6a;
   --glow: 0 0 4px rgba(57, 255, 106, 0.55), 0 0 12px rgba(57, 255, 106, 0.25);
+  --font-dos: 'VT323', ui-monospace, 'SF Mono', 'Courier New', monospace;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; background: var(--bg); }
 body {
-  font-family: ui-monospace, 'SF Mono', 'Courier New', monospace;
+  font-family: var(--font-dos);
   color: var(--fg);
-  font-size: 16px;
+  font-size: 22px;
   line-height: 1.5;
   text-shadow: var(--glow);
   letter-spacing: 0.02em;
@@ -64,23 +65,26 @@ body::after {
   margin-bottom: 1.6em;
 }
 #mode-select button {
-  font-family: inherit; font-size: 0.9em;
-  background: transparent; color: var(--fg);
-  border: 1px solid var(--dim);
-  padding: 0.5em 1em;
+  font-family: inherit; font-size: 1.05em;
+  background: rgba(1,15,9,0.5); color: var(--fg);
+  border: 2px solid var(--dim);
+  border-radius: 3px;
+  padding: 0.6em 1.1em;
   cursor: pointer;
   display: flex; flex-direction: column; align-items: flex-start; gap: 0.15em;
   text-align: left;
 }
+#mode-select button:hover { border-color: var(--accent); }
 #mode-select button.selected {
   color: var(--bg); background: var(--accent); border-color: var(--accent);
 }
 #mode-select button.selected .mode-legend { color: rgba(1,8,5,0.75); }
 
 .btn-enter {
-  font-family: inherit; font-size: 1em;
+  font-family: inherit; font-size: 1.3em;
   background: transparent; color: var(--accent);
-  border: 1px solid var(--accent);
+  border: 2px solid var(--accent);
+  border-radius: 3px;
   padding: 0.6em 1.6em;
   cursor: pointer;
 }
@@ -89,30 +93,30 @@ body::after {
 #touch-hint {
   position: fixed; left: 50%; top: 6vh; transform: translateX(-50%) translateY(-6px);
   z-index: 8; max-width: 80vw; text-align: center;
-  font-size: 0.8em; letter-spacing: 0.03em; color: var(--fg);
-  background: rgba(1,8,5,0.7); border: 1px solid rgba(186,255,201,0.35);
-  padding: 0.5em 1em; opacity: 0; pointer-events: none;
+  font-size: 1em; letter-spacing: 0.03em; color: var(--fg);
+  background: rgba(1,12,7,0.85); border: 2px solid rgba(186,255,201,0.45);
+  padding: 0.6em 1.2em; opacity: 0; pointer-events: none;
   transition: opacity 0.4s ease, transform 0.4s ease;
 }
 #touch-hint.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 .toast {
   position: fixed; left: 50%; bottom: 6vh; transform: translateX(-50%) translateY(6px);
-  z-index: 9; font-size: 0.85em; color: var(--fg);
-  background: rgba(1,8,5,0.8); border: 1px solid var(--dim);
+  z-index: 9; font-size: 1em; color: var(--fg);
+  background: rgba(1,12,7,0.9); border: 2px solid var(--dim);
   padding: 0.6em 1.2em; opacity: 0; pointer-events: none;
   transition: opacity 0.4s ease, transform 0.4s ease;
 }
 .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-.mode-legend { display: block; font-size: 0.75em; color: var(--dim); margin-top: 0.3em; letter-spacing: 0.02em; }
+.mode-legend { display: block; font-size: 0.85em; color: var(--dim); margin-top: 0.3em; letter-spacing: 0.02em; }
 
 .btn-mute {
   position: fixed; right: 1.2em; bottom: 1.2em; z-index: 8;
-  font-family: inherit; font-size: 1.1em;
-  background: rgba(1,8,5,0.7); color: var(--fg);
-  border: 1px solid var(--dim); border-radius: 50%;
-  width: 2.4em; height: 2.4em; cursor: pointer;
+  font-family: inherit; font-size: 1.4em;
+  background: rgba(1,12,7,0.85); color: var(--fg);
+  border: 2px solid var(--dim); border-radius: 50%;
+  width: 2em; height: 2em; cursor: pointer;
 }
 .btn-mute.muted { color: var(--dim); }
 
@@ -141,42 +145,43 @@ body::after {
 .credits-panel .artist .name { font-size: 1.05em; margin: 0.15em 0 0.3em; }
 .credits-panel .artist p { margin-bottom: 0.3em; font-size: 0.92em; }
 .credits-panel .artist .links { margin-bottom: 0; gap: 0.3em 1em; }
-.credits-panel .artist .links a { font-size: 0.9em; }
+.credits-panel .artist .links a { font-size: 1em; }
 
 #control-hud {
   position: fixed; left: 50%; bottom: 2vh; transform: translateX(-50%) translateY(6px);
-  z-index: 7; display: flex; gap: 1.2em; flex-wrap: wrap; justify-content: center;
-  font-size: 0.72em; letter-spacing: 0.03em; color: var(--dim);
+  z-index: 7; display: flex; gap: 1em; flex-wrap: wrap; justify-content: center;
+  font-size: 0.95em; letter-spacing: 0.03em; color: var(--fg);
   opacity: 0; transition: opacity 0.5s ease, transform 0.5s ease;
-  pointer-events: none; max-width: 90vw;
+  pointer-events: none; max-width: 92vw;
 }
-#control-hud.visible { opacity: 0.75; transform: translateX(-50%) translateY(0); }
-#control-hud span { border: 1px solid var(--dim); padding: 0.15em 0.6em; }
-
-#hud-toolbar {
-  position: fixed; right: 1.2em; top: 1.2em; z-index: 8;
-  display: flex; gap: 0.5em;
-}
-#hud-toolbar button {
-  font-family: inherit; font-size: 0.78em; letter-spacing: 0.03em;
-  background: rgba(1,8,5,0.7); color: var(--fg);
-  border: 1px solid var(--dim); border-radius: 3px;
-  padding: 0.45em 0.7em; cursor: pointer;
-  display: flex; align-items: center; gap: 0.4em;
-}
-#hud-toolbar button:hover { border-color: var(--accent); color: var(--accent); }
-#hud-toolbar button span { display: none; }
-@media (min-width: 640px) { #hud-toolbar button span { display: inline; } }
+#control-hud.visible { opacity: 0.9; transform: translateX(-50%) translateY(0); }
+#control-hud span { border: 1px solid var(--dim); padding: 0.2em 0.7em; background: rgba(1,12,7,0.7); }
 
 #hand-legend {
   position: fixed; left: 50%; bottom: 2vh; transform: translateX(-50%) translateY(6px);
-  z-index: 7; display: flex; gap: 1.2em; flex-wrap: wrap; justify-content: center;
-  font-size: 0.72em; letter-spacing: 0.03em; color: var(--dim);
+  z-index: 7; display: flex; gap: 1em; flex-wrap: wrap; justify-content: center;
+  font-size: 0.9em; letter-spacing: 0.03em; color: var(--fg);
   opacity: 0; transition: opacity 0.5s ease, transform 0.5s ease;
-  pointer-events: none; max-width: 90vw;
+  pointer-events: none; max-width: 92vw;
 }
-#hand-legend.visible { opacity: 0.75; transform: translateX(-50%) translateY(0); }
-#hand-legend span { border: 1px solid var(--dim); padding: 0.15em 0.6em; }
+#hand-legend.visible { opacity: 0.9; transform: translateX(-50%) translateY(0); }
+#hand-legend span { border: 1px solid var(--dim); padding: 0.2em 0.7em; background: rgba(1,12,7,0.7); }
+
+#hud-toolbar {
+  position: fixed; right: 1em; top: 1em; z-index: 8;
+  display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5em;
+  max-width: 96vw;
+}
+#hud-toolbar button {
+  font-family: inherit; font-size: 1.15em; letter-spacing: 0.03em;
+  background: rgba(1,15,9,0.88); color: var(--fg);
+  border: 2px solid var(--dim); border-radius: 4px;
+  padding: 0.4em 0.85em; cursor: pointer;
+  display: flex; align-items: center; gap: 0.4em; white-space: nowrap;
+}
+#hud-toolbar button:hover, #hud-toolbar button:focus-visible {
+  border-color: var(--accent); color: var(--bg); background: var(--accent);
+}
 
 #farewell {
   position: fixed; inset: 0; z-index: 25;

@@ -127,6 +127,7 @@ async function boot() {
     muteBtn.classList.toggle('muted', muted);
   });
 
+  router.on('dive', delta => { if (player) player.zoom(delta); });
   router.attachKeyboardMouse(canvas);
   if (mode === 'light') {
     router.attachLightTouch(canvas, state => { if (player) player.setTouch(state); });

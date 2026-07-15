@@ -153,8 +153,9 @@ export class UI {
     if ($('hand-legend')) return;
     const el = document.createElement('div');
     el.id = 'hand-legend';
-    el.innerHTML = '<span>palm left/right = turn</span><span>fist = walk</span>'
-      + '<span>open hand = stop</span><span>pinch = inspect</span>';
+    el.innerHTML = '<span>both fists = walk</span><span>point right hand = turn right</span>'
+      + '<span>point left hand = turn left</span><span>both palms = stop</span>'
+      + '<span>spread/pinch palms = zoom</span><span>finger pinch = inspect</span>';
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('visible'));
   }

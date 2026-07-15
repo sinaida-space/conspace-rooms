@@ -24,11 +24,12 @@ accepts it as it is.
 
 | Action                | Desktop (gestures)         | Desktop (keyboard)          | Mobile (light mode)          |
 |------------------------|-----------------------------|-------------------------------|---------------------------------|
-| Walk                   | close a fist                | W / ↑, S / ↓                  | hold top half of the screen     |
-| Turn                   | move palm left/right        | ← / →, or mouse look (click to lock) | horizontal drag           |
+| Walk                   | both hands as fists         | W / ↑, S / ↓                  | hold top half of the screen     |
+| Turn                   | point right hand = turn right, point left hand = turn left | ← / →, or mouse look (click to lock) | horizontal drag |
+| Zoom                   | both palms open, spread/pinch the two hands | mouse wheel         | two-finger pinch (desktop-touch fallback) |
 | Strafe                 | —                            | A / D                         | —                                |
-| Inspect                | pinch                       | E or Space, click             | tap an artwork                  |
-| Close inspect / stop   | open hand / release         | Escape                        | tap again                       |
+| Inspect                | thumb-index pinch (either hand) | E or Space, click        | tap an artwork                  |
+| Close inspect / stop   | both palms open              | Escape                        | tap again                       |
 
 Gesture mode requests webcam access on entry (opt-in); if it's denied or unavailable the
 experience falls back to keyboard controls automatically. Light mode is auto-suggested on
