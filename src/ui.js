@@ -148,6 +148,67 @@ export class UI {
     requestAnimationFrame(() => el.classList.add('visible'));
   }
 
+  // Persistent low-opacity gesture legend for hands mode — mirrors control-hud.
+  showHandLegend() {
+    if ($('hand-legend')) return;
+    const el = document.createElement('div');
+    el.id = 'hand-legend';
+    el.innerHTML = '<span>palm left/right = turn</span><span>fist = walk</span>'
+      + '<span>open hand = stop</span><span>pinch = inspect</span>';
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('visible'));
+  }
+
+  // Fullscreen / main-screen / finish toolbar, shown once the mode is chosen.
+  showExperienceControls({ onFinish } = {}) {
+    const toolbar = $('hud-toolbar');
+    if (!toolbar) return;
+    toolbar.classList.remove('hidden');
+
+    const fsBtn = $('btn-fullscreen');
+    const syncFsLabel = () => {
+      const active = !!document.fullscreenElement;
+      fsBtn.innerHTML = active ? '⛶ <span>Exit fullscreen</span>' : '⛶ <span>Fullscreen</span>';
+    };
+    fsBtn.addEventListener('click', () => {
+      if (document.fullscreenElement) document.exitFullscreen?.();
+      else document.documentElement.requestFullscreen?.().catch(() => {});
+    });
+    document.addEventListener('fullscreenchange', syncFsLabel);
+
+    $('btn-main-screen').addEventListener('click', () => {
+      if (!confirm('Leave the labyrinth and return to the main screen?')) return;
+      location.reload();
+    });
+
+    $('btn-finish').addEventListener('click', () => onFinish?.());
+  }
+
+  // Farewell screen: one existential-dread question drawn at random each
+  // time, plus credits/links. Purely a DOM overlay — caller is responsible
+  // for pausing movement/audio before calling this.
+  showFarewell() {
+    const questions = [
+      'If the room forgot you the moment you left it, would you have been here at all?',
+      "Name the version of yourself you buried to become who is reading this. Does it know it's dead?",
+      'When you finally stop moving, what will you have been walking toward?',
+      'Which of your memories would you erase first, if erasing it meant losing the person who gave it to you?',
+      "If your soul were hung on this wall tonight, framed and lit — would you recognize it, or is it a stranger you're required to love?",
+      'What part of you only exists because someone else is watching?',
+      "You will forget this labyrinth. What makes you so sure you won't forget yourself the same way?",
+    ];
+    const q = questions[Math.floor(Math.random() * questions.length)];
+    const qEl = $('farewell-question');
+    if (qEl) qEl.textContent = q;
+    $('hud-toolbar')?.classList.add('hidden');
+    $('btn-mute')?.classList.add('hidden');
+    $('hand-legend')?.remove();
+    $('control-hud')?.remove();
+    $('touch-hint')?.remove();
+    $('farewell')?.classList.remove('hidden');
+    $('btn-walk-again')?.addEventListener('click', () => location.reload(), { once: true });
+  }
+
   // Small transient message (e.g. webcam-denied fallback notice).
   showToast(text) {
     const el = document.createElement('div');

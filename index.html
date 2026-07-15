@@ -55,9 +55,35 @@
 
 <button type="button" id="btn-mute" class="btn-mute hidden" aria-label="Mute ambient audio">♪</button>
 
+<div id="hud-toolbar" class="hidden">
+  <button type="button" id="btn-fullscreen" aria-label="Toggle fullscreen">⛶ <span>Fullscreen</span></button>
+  <button type="button" id="btn-main-screen" aria-label="Back to main screen">⌂ <span>Main screen</span></button>
+  <button type="button" id="btn-finish" aria-label="Finish the experience">✕ <span>Finish</span></button>
+</div>
+
 <div id="webgl-error" class="hidden">
   <p>Your browser or device doesn't support WebGL2, which this piece needs to run. Try a recent
   version of Chrome, Firefox, Safari, or Edge on a desktop or modern mobile device.</p>
+</div>
+
+<div id="farewell" class="hidden">
+  <div class="farewell-inner">
+    <p class="farewell-q" id="farewell-question"></p>
+    <div class="farewell-credits">
+      <p class="role">CONSPACE ROOMS — a collaboration between Sinaida and UVALISS</p>
+      <div class="links">
+        <a href="https://sinaida.eu/" target="_blank" rel="noopener">sinaida.eu</a>
+        <a href="https://www.instagram.com/sin.ai.da" target="_blank" rel="noopener">@sin.ai.da</a>
+        <a href="https://uvaliss.ru/" target="_blank" rel="noopener">uvaliss.ru</a>
+        <a href="https://www.instagram.com/uvaliss/" target="_blank" rel="noopener">@uvaliss</a>
+      </div>
+      <p class="role playlist-label">A companion soundtrack for sitting with it</p>
+      <div class="links">
+        <a href="https://open.spotify.com/playlist/0145rQE2XluEkz3YWbEQLp?si=6c33fb59e0ad4ff4" target="_blank" rel="noopener">Spotify playlist ↗</a>
+      </div>
+    </div>
+    <button type="button" id="btn-walk-again" class="btn-enter">Walk again</button>
+  </div>
 </div>
 
 <script type="module" src="src/main.js"></script>

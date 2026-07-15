@@ -135,6 +135,18 @@ async function boot() {
     router.attachTouch(canvas);
   }
   if (mode === 'keys') ui.showControlHud();
+  if (mode === 'hands') ui.showHandLegend();
+
+  ui.showExperienceControls({
+    onFinish: () => {
+      if (player) player.locked = true;
+      document.exitPointerLock?.();
+      audio?.setMuted(true);
+      muteBtn.classList.add('muted');
+      muted = true;
+      ui.showFarewell();
+    },
+  });
 
   startWorld(mode);
 

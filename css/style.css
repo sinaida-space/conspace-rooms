@@ -153,6 +153,51 @@ body::after {
 #control-hud.visible { opacity: 0.75; transform: translateX(-50%) translateY(0); }
 #control-hud span { border: 1px solid var(--dim); padding: 0.15em 0.6em; }
 
+#hud-toolbar {
+  position: fixed; right: 1.2em; top: 1.2em; z-index: 8;
+  display: flex; gap: 0.5em;
+}
+#hud-toolbar button {
+  font-family: inherit; font-size: 0.78em; letter-spacing: 0.03em;
+  background: rgba(1,8,5,0.7); color: var(--fg);
+  border: 1px solid var(--dim); border-radius: 3px;
+  padding: 0.45em 0.7em; cursor: pointer;
+  display: flex; align-items: center; gap: 0.4em;
+}
+#hud-toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+#hud-toolbar button span { display: none; }
+@media (min-width: 640px) { #hud-toolbar button span { display: inline; } }
+
+#hand-legend {
+  position: fixed; left: 50%; bottom: 2vh; transform: translateX(-50%) translateY(6px);
+  z-index: 7; display: flex; gap: 1.2em; flex-wrap: wrap; justify-content: center;
+  font-size: 0.72em; letter-spacing: 0.03em; color: var(--dim);
+  opacity: 0; transition: opacity 0.5s ease, transform 0.5s ease;
+  pointer-events: none; max-width: 90vw;
+}
+#hand-legend.visible { opacity: 0.75; transform: translateX(-50%) translateY(0); }
+#hand-legend span { border: 1px solid var(--dim); padding: 0.15em 0.6em; }
+
+#farewell {
+  position: fixed; inset: 0; z-index: 25;
+  background: rgba(1, 8, 5, 0.96);
+  display: flex; align-items: center; justify-content: center;
+  padding: 6vh 6vw; overflow-y: auto;
+}
+.farewell-inner { max-width: 62ch; text-align: center; }
+.farewell-q {
+  font-size: clamp(1.15rem, 3vw, 1.5rem);
+  line-height: 1.5; letter-spacing: 0.01em;
+  margin-bottom: 2em;
+}
+.farewell-credits { margin-bottom: 2em; }
+.farewell-credits .role {
+  font-size: 0.75em; letter-spacing: 0.1em; color: var(--dim);
+  text-transform: uppercase; margin-bottom: 0.6em;
+}
+.farewell-credits .playlist-label { margin-top: 1.2em; }
+.farewell-credits .links { justify-content: center; margin-bottom: 0; }
+
 #webgl-error {
   position: fixed; inset: 0; z-index: 20;
   background: var(--bg);
