@@ -35,7 +35,7 @@ body::after {
 #cookie-gate {
   position: fixed; inset: 0; z-index: 15;
   background: rgba(1, 8, 5, 0.96);
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: safe center; justify-content: safe center;
   padding: 6vh 6vw; overflow-y: auto;
 }
 .consent-panel {
@@ -54,7 +54,7 @@ body::after {
 #welcome {
   position: fixed; inset: 0; z-index: 10;
   background: rgba(1, 8, 5, 0.92);
-  display: flex; flex-direction: column; justify-content: center;
+  display: flex; flex-direction: column; justify-content: safe center;
   padding: 6vh 6vw;
   overflow-y: auto;
 }
@@ -205,7 +205,7 @@ body::after {
 #farewell {
   position: fixed; inset: 0; z-index: 25;
   background: rgba(1, 8, 5, 0.96);
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: safe center; justify-content: safe center;
   padding: 6vh 6vw; overflow-y: auto;
 }
 .farewell-inner { max-width: 62ch; text-align: center; }
