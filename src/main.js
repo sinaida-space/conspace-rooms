@@ -105,12 +105,12 @@ async function boot() {
     else renderer.render(scene, camera);
   });
 
-  const mode = await ui.waitForEnter();
+  const { mode, cameraStream } = await ui.waitForEnter();
   ui.hideWelcome();
 
-  if (mode === 'light') {
-    quality.tier = 0; // light mode contract: tier 0, radius 1, no post, half-res, no webcam
-  }
+  if (mode === 'light' && caps.device.isPhone) {
+    quality.tier = 0; // light mode contract on phones: tier 0, radius 1, no post, half-res, no webcam
+  } // tablets in light mode keep their detected tier; the FPS governor steps it down if needed
 
   const { createPost } = await import('./post.js');
   post = createPost(renderer, quality);
@@ -132,14 +132,39 @@ async function boot() {
 
   router.on('dive', delta => { if (player) player.zoom(delta); });
   router.attachKeyboardMouse(canvas);
+  let lightTouchAttached = false;
   if (mode === 'light') {
     router.attachLightTouch(canvas, state => { if (player) player.setTouch(state); });
+    lightTouchAttached = true;
     ui.showTouchHint();
   } else if (caps.touch) {
     router.attachTouch(canvas);
   }
   if (mode === 'keys') ui.showControlHud();
   if (mode === 'hands') ui.showHandLegend();
+
+  // Camera failure fallback, shared between the initial start() rejection and
+  // a later onError report from HandInput (task #2 may report a failure
+  // after start() already resolved). Guarded to run at most once.
+  let cameraFallbackDone = false;
+  function handleCameraFailure() {
+    if (cameraFallbackDone) return;
+    cameraFallbackDone = true;
+    if (caps.device.isTouch) {
+      if (player) player.mode = 'light';
+      if (!lightTouchAttached) {
+        router.attachLightTouch(canvas, state => { if (player) player.setTouch(state); });
+        lightTouchAttached = true;
+      }
+      ui.showTouchHint();
+      document.getElementById('hand-legend')?.remove();
+      ui.showToast('Camera unavailable. Switched to touch controls.');
+    } else {
+      if (player) player.mode = 'keys';
+      ui.showControlHud();
+      ui.showToast('Camera unavailable. Switched to keyboard controls.');
+    }
+  }
 
   ui.showExperienceControls({
     onFinish: () => {
@@ -157,12 +182,12 @@ async function boot() {
   if (mode === 'hands') {
     try {
       const { HandInput } = await import('./hands.js');
-      hands = new HandInput(state => { if (player) player.setHand(state); });
-      await hands.start(); // requests webcam permission, opt-in only
+      hands = new HandInput(state => { if (player) player.setHand(state); }, handleCameraFailure);
+      const stream = cameraStream ? await cameraStream : null;
+      await hands.start(stream); // uses the pre-authorized stream from the Enter click, opt-in only
     } catch (e) {
       console.warn('hand tracking unavailable, falling back:', e);
-      if (player) player.mode = 'keys'; // webcam denied/unavailable: fall back to keyboard
-      ui.showToast('Webcam unavailable — switched to keyboard controls.');
+      handleCameraFailure();
     }
   }
 

@@ -1,4 +1,6 @@
 // Welcome screen: collab statement, links, machine capability check, mode select.
+import { detectDevice } from './device.js';
+
 const $ = id => document.getElementById(id);
 const wait = ms => new Promise(res => setTimeout(res, ms));
 
@@ -16,19 +18,19 @@ export function detectCapabilities() {
   } catch (e) { /* no webgl2 */ }
 
   const dpr = window.devicePixelRatio || 1;
-  const touch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
-    || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820);
+  const device = detectDevice();
+  const touch = device.isTouch;
+  const isMobile = device.isMobile;
 
   let gpuClass = 'unknown';
   if (/(intel|iris|uhd|hd graphics)/i.test(gpu) && !/(arc)/i.test(gpu)) gpuClass = 'low';
   else if (gpu) gpuClass = 'high';
 
   let recommendedMode = 'keys';
-  if (isMobile) recommendedMode = 'light';
-  else if (webgl2 && gpuClass !== 'low' && !!navigator.mediaDevices?.getUserMedia) recommendedMode = 'hands';
+  if (device.isMobile || device.coarsePointer) recommendedMode = 'light';
+  else if (webgl2 && gpuClass !== 'low' && device.hasCamera) recommendedMode = 'hands';
 
-  return { webgl2, gpu, dpr, touch, isMobile, gpuClass, recommendedMode };
+  return { webgl2, gpu, dpr, touch, isMobile, gpuClass, recommendedMode, device };
 }
 
 export class UI {
@@ -147,9 +149,21 @@ export class UI {
     $('webgl-error')?.classList.remove('hidden');
   }
 
+  // Resolves { mode, cameraStream }. cameraStream is a Promise<MediaStream> or
+  // null, created synchronously inside the click listener (before any await)
+  // so iOS user-activation is still live when getUserMedia is called. A
+  // no-op .catch() is attached so a rejection here is never unhandled; the
+  // caller (main.js) awaits the same promise and handles the real error.
   waitForEnter() {
     return new Promise(res => {
-      $('btn-enter').addEventListener('click', () => res(this.selectedMode));
+      $('btn-enter').addEventListener('click', () => {
+        let cameraStream = null;
+        if (this.selectedMode === 'hands' && navigator.mediaDevices?.getUserMedia) {
+          cameraStream = navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' } });
+          cameraStream.catch(() => {});
+        }
+        res({ mode: this.selectedMode, cameraStream });
+      });
     });
   }
 

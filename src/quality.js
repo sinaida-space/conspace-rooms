@@ -1,5 +1,7 @@
 // One dial every module reads. Tiers: 2 high, 1 medium, 0 low.
 // Generalized foundation module — tiers carry no artwork-specific fields.
+import { detectDevice } from './device.js';
+
 const TABLE = [
   { name: 'LOW',    pixelRatio: 1,   post: false, particles: 900,  segments: 16 },
   { name: 'MEDIUM', pixelRatio: 1.5, post: true,  particles: 2000, segments: 24 },
@@ -8,8 +10,8 @@ const TABLE = [
 
 export class Quality {
   constructor() {
-    this.isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
-      || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820);
+    this.device = detectDevice();
+    this.isMobile = this.device.isMobile;
     const forced = new URLSearchParams(location.search).get('tier');
     let saved = null;
     try { saved = localStorage.getItem('conspace-tier'); } catch (e) { /* storage blocked */ }
@@ -25,7 +27,8 @@ export class Quality {
   }
 
   detect() {
-    if (this.isMobile) return 0;
+    if (this.device.isPhone) return 0; // phones: fixed low tier, governor cannot step up
+    if (this.device.isTablet) return 1; // tablets: mid tier, governor may still step down
     // probe GPU name via a throwaway context
     let gpu = '';
     try {
@@ -41,7 +44,7 @@ export class Quality {
 
   get p() { return TABLE[this.tier]; }
   get canHands() { // hand tracking only where the GPU can afford a second model
-    return !this.isMobile && this.tier >= 1 && !!(navigator.mediaDevices?.getUserMedia);
+    return !this.device.isPhone && this.tier >= 1 && this.device.hasCamera;
   }
 
   // called each frame with delta time; steps tier down under sustained low FPS
