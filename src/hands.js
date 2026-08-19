@@ -193,7 +193,10 @@ export class HandInput {
         return;
       }
 
-      this._clearWatchdog();
+      // Re-arm rather than clear: a stream that freezes after working for a
+      // while stops producing new currentTime values, so the loop stops
+      // detecting and the sliding watchdog fires the fallback.
+      this._armWatchdog();
 
       const n = res.landmarks ? res.landmarks.length : 0;
 

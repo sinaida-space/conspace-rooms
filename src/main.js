@@ -146,11 +146,17 @@ async function boot() {
   // Camera failure fallback, shared between the initial start() rejection and
   // a later onError report from HandInput (task #2 may report a failure
   // after start() already resolved). Guarded to run at most once.
+  // startWorld() is deliberately not awaited, so the camera can fail before
+  // Player exists. activeMode is the single source of truth for the mode the
+  // Player is eventually constructed with; writing only player.mode would be
+  // a no-op in that race and would leave a touch user unable to move.
+  let activeMode = mode;
   let cameraFallbackDone = false;
   function handleCameraFailure() {
     if (cameraFallbackDone) return;
     cameraFallbackDone = true;
     if (caps.device.isTouch) {
+      activeMode = 'light';
       if (player) player.mode = 'light';
       if (!lightTouchAttached) {
         router.attachLightTouch(canvas, state => { if (player) player.setTouch(state); });
@@ -160,6 +166,7 @@ async function boot() {
       document.getElementById('hand-legend')?.remove();
       ui.showToast('Camera unavailable. Switched to touch controls.');
     } else {
+      activeMode = 'keys';
       if (player) player.mode = 'keys';
       ui.showControlHud();
       ui.showToast('Camera unavailable. Switched to keyboard controls.');
@@ -169,6 +176,7 @@ async function boot() {
   ui.showExperienceControls({
     onFinish: () => {
       if (player) player.locked = true;
+      hands?.stop(); // release the camera and the detection loop, not just the view
       document.exitPointerLock?.();
       audio?.setMuted(true);
       muteBtn.classList.add('muted');
@@ -177,7 +185,7 @@ async function boot() {
     },
   });
 
-  startWorld(mode);
+  startWorld();
 
   if (mode === 'hands') {
     try {
@@ -194,7 +202,7 @@ async function boot() {
   // dev hook
   window.__router = router;
 
-  async function startWorld(mode) {
+  async function startWorld() {
     const { World } = await import('./world.js');
     const { Player } = await import('./player.js');
     const { createMaterials } = await import('./materials.js');
@@ -209,7 +217,7 @@ async function boot() {
     const atmo = createMaterials(quality);
     const radius = quality.tier === 0 ? 1 : 2;
     world = new World(scene, { buildRadius: radius, disposeRadius: radius + 1, materials: atmo.materials });
-    player = new Player(world, camera, canvas, { mode });
+    player = new Player(world, camera, canvas, { mode: activeMode });
     world.update(player.pos.x, player.pos.y); // build initial chunks before first frame
     artworks = await Artworks.create(scene, world, quality, camera, player, router);
     artworks.sync();
