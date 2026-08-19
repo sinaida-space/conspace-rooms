@@ -117,11 +117,14 @@ export class UI {
   }
 
   initModeSelect(recommendedMode, caps = {}) {
+    const isTouch = !!(caps.device?.isTouch ?? caps.touch);
+    if (isTouch && recommendedMode === 'hands') recommendedMode = 'light';
     this.selectedMode = recommendedMode;
     const buttons = Array.from(document.querySelectorAll('#mode-select button'));
     const hasWebcam = !!navigator.mediaDevices?.getUserMedia;
     buttons.forEach(btn => {
-      const isRecommended = btn.dataset.mode === recommendedMode;
+      const isHands = btn.dataset.mode === 'hands';
+      const isRecommended = btn.dataset.mode === recommendedMode && !(isHands && isTouch);
       btn.classList.toggle('selected', isRecommended);
       if (isRecommended) {
         const tag = document.createElement('span');
@@ -129,10 +132,12 @@ export class UI {
         tag.textContent = 'recommended for this device';
         btn.appendChild(tag);
       }
-      if (btn.dataset.mode === 'hands' && !hasWebcam) {
+      if (isHands && !hasWebcam) {
         const tag = document.createElement('span');
         tag.className = 'mode-legend';
-        tag.textContent = 'no webcam detected — will fall back to keyboard';
+        tag.textContent = isTouch
+          ? 'no camera detected — this option will fall back to touch controls'
+          : 'no camera detected — this option will fall back to keyboard';
         btn.appendChild(tag);
       }
       btn.addEventListener('click', () => {
