@@ -99,6 +99,24 @@ body::after {
 }
 #mode-select button.selected .mode-legend { color: rgba(1,8,5,0.75); }
 
+#mode-select button.mode-secondary {
+  border-color: var(--dim); color: var(--dim); background: transparent;
+}
+#mode-select button.mode-secondary .mode-legend { color: var(--dim); }
+#mode-select button.mode-secondary:hover { border-color: var(--fg); }
+#mode-select button.mode-secondary.selected {
+  color: var(--fg); background: rgba(63,138,90,0.18); border-color: var(--dim);
+}
+#mode-select button.mode-secondary.selected .mode-legend { color: var(--dim); }
+
+.gesture-note {
+  color: var(--dim);
+  font-size: 0.85em;
+  line-height: 1.5;
+  max-width: 46ch;
+  margin-bottom: 1.4em;
+}
+
 .btn-enter {
   font-family: inherit; font-size: 1.3em;
   background: transparent; color: var(--accent);

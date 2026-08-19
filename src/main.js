@@ -105,12 +105,12 @@ async function boot() {
     else renderer.render(scene, camera);
   });
 
-  const mode = await ui.waitForEnter();
+  const { mode, cameraStream } = await ui.waitForEnter();
   ui.hideWelcome();
 
-  if (mode === 'light') {
-    quality.tier = 0; // light mode contract: tier 0, radius 1, no post, half-res, no webcam
-  }
+  if (mode === 'light' && caps.device.isPhone) {
+    quality.tier = 0; // light mode contract on phones: tier 0, radius 1, no post, half-res, no webcam
+  } // tablets in light mode keep their detected tier; the FPS governor steps it down if needed
 
   const { createPost } = await import('./post.js');
   post = createPost(renderer, quality);
@@ -132,8 +132,10 @@ async function boot() {
 
   router.on('dive', delta => { if (player) player.zoom(delta); });
   router.attachKeyboardMouse(canvas);
+  let lightTouchAttached = false;
   if (mode === 'light') {
     router.attachLightTouch(canvas, state => { if (player) player.setTouch(state); });
+    lightTouchAttached = true;
     ui.showTouchHint();
   } else if (caps.touch) {
     router.attachTouch(canvas);
@@ -141,9 +143,40 @@ async function boot() {
   if (mode === 'keys') ui.showControlHud();
   if (mode === 'hands') ui.showHandLegend();
 
+  // Camera failure fallback, shared between the initial start() rejection and
+  // a later onError report from HandInput (task #2 may report a failure
+  // after start() already resolved). Guarded to run at most once.
+  // startWorld() is deliberately not awaited, so the camera can fail before
+  // Player exists. activeMode is the single source of truth for the mode the
+  // Player is eventually constructed with; writing only player.mode would be
+  // a no-op in that race and would leave a touch user unable to move.
+  let activeMode = mode;
+  let cameraFallbackDone = false;
+  function handleCameraFailure() {
+    if (cameraFallbackDone) return;
+    cameraFallbackDone = true;
+    if (caps.device.isTouch) {
+      activeMode = 'light';
+      if (player) player.mode = 'light';
+      if (!lightTouchAttached) {
+        router.attachLightTouch(canvas, state => { if (player) player.setTouch(state); });
+        lightTouchAttached = true;
+      }
+      ui.showTouchHint();
+      document.getElementById('hand-legend')?.remove();
+      ui.showToast('Camera unavailable. Switched to touch controls.');
+    } else {
+      activeMode = 'keys';
+      if (player) player.mode = 'keys';
+      ui.showControlHud();
+      ui.showToast('Camera unavailable. Switched to keyboard controls.');
+    }
+  }
+
   ui.showExperienceControls({
     onFinish: () => {
       if (player) player.locked = true;
+      hands?.stop(); // release the camera and the detection loop, not just the view
       document.exitPointerLock?.();
       audio?.setMuted(true);
       muteBtn.classList.add('muted');
@@ -152,24 +185,24 @@ async function boot() {
     },
   });
 
-  startWorld(mode);
+  startWorld();
 
   if (mode === 'hands') {
     try {
       const { HandInput } = await import('./hands.js');
-      hands = new HandInput(state => { if (player) player.setHand(state); });
-      await hands.start(); // requests webcam permission, opt-in only
+      hands = new HandInput(state => { if (player) player.setHand(state); }, handleCameraFailure);
+      const stream = cameraStream ? await cameraStream : null;
+      await hands.start(stream); // uses the pre-authorized stream from the Enter click, opt-in only
     } catch (e) {
       console.warn('hand tracking unavailable, falling back:', e);
-      if (player) player.mode = 'keys'; // webcam denied/unavailable: fall back to keyboard
-      ui.showToast('Webcam unavailable — switched to keyboard controls.');
+      handleCameraFailure();
     }
   }
 
   // dev hook
   window.__router = router;
 
-  async function startWorld(mode) {
+  async function startWorld() {
     const { World } = await import('./world.js');
     const { Player } = await import('./player.js');
     const { createMaterials } = await import('./materials.js');
@@ -184,7 +217,7 @@ async function boot() {
     const atmo = createMaterials(quality);
     const radius = quality.tier === 0 ? 1 : 2;
     world = new World(scene, { buildRadius: radius, disposeRadius: radius + 1, materials: atmo.materials });
-    player = new Player(world, camera, canvas, { mode });
+    player = new Player(world, camera, canvas, { mode: activeMode });
     world.update(player.pos.x, player.pos.y); // build initial chunks before first frame
     artworks = await Artworks.create(scene, world, quality, camera, player, router);
     artworks.sync();
