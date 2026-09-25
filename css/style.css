@@ -59,6 +59,16 @@ body::after {
   min-height: 1.6em; white-space: pre-wrap;
 }
 .consent-copy { max-width: 56ch; margin-bottom: 1.4em; }
+/* Content warning: the one red outside the labyrinth, so it is read first. */
+.tw {
+  border: 1px solid #ff3b3b; padding: 0.9em 1.1em; margin: 0 0 1.4em;
+  max-width: 60ch; background: rgba(40, 4, 4, 0.35);
+}
+.tw-title { color: #ff5a5a; letter-spacing: 0.08em; margin-bottom: 0.5em; }
+.tw-list { list-style: none; padding: 0; margin: 0; font-size: 0.92em; }
+.tw-list li { position: relative; padding-left: 1.3em; margin-bottom: 0.35em; }
+.tw-list li::before { content: '>'; position: absolute; left: 0; color: #ff5a5a; }
+.statement + .tw { margin-top: 1.2em; }
 .consent-actions {
   display: flex; flex-wrap: wrap; align-items: center; gap: 1em 1.6em;
 }
