@@ -1,6 +1,7 @@
 import { startAmbience } from './ambience.js';
-// Generative audio, zero files: low drone bed + crackle, motion-reactive
-// filter, soft chime on demand.
+import { Music } from './music.js';
+// Generative audio, zero files: the music (music.js), crackle, footsteps,
+// turns, the works' voices, soft chime on demand.
 // Init-only — build only after a user gesture (start()), not auto-started.
 export class AudioEngine {
   constructor() { this.ctx = null; this.muted = false; }
@@ -16,31 +17,8 @@ export class AudioEngine {
     this.bed = ctx.createGain(); this.bed.gain.value = 1;
     this.bed.connect(this.master);
 
-    // drone: detuned saws (a narrow, slightly dissonant cluster instead of a
-    // clean fifth) through a slow-breathing lowpass — a beating, haunted bed
-    // rather than a warm one.
-    this.filter = ctx.createBiquadFilter();
-    this.filter.type = 'lowpass'; this.filter.frequency.value = 170; this.filter.Q.value = 3.2;
-    const droneGain = this.droneGain = ctx.createGain(); droneGain.gain.value = 0.05;
-    for (const f of [54, 54.9, 108.4, 111.2]) {
-      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
-      o.connect(this.filter); o.start();
-    }
-    this.filter.connect(droneGain); droneGain.connect(this.bed);
-    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.045;
-    const lfoGain = ctx.createGain(); lfoGain.gain.value = 80;
-    lfo.connect(lfoGain); lfoGain.connect(this.filter.frequency); lfo.start();
-
-    // a far-off, very quiet high whisper tone that slowly drifts — reads as
-    // an unplaceable voice rather than a musical element
-    const whisper = ctx.createOscillator(); whisper.type = 'sine'; whisper.frequency.value = 1180;
-    const whisperGain = ctx.createGain(); whisperGain.gain.value = 0;
-    const whisperLfo = ctx.createOscillator(); whisperLfo.frequency.value = 0.017;
-    const whisperLfoGain = ctx.createGain(); whisperLfoGain.gain.value = 0.006;
-    whisperLfo.connect(whisperLfoGain); whisperLfoGain.connect(whisperGain.gain);
-    whisperGain.gain.value = 0.006;
-    whisper.connect(whisperGain); whisperGain.connect(this.bed);
-    whisper.start(); whisperLfo.start();
+    // the music: lo-fi corridors, a gramophone in grandmother's room (music.js)
+    this.music = new Music(ctx, this.bed);
 
     // crackle bed: looping filtered noise + random pops
     const len = ctx.sampleRate * 2;
@@ -73,11 +51,11 @@ export class AudioEngine {
     o.connect(g); g.connect(this.bed); o.start(t); o.stop(t + 0.09);
   }
 
-  // motion speed 0..~8 → drone opens up, crackle rises slightly
+  // motion speed 0..~8 → crackle rises slightly
   motion(speed) {
     if (!this.ctx) return;
     const s = Math.min(1, Math.abs(speed) / 8);
-    this.filter.frequency.setTargetAtTime(190 + s * 620, this.ctx.currentTime, 0.4);
+    this.music?.motion(s);
     this._speedS = s; // crackle level is set in setZone(), which scales it by zone
   }
 
@@ -229,21 +207,19 @@ export class AudioEngine {
     this._stopAmbience = startAmbience(this.ctx, this.master, index);
   }
 
-  // The bed follows the zone: harsh in fear, softer in memory, almost gone in
-  // acceptance. hush() silences it entirely (grandmother's kitchen).
+  // The music and the crackle follow the zone.
   setZone(zone) {
-    if (!this.ctx || !this.droneGain) return;
-    this._zoneLevel = 0.05 * (zone.fear + 0.55 * zone.memory + 0.18 * zone.accept);
-    const target = this._hushed ? 0 : this._zoneLevel;
-    this.droneGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.6);
-    this.crackleGain.gain.setTargetAtTime(this._hushed ? 0 : (0.011 + (this._speedS || 0) * 0.012) * (zone.fear + 0.4 * zone.memory), this.ctx.currentTime, 0.4);
+    if (!this.ctx || !this.music) return;
+    this.music.setZone(zone);
+    this.crackleGain.gain.setTargetAtTime((0.011 + (this._speedS || 0) * 0.012) * (zone.fear + 0.4 * zone.memory), this.ctx.currentTime, 0.4);
   }
 
-  hush(on) {
-    this._hushed = on;
-    if (!this.ctx || !this.droneGain) return;
-    this.droneGain.gain.setTargetAtTime(on ? 0 : (this._zoneLevel ?? 0.05), this.ctx.currentTime, on ? 1.2 : 2.0);
-  }
+  // Grandmother's room: the corridor music gives way to the gramophone.
+  hush(on) { this.music?.room(on); }
+
+  // A presence door gives way for a moment, then slams.
+  doorLight(seconds) { this.music?.light(seconds); }
+  doorSlam() { this.music?.slam(); }
 
   setMuted(m) {
     this.muted = m;
