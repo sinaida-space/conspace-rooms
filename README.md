@@ -26,10 +26,10 @@ some doors open only when you stand still, and every work hums its own note.
 
 ## Why it exists
 
-Paintings usually wait in rooms you have to travel to. This one opens from any
-browser, on a laptop or a phone, and it opens from Russia without a VPN, where
-most of Alisa's audience lives. It keeps nothing about you: no analytics, no
-accounts, and the camera image never leaves your device.
+Paintings usually wait in rooms you have to travel to. This one opens in any
+browser, on a laptop or a phone, and you meet the works alone, at your own pace.
+It keeps nothing about you: no analytics, no accounts, and the camera image
+never leaves your device.
 
 ## Collaboration
 
@@ -80,16 +80,6 @@ The old GitHub Pages address (https://sinaida-space.github.io/conspace-rooms/)
 stays on and forwards every page to Vercel: a small script at the top of each
 HTML page redirects any `github.io` host, keeping the path, `?lang` and hash.
 
-Before any hosting change, check reachability from Russia:
-
-```
-curl -s -H 'Accept: application/json' \
-  "https://check-host.net/check-http?host=https://conspace-rooms.vercel.app/&max_nodes=40"
-```
-
-then read `https://check-host.net/check-result/<request_id>` and look at the
-`ru*` nodes.
-
 ## Soul path
 
 The labyrinth follows the arc of the SOULS series, from trauma to accepting
@@ -102,21 +92,9 @@ shaders in `src/materials.js`):
   walls, parquet, warm lampshades.
 - **Acceptance** (175 m and on): pale walls dissolving into lace and light.
 
-`src/soulpath.js` adds the responsive layer. The world stays in one stage and
-moves on only through a portal: a scratched baroque frame with a shimmering
-veil. Candles along the walls are the map: in the hospital corridors their
-flames redden toward a portal into the red rooms; in the red rooms the flame
-turns yellow toward the next portal and the wax itself reddens toward
-grandmother's room. In that room three souls drift (someone close, a child, a
-grown-up); walk into one and its question types itself on the television.
-Terminal printouts on the walls ask questions of their own, chalk writings sit
-at a child's height, red scratches lead to unseen works, some doors lift after
-three seconds of stillness. Every work hums its own note, and when you look
-closely at one (E) it opens its own sound world (`src/ambience.js`: rain,
-wind, fire, a clock, a music box, a heart monitor…). Shift runs.
-`src/dust.js` hangs dust in the lamp beams. Nothing is stored.
-
-Secrets: walk backwards for 30 s; stand still for a minute in the last stage.
+`src/soulpath.js` moves the world from one stage to the next through portals,
+and candles along the walls point the way. `src/ambience.js` gives every work
+its own sound, `src/dust.js` hangs dust in the lamp beams. Shift runs.
 
 ## Languages
 
@@ -124,8 +102,6 @@ The first screen asks for Russian or English. The choice is kept only in the
 URL (`?lang=ru` / `?lang=en`), never in storage, so a link with `?lang=ru`
 opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 (`tech.html`, `privacy.html`) hold both languages and switch the same way.
-
-Easter egg: click the CONSPACE ROOMS title on the welcome screen.
 
 ## Stack
 
