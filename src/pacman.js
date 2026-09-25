@@ -4,30 +4,23 @@
 // Nothing is stored; the score lives only as long as the overlay.
 import { t } from './i18n.js';
 
-// # wall · _ void outside the maze · = ghost-house door (ghosts leave through it)
-// . dot · o power pellet · P pac-man · G ghost. Row 9 is the wrap-around tunnel.
+// # wall · . dot · o power pellet · P pac-man · G ghost. Small, symmetric,
+// no tunnel, no ghost house, no dead ends (checked: every open tile has at
+// least two open neighbours and every dot is reachable).
 const MAP = [
-  '###################',
-  '#........#........#',
-  '#o##.###.#.###.##o#',
-  '#.................#',
-  '#.##.#.#####.#.##.#',
-  '#....#...#...#....#',
-  '####.###.#.###.####',
-  '___#.#...G...#.#___',
-  '####.#.##=##.#.####',
-  '.......#GGG#.......',
-  '####.#.#####.#.####',
-  '___#.#.......#.#___',
-  '####.#.#####.#.####',
-  '#........#........#',
-  '#.##.###.#.###.##.#',
-  '#o.#.....P.....#.o#',
-  '##.#.#.#####.#.#.##',
-  '#....#...#...#....#',
-  '#.######.#.######.#',
-  '#.................#',
-  '###################',
+  '###############',
+  '#o...........o#',
+  '#.##.#####.##.#',
+  '#.............#',
+  '#.##.#.#.#.##.#',
+  '#....#.G.#....#',
+  '##.#.#.#.#.#.##',
+  '#..#...G...#..#',
+  '#.##.#.#.#.##.#',
+  '#....#.G.#....#',
+  '#.##.##.##.##.#',
+  '#o.....P.....o#',
+  '###############',
 ];
 const W = MAP[0].length, H = MAP.length;
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
@@ -66,8 +59,11 @@ export function openPacman() {
     if (full) { score = 0; lives = 3; }
     scared = 0; message = '';
   }
+  // An actor always stands on tile (tx, ty) or walks from it toward the next
+  // tile in `dir`; prog is how far along (0..1). It only ever starts a step
+  // into an open tile, so it can never end up inside a wall.
   function mk(x, y, dir, speed, hx = x, hy = y, wait = 0) {
-    return { x, y, dir, next: dir, speed, hx, hy, wait };
+    return { tx: x, ty: y, x, y, prog: 0, dir, next: dir, speed, hx, hy, wait };
   }
   function softReset() { // after losing a life: keep dots, reposition actors
     const g0 = MAP.map(r => r.split(''));
@@ -79,41 +75,39 @@ export function openPacman() {
     scared = 0;
   }
 
-  const wrapX = x => (x + W) % W;
-  const cellAt = (x, y) => (y < 0 || y >= H ? '#' : grid[y][wrapX(x)]);
-  const solid = c => c === '#' || c === '_' || c === '=';
-  const wall = (x, y) => solid(cellAt(x, y));
-  // ghosts may pass the door, but only on the way out (moving up)
-  const ghostWall = (x, y, dir) => (cellAt(x, y) === '=' ? dir !== 'up' : wall(x, y));
+  const solid = c => c === '#';
+  const wall = (x, y) => y < 0 || y >= H || x < 0 || x >= W || solid(grid[y][x]);
 
-  // Move one actor along the grid. Turns happen only at tile centres.
-  function step(a, dt, chooser, blocked = wall) {
-    if (!chooser && a.next === OPP[a.dir]) a.dir = a.next; // pac-man may reverse mid-tile
+  function step(a, dt, chooser) {
+    // pac-man may turn around mid-step: swap to walking back from the target tile
+    if (!chooser && a.prog > 0 && a.next === OPP[a.dir]) {
+      const [dx, dy] = DIRS[a.dir];
+      a.tx += dx; a.ty += dy; a.prog = 1 - a.prog; a.dir = a.next;
+    }
     let move = a.speed * dt;
     while (move > 0) {
-      const cx = Math.round(a.x), cy = Math.round(a.y);
-      const dist = Math.abs(a.x - cx) + Math.abs(a.y - cy);
-      if (dist < 1e-6) {
-        a.x = cx; a.y = cy;
-        if (chooser) a.next = chooser(a, cx, cy);
+      if (a.prog === 0) { // standing on a tile: decide where to go next
+        if (chooser) a.next = chooser(a, a.tx, a.ty);
         const [nx, ny] = DIRS[a.next];
-        if (!blocked(cx + nx, cy + ny, a.next)) a.dir = a.next;
+        if (!wall(a.tx + nx, a.ty + ny)) a.dir = a.next;
         const [dx, dy] = DIRS[a.dir];
-        if (blocked(cx + dx, cy + dy, a.dir)) return; // stopped against a wall
+        if (wall(a.tx + dx, a.ty + dy)) break;   // facing a wall: wait here
       }
-      const [dx, dy] = DIRS[a.dir];
-      const tx = Math.round(a.x + dx * 0.5 + dx * 1e-3), ty = Math.round(a.y + dy * 0.5 + dy * 1e-3);
-      const toCentre = Math.abs(tx - a.x) + Math.abs(ty - a.y) || 1;
-      const d = Math.min(move, toCentre);
-      a.x += dx * d; a.y += dy * d; move -= d;
-      if (a.x < -0.5) a.x += W; if (a.x > W - 0.5) a.x -= W; // tunnel
+      const d = Math.min(move, 1 - a.prog);
+      a.prog += d; move -= d;
+      if (a.prog >= 1 - 1e-9) {
+        const [dx, dy] = DIRS[a.dir];
+        a.tx += dx; a.ty += dy; a.prog = 0;
+      }
     }
+    const [dx, dy] = DIRS[a.dir];
+    a.x = a.tx + dx * a.prog; a.y = a.ty + dy * a.prog;
   }
 
   // Ghosts: at each junction pick the open direction that gets closest to pac
   // (or farthest while scared), never reversing, with a pinch of randomness.
   function ghostChoice(g, cx, cy) {
-    const opts = Object.keys(DIRS).filter(d => d !== OPP[g.dir] && !ghostWall(cx + DIRS[d][0], cy + DIRS[d][1], d));
+    const opts = Object.keys(DIRS).filter(d => d !== OPP[g.dir] && !wall(cx + DIRS[d][0], cy + DIRS[d][1]));
     if (!opts.length) return OPP[g.dir];
     if (Math.random() < 0.2) return opts[Math.floor(Math.random() * opts.length)];
     const score = d => Math.hypot(cx + DIRS[d][0] - pac.x, cy + DIRS[d][1] - pac.y) * (scared > 0 ? -1 : 1);
@@ -124,9 +118,9 @@ export function openPacman() {
     if (message) return;
     step(pac, dt);
     const px = Math.round(pac.x), py = Math.round(pac.y);
-    const cell = grid[py]?.[wrapX(px)];
+    const cell = grid[py]?.[px];
     if (cell === '.' || cell === 'o') {
-      grid[py][wrapX(px)] = ' ';
+      grid[py][px] = ' ';
       dotsLeft--;
       score += cell === 'o' ? 50 : 10;
       if (cell === 'o') scared = 7;
@@ -136,7 +130,7 @@ export function openPacman() {
     for (const g of ghosts) {
       if (g.wait > 0) { g.wait -= dt; continue; }
       g.speed = scared > 0 ? 3.2 : 4.5;
-      step(g, dt, ghostChoice, ghostWall);
+      step(g, dt, ghostChoice);
       if (Math.hypot(g.x - pac.x, g.y - pac.y) < 0.6) {
         if (scared > 0) { score += 200; Object.assign(g, mk(g.hx, g.hy, 'up', 5, g.hx, g.hy, 2)); }
         else if (--lives <= 0) message = t('pacLose');
@@ -180,11 +174,6 @@ export function openPacman() {
       if (walk(x + 1, y)) { ctx.moveTo(X + s, Y); ctx.lineTo(X + s, Y + s); }
     }
     ctx.stroke();
-    // ghost-house door: a dim bar
-    ctx.fillStyle = COL.scared;
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      if (grid[y][x] === '=') ctx.fillRect(x * s, y * s + s * 0.42, s, s * 0.16);
-    }
     // dots and pellets
     ctx.fillStyle = COL.dot; ctx.shadowColor = COL.dot;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -219,11 +208,11 @@ export function openPacman() {
     ctx.shadowBlur = 0;
     scoreEl.textContent = `${t('pacScore')} ${score} · ${'♥'.repeat(Math.max(0, lives))}`;
     if (message) {
-      ctx.fillStyle = 'rgba(1,8,5,0.8)'; ctx.fillRect(0, s * 8.5, s * W, s * 4);
+      ctx.fillStyle = 'rgba(1,8,5,0.8)'; ctx.fillRect(0, s * (H / 2 - 2), s * W, s * 4);
       ctx.fillStyle = COL.pac; ctx.font = `${Math.max(12, s * 0.9)}px "Departure Mono", monospace`;
-      ctx.textAlign = 'center'; ctx.fillText(message, (s * W) / 2, s * 10.4);
+      ctx.textAlign = 'center'; ctx.fillText(message, (s * W) / 2, s * (H / 2 - 0.1));
       ctx.fillStyle = COL.dot; ctx.font = `${Math.max(10, s * 0.6)}px "Departure Mono", monospace`;
-      ctx.fillText(t('pacAgain'), (s * W) / 2, s * 11.6);
+      ctx.fillText(t('pacAgain'), (s * W) / 2, s * (H / 2 + 1.1));
     }
   }
 
