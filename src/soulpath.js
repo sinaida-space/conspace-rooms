@@ -48,6 +48,9 @@ const DOOR_WAIT = 3.0;           // seconds of stillness that open a door
 const CHILD_AFTER = 30;          // seconds of walking backwards
 const CHILD_EYE = 0.98;
 const STILL_FOR_19 = 60;         // seconds of stillness in acceptance
+const SOUL_HOLD = 5;             // seconds a soul's question stays before another may open
+const SOUL_WALK = 3;             // metres walked between two souls
+const SOUL_STOP = 1.6;           // a soul drawn to a still visitor halts this far off
 
 const SEED_WRITING = CONSPACE_SEED ^ 0x77a1;
 const SEED_DOOR = CONSPACE_SEED ^ 0x0d00;
@@ -254,6 +257,7 @@ export class SoulPath {
     this._stillT = 0; this.nineteenth = null;
     this._inKitchen = false;
     this._soulIdx = [0, 0, 0];            // next question per soul
+    this._soulAt = -1e9; this._walked = SOUL_WALK; this._lastPos = null; // gate between souls
     // guide: five presses of the M key (any layout: physical key) toggles it
     this.guide = null; this._mTimes = []; this._fiveTimes = [];
     addEventListener('keydown', e => {
@@ -423,7 +427,12 @@ export class SoulPath {
 
   // A soul scattered: its question types itself on the television and across
   // the screen, under a whisper.
-  _askSoul(cat, room) {
+  // Another soul may speak only once the last question has held and the
+  // visitor has walked a few steps since.
+  _soulReady(time) { return time - this._soulAt >= SOUL_HOLD && this._walked >= SOUL_WALK; }
+
+  _askSoul(cat, room, time) {
+    this._soulAt = time; this._walked = 0;
     const qs = t('soulQuestions')[cat];
     const text = qs[this._soulIdx[cat]++ % qs.length];
     const label = t('soulLabels')[cat];
@@ -678,7 +687,7 @@ export class SoulPath {
         if (!solidAtGlobal(cellOf(nx), cellOf(nz))) r.aim.set(nx, 1.3 + Math.random() * 0.5, nz);
       }
       const drawn = speed < 0.1 && dP < 7;
-      const goal = drawn ? new THREE.Vector3(P.pos.x, 1.5, P.pos.y) : r.aim;
+      const goal = drawn ? new THREE.Vector3(P.pos.x - toP.x / dP * SOUL_STOP, 1.5, P.pos.y - toP.z / dP * SOUL_STOP) : r.aim;
       const step = goal.clone().sub(r.pos);
       const len = step.length();
       if (len > 1e-3) {
@@ -691,9 +700,9 @@ export class SoulPath {
       const s2 = 0.32 + 0.05 * Math.sin(time * 3 + r.seed); r.sprite.scale.set(s2, s2, 1);
       let lead = r.sprite.position;
       for (const t of r.tail) { t.visible = true; t.position.lerp(lead, Math.min(1, dt * 4)); lead = t.position; }
-      if (dP < 1.1) {
+      if (dP < 1.1 && this._soulReady(time)) {
         r.gone = true; r.back = time + 12;
-        this._askSoul(r.cat, null);
+        this._askSoul(r.cat, null, time);
       }
     }
   }
@@ -881,6 +890,8 @@ export class SoulPath {
     const P = this.player, cam = this.camera;
     const memoryStage = this.stage.stage === 1;   // grandmother's room only exists here
     const speed = P.vel.length();
+    if (this._lastPos) this._walked += Math.min(1, Math.hypot(P.pos.x - this._lastPos.x, P.pos.y - this._lastPos.y));
+    this._lastPos = { x: P.pos.x, y: P.pos.y };
     const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
 
     // seen: close enough and roughly in front
@@ -950,7 +961,7 @@ export class SoulPath {
       this.audio?.hush(inKitchen);
       if (inKitchen && !this._roomHinted) {
         this._roomHinted = true; this.visitedRoom = true;
-        this._say(t('roomLabel'), t('roomHint'));
+        this._say(t('roomLabel'), t('roomHint')); this._soulAt = time;
         this._rebuildScatter();                       // candles now point to the way out into the light
       }
     }
@@ -1010,18 +1021,19 @@ export class SoulPath {
         const dxp = P.pos.x - w.home.x, dzp = P.pos.y - w.home.z, dp = Math.hypot(dxp, dzp);
         const drawn = speed < 0.1 && dp < 5 ? Math.min(1, w.pull.x + dt * 0.12) : Math.max(0, w.pull.x - dt * 0.2);
         w.pull.x = drawn;
+        const reach = dp > SOUL_STOP ? drawn * (1 - SOUL_STOP / dp) : 0;  // never drifts inside touching range
         const b = Math.sin(time * 0.9 + w.seed);
         w.sprite.position.set(
-          w.home.x + dxp * drawn * 0.85 + Math.sin(time * 0.4 + w.seed) * 0.25,
+          w.home.x + dxp * reach + Math.sin(time * 0.4 + w.seed) * 0.25,
           w.home.y + b * 0.12,
-          w.home.z + dzp * drawn * 0.85 + Math.cos(time * 0.35 + w.seed) * 0.25);
+          w.home.z + dzp * reach + Math.cos(time * 0.35 + w.seed) * 0.25);
         let lead = w.sprite.position;
         for (const tsp of w.tail) { tsp.position.lerp(lead, Math.min(1, dt * 4)); tsp.visible = true; lead = tsp.position; }
         const s2 = 0.32 + 0.05 * Math.sin(time * 3 + w.seed);
         w.sprite.scale.set(s2, s2, 1);
-        if (Math.hypot(w.sprite.position.x - P.pos.x, w.sprite.position.z - P.pos.y) < 1.1) {
+        if (Math.hypot(w.sprite.position.x - P.pos.x, w.sprite.position.z - P.pos.y) < 1.1 && this._soulReady(time)) {
           w.gone = true; w.back = time + 20;
-          this._askSoul(w.cat, k.room);
+          this._askSoul(w.cat, k.room, time);
         }
       }
     }
