@@ -55,7 +55,7 @@ export class UI {
     const el = $('lang-boot');
     if (el) await this._typeLine(el, 'C:\\CONSPACE>ВЫБЕРИТЕ ЯЗЫК / SELECT LANGUAGE_');
     const byBrowser = (navigator.language || '').toLowerCase().startsWith('ru') ? 'ru' : 'en';
-    gate?.querySelector(`[data-lang="${byBrowser}"]`)?.focus();
+    gate?.querySelector(`[data-lang="${byBrowser}"]`)?.focus({ preventScroll: true });
     const chosen = await new Promise(res => {
       gate?.querySelectorAll('[data-lang]').forEach(b =>
         b.addEventListener('click', () => res(b.dataset.lang), { once: true }));

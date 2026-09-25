@@ -1,6 +1,9 @@
 // Text pages carry both languages; ?lang= (or the browser language) picks one.
 // Nothing is stored.
 (function () {
+  // text pages always open at the top
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  scrollTo(0, 0);
   const p = new URLSearchParams(location.search).get('lang');
   const lang = p === 'ru' || p === 'en' ? p
     : (navigator.language || '').toLowerCase().startsWith('ru') ? 'ru' : 'en';

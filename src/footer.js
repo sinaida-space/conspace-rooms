@@ -15,6 +15,7 @@ const COPY = {
     other: 'Русская версия',
     more: 'More',
     playlist: 'Companion playlist',
+    released: 'September 2026',
   },
   ru: {
     tagline: 'Бесконечный лабиринт, в~котором живёт серия~SOULS.',
@@ -26,6 +27,7 @@ const COPY = {
     other: 'English version',
     more: 'Ещё',
     playlist: 'Плейлист к~работе',
+    released: 'сентябрь 2026',
   },
 };
 
@@ -39,10 +41,10 @@ export function renderFooter(lang, target = document.getElementById('site-footer
   target.className = 'site-footer';
   target.innerHTML = `
     <div class="footer-col footer-product">
-      <a class="footer-brand" href="index.html?lang=${l}">CONSPACE ROOMS</a>
+      <h2><a class="footer-brand" href="index.html?lang=${l}">CONSPACE ROOMS</a></h2>
       <p>${c.tagline}</p>
       <p><a href="https://sinaida.eu/" ${ext}>${c.created}</a></p>
-      <p class="footer-version">${VERSION}</p>
+      <p class="footer-version">${VERSION} · ${c.released}</p>
     </div>
     <nav class="footer-col" aria-label="${c.navigate}">
       <h2>${c.navigate}</h2>

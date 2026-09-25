@@ -5,6 +5,9 @@ import { UI, detectCapabilities } from './ui.js';
 import { t, applyStatic } from './i18n.js';
 import { zoneWeights, mixZone } from './zones.js';
 
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+scrollTo(0, 0);
+
 const canvas = document.getElementById('gl');
 const caps = detectCapabilities();
 const ui = new UI();
@@ -14,7 +17,10 @@ if (!caps.webgl2) {
   ui.showWebglError();
 } else {
   ui.gateLanguage().then(() => ui.gateConsent()).then(() => {
-    document.getElementById('welcome')?.classList.remove('hidden');
+    const welcome = document.getElementById('welcome');
+    welcome?.classList.remove('hidden');
+    if (welcome) welcome.scrollTop = 0; // always open at the top
+    import('./molecule.js').then(m => m.startMolecule(document.getElementById('welcome')));
     boot();
   });
 }

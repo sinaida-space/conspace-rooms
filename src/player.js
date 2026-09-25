@@ -71,19 +71,30 @@ export class Player {
 
   _attach() {
     addEventListener('keydown', e => {
-      if (e.code === 'Escape') { document.exitPointerLock?.(); return; }
       this.keys[e.code] = 1;
     });
     addEventListener('keyup', e => { this.keys[e.code] = 0; });
 
-    // pointer-lock mouse look (keyboard mode)
-    this.canvas.addEventListener('click', () => {
-      if (this.mode === 'keys') this.canvas.requestPointerLock?.()?.catch?.(() => {}); // refused in some embeds; mouse look is optional
+    // Mouse look by dragging: hold the button and move. No pointer lock, so the
+    // cursor stays free for the toolbar and the first mouse event can never
+    // jerk the camera into the floor. Spikes (tab switches, trackpad jumps)
+    // are dropped. canvas.dragDist lets input.js tell a drag from a click.
+    this.dragging = false;
+    this.canvas.dragDist = 0;
+    this.canvas.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      this.dragging = true;
+      this.canvas.dragDist = 0;
     });
+    addEventListener('mouseup', () => { this.dragging = false; });
+    addEventListener('blur', () => { this.dragging = false; });
     addEventListener('mousemove', e => {
-      if (document.pointerLockElement !== this.canvas) return;
-      this.yaw -= e.movementX * MOUSE_SENS;
-      this.pitch = clamp(this.pitch - e.movementY * MOUSE_SENS, -PITCH_LIMIT, PITCH_LIMIT);
+      if (!this.dragging || this.locked) return;
+      const mx = e.movementX, my = e.movementY;
+      if (Math.abs(mx) > 150 || Math.abs(my) > 150) return;
+      this.canvas.dragDist += Math.abs(mx) + Math.abs(my);
+      this.yaw -= mx * MOUSE_SENS;
+      this.pitch = clamp(this.pitch - my * MOUSE_SENS, -PITCH_LIMIT, PITCH_LIMIT);
     });
   }
 
@@ -127,6 +138,8 @@ export class Player {
     }
 
     this.intent = walk;
+    // let the gaze drift back to the horizon when nobody is looking up or down
+    if (!this.dragging) this.pitch *= 1 - Math.min(1, dt * 0.6);
     this.eye += (this.eyeTarget - this.eye) * Math.min(1, dt * 1.2); // slow, dreamlike height change
 
     // heading basis (camera faces -Z at yaw 0)

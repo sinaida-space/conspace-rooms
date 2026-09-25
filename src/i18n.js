@@ -15,6 +15,17 @@ const STRINGS = {
     consentBtn: 'Accept necessary~only',
     privacyLink: 'Privacy policy~→',
     statement: 'A~collaboration between Sinaida and~UVALISS.',
+    aboutTitle: 'What this is',
+    aboutText: 'A~web installation built on~the SOULS series by~UVALISS. The series is~dedicated to~her grandmother and follows a~soul’s path through trauma to~accepting itself. Here that path becomes an~endless labyrinth: eighteen works hang on~its walls, and you meet them in~whatever order the corridors unfold.',
+    expectTitle: 'What to~expect',
+    expect: [
+      'There is~no goal and no~ending. Walk as~long as~you like and leave whenever you want with the Finish button.',
+      'The further you go from the start, the more the space changes: hospital corridors, then a~grandmother’s flat at~night, then light.',
+      'Red scratches on~the walls lead to~works you have not found yet.',
+      'Every work hums its own note. Headphones help.',
+      'Some doors open only if~you stand still in~front of~them.',
+      'Give it at~least fifteen minutes. Some things only show themselves to~those who wait.',
+    ],
     credits: 'Credits',
     role1: 'Concept and experience~design',
     bio1: 'Visual artist and digital strategist working across interactive projection, generative systems, and~code. This piece is a~space to~walk through. There is nothing here to~solve.',
@@ -34,7 +45,7 @@ const STRINGS = {
     modeLight: 'Touch controls',
     legendLight: 'hold top half = walk · drag = turn · tap = inspect',
     modeKeys: 'Keyboard + mouse',
-    legendKeys: 'WASD/arrows = walk · turn/look = ←/→ or~mouse · E = inspect',
+    legendKeys: 'WASD/arrows = walk · ←/→ or~drag the mouse = look · E or~click = inspect',
     modeHands: 'Gestures (webcam)',
     legendHands: 'both fists = walk · point right/left hand = turn that way · both palms = stop · spread/pinch palms = zoom · finger pinch = inspect',
     recommended: 'recommended for this device',
@@ -55,7 +66,7 @@ const STRINGS = {
     playlistLink: 'Spotify playlist~↗',
     walkAgain: 'Walk again',
     touchHint: 'hold top half to~walk · drag to~turn · tap artwork to~inspect',
-    hud: ['↑/W walk', '↓/S back', '←/→ turn', 'A/D strafe', 'E inspect'],
+    hud: ['↑/W walk', '↓/S back', '←/→ or~drag turn', 'A/D strafe', 'E inspect'],
     handLegend: ['both fists = walk', 'point right hand = turn right', 'point left hand = turn left', 'both palms = stop', 'spread/pinch palms = zoom', 'finger pinch = inspect'],
     camTouch: 'Camera unavailable. Switched to~touch controls.',
     camKeys: 'Camera unavailable. Switched to~keyboard controls.',
@@ -95,6 +106,17 @@ const STRINGS = {
     consentBtn: 'Принять только~необходимое',
     privacyLink: 'Политика конфиденциальности~→',
     statement: 'Совместный проект Sinaida и~UVALISS.',
+    aboutTitle: 'Что это',
+    aboutText: 'Веб-инсталляция по~серии SOULS художницы UVALISS. Серия посвящена её бабушке и~рассказывает о~пути души через травму к~принятию себя. Здесь этот путь стал бесконечным лабиринтом: восемнадцать работ висят на~его стенах, и~ты встречаешь их в~том порядке, в~каком сложатся коридоры.',
+    expectTitle: 'Чего ждать',
+    expect: [
+      'Цели и~финала нет. Иди сколько хочется и~выходи когда угодно кнопкой «Завершить».',
+      'Чем дальше от~начала, тем сильнее меняется пространство: больничные коридоры, потом ночная бабушкина квартира, потом свет.',
+      'Красные царапины на~стенах ведут к~работам, которые ещё не~найдены.',
+      'Каждая работа звучит своей нотой. Лучше в~наушниках.',
+      'Некоторые двери откроются, только если постоять перед ними.',
+      'Дай себе хотя бы пятнадцать минут. Кое-что показывается только тем, кто не~спешит.',
+    ],
     credits: 'Авторы',
     role1: 'Концепция и~дизайн~взаимодействия',
     bio1: 'Визуальный артист и~цифровой стратег. Работает с~интерактивными проекциями, генеративными системами и~кодом. Эта инсталляция задумана как пространство для блуждания. Решать здесь~нечего.',
@@ -114,7 +136,7 @@ const STRINGS = {
     modeLight: 'Сенсорное управление',
     legendLight: 'держи верхнюю половину = идти · веди пальцем = поворот · тап = рассмотреть',
     modeKeys: 'Клавиатура и~мышь',
-    legendKeys: 'WASD/стрелки = идти · ←/→ или мышь = поворот · E = рассмотреть',
+    legendKeys: 'WASD/стрелки = идти · ←/→ или тяни мышью = обзор · E или клик = рассмотреть',
     modeHands: 'Жесты (веб-камера)',
     legendHands: 'два кулака = идти · укажи правой/левой рукой = поворот в~ту сторону · две ладони = стоп · развести/свести ладони = зум · щипок пальцами = рассмотреть',
     recommended: 'подходит для этого устройства',
@@ -135,7 +157,7 @@ const STRINGS = {
     playlistLink: 'Плейлист в~Spotify~↗',
     walkAgain: 'Пройти ещё~раз',
     touchHint: 'держи верхнюю половину, чтобы идти · веди пальцем для поворота · тапни по~работе, чтобы рассмотреть',
-    hud: ['↑/W идти', '↓/S назад', '←/→ поворот', 'A/D вбок', 'E рассмотреть'],
+    hud: ['↑/W идти', '↓/S назад', '←/→ или мышь поворот', 'A/D вбок', 'E рассмотреть'],
     handLegend: ['два кулака = идти', 'правая рука указывает = вправо', 'левая рука указывает = влево', 'две ладони = стоп', 'развести/свести ладони = зум', 'щипок пальцами = рассмотреть'],
     camTouch: 'Камера недоступна. Включено сенсорное управление.',
     camKeys: 'Камера недоступна. Включена клавиатура.',
@@ -197,6 +219,13 @@ export function t(key, vars = {}) {
 export function applyStatic(root = document) {
   document.title = t('docTitle');
   root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  root.querySelectorAll('[data-i18n-list]').forEach(el => {
+    el.replaceChildren(...t(el.dataset.i18nList).map(line => {
+      const li = document.createElement('li');
+      li.textContent = line;
+      return li;
+    }));
+  });
   root.querySelectorAll('[data-i18n-aria]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nAria)));
   root.querySelectorAll('[data-i18n-href]').forEach(el => {
     el.setAttribute('href', `${el.dataset.i18nHref}?lang=${lang}`);
