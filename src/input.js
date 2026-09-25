@@ -26,67 +26,30 @@ export class InputRouter {
       e.preventDefault();
       this.emit('dive', e.deltaY > 0 ? 0.9 : -0.9);
     }, { passive: false });
-    canvas.addEventListener('click', () => { if ((canvas.dragDist || 0) < 6) this.emit('pick'); }); // a drag to look is not a click
+    // a drag to look is not a click, and a finger tap is not a click either: on touch the pad's button inspects
+    let finger = false;
+    canvas.addEventListener('pointerdown', e => { finger = e.pointerType === 'touch'; });
+    canvas.addEventListener('click', () => { if (!finger && (canvas.dragDist || 0) < 6) this.emit('pick'); });
   }
 
-  // Light mode: single-touch. Hold anywhere in the top half of the screen to
-  // walk forward; horizontal drag distance from the touch start sets turn
-  // rate; a quick tap (little movement) inspects an artwork.
-  attachLightTouch(canvas, onState) {
-    let id = null, x0 = 0, moved = 0;
-    const state = { forward: false, turn: 0 };
-    const reset = () => { state.forward = false; state.turn = 0; onState(state); };
-    canvas.addEventListener('touchstart', e => {
-      const t = e.changedTouches[0];
-      id = t.identifier; x0 = t.clientX; moved = 0;
-      state.forward = t.clientY < innerHeight / 2;
-      onState(state);
-    }, { passive: true });
-    canvas.addEventListener('touchmove', e => {
-      e.preventDefault();
-      const t = Array.from(e.touches).find(tt => tt.identifier === id);
-      if (!t) return;
-      moved += 1;
-      const dx = (t.clientX - x0) / (innerWidth * 0.25);
-      state.turn = Math.max(-1, Math.min(1, dx));
-      state.forward = t.clientY < innerHeight / 2;
-      onState(state);
-    }, { passive: false });
-    canvas.addEventListener('touchend', e => {
-      const t = Array.from(e.changedTouches).find(tt => tt.identifier === id);
-      if (t && moved < 4) this.emit('pick');
-      id = null;
-      reset();
-    });
-    canvas.addEventListener('touchcancel', () => { id = null; reset(); });
-  }
-
+  // Touch on the canvas: two-finger pinch zooms. Walking and inspecting live
+  // on the on-screen pad.
   attachTouch(canvas) {
-    let drag = null, pinchD = null, moved = false;
+    let pinchD = null;
     canvas.addEventListener('touchstart', e => {
-      moved = false;
-      if (e.touches.length === 1) drag = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       if (e.touches.length === 2) pinchD = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
     }, { passive: true });
     canvas.addEventListener('touchmove', e => {
-      e.preventDefault(); moved = true;
-      if (e.touches.length === 1 && drag) {
-        const dx = (e.touches[0].clientX - drag.x) / (innerWidth * 0.3);
-        const dy = (e.touches[0].clientY - drag.y) / (innerHeight * 0.3);
-        this.emit('steer', { x: Math.max(-1, Math.min(1, dx)), y: Math.max(-1, Math.min(1, dy)) });
-      } else if (e.touches.length === 2 && pinchD != null) {
+      e.preventDefault();
+      if (e.touches.length === 2 && pinchD != null) {
         const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         this.emit('dive', (d - pinchD) * -0.02);
         pinchD = d;
       }
     }, { passive: false });
     canvas.addEventListener('touchend', e => {
-      if (e.touches.length === 0) {
-        if (!moved) this.emit('pick');
-        drag = null; pinchD = null;
-        this.emit('steer', { x: 0, y: 0 });
-      }
+      if (e.touches.length < 2) pinchD = null;
     });
   }
 }

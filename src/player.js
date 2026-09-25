@@ -12,10 +12,9 @@ import { CELL } from './world.js';
 const EYE = 1.65;          // eye height (m)
 const RADIUS = 0.3;        // capsule radius (m)
 const MAX_SPEED = 3.2;     // m/s, walking
-const RUN_SPEED = 6.0;     // m/s, Shift held (or a long touch-walk)
+const RUN_SPEED = 6.0;     // m/s, Shift held (or ▲ on the pad held long)
 const ACCEL = 9;           // approach rate toward target velocity (1/s)
 const YAW_RATE = 1.8;      // rad/s while turning
-const DEADZONE = 0.15;     // touch-turn deadzone
 const MOUSE_SENS = 0.0022; // rad per pixel
 const PITCH_LIMIT = 1.2;   // rad
 const BOB_AMP = 0.02;      // head-bob amplitude (m)
@@ -50,7 +49,6 @@ export class Player {
       present: false, bothFists: false, pointLeft: false, pointRight: false,
       stopped: false, pinch: false, zoomDelta: 0,
     };
-    this.touch = { forward: false, turn: 0 };
     this.locked = false; // set true during artwork inspect (#4) — update() becomes a no-op
     this.fov = camera.fov; // gesture zoom target (both palms open + spread/pinch)
 
@@ -59,7 +57,6 @@ export class Player {
   }
 
   setHand(state) { this.hand = state; }
-  setTouch(state) { this.touch = state; }
 
   // Mouse-wheel / two-finger touch pinch ('dive' events) drive the same FOV
   // zoom as the gesture zoom below — negative delta (scroll up / spread
@@ -106,11 +103,7 @@ export class Player {
     if (this.hand.present) {
       if (this.hand.pointRight) this.yaw -= YAW_RATE * dt;   // right hand points → turn right
       else if (this.hand.pointLeft) this.yaw += YAW_RATE * dt; // left hand points → turn left
-    } else if (this.mode === 'light' && Math.abs(this.touch.turn) > DEADZONE) {
-      const p = this.touch.turn;
-      const s = (p - Math.sign(p) * DEADZONE) / (1 - DEADZONE);
-      this.yaw -= s * YAW_RATE * dt;
-    } else if (this.mode !== 'light' && !this.hand.present) {
+    } else {
       // arrow-left/right turn the camera directly (independent of pointer-lock
       // mouse look, which stays optional) — A/D remain strafe below.
       const turn = (this.keys.ArrowRight ? 1 : 0) - (this.keys.ArrowLeft ? 1 : 0);
@@ -130,9 +123,6 @@ export class Player {
     if (this.hand.present) {
       walk = this.hand.bothFists ? 1 : 0; // both hands as fists walks forward; anything else stops
       strafe = 0;
-    } else if (this.mode === 'light') {
-      walk = this.touch.forward ? 1 : 0; // hold top half of screen to walk
-      strafe = 0;
     } else {
       walk = (this.keys.KeyW || this.keys.ArrowUp ? 1 : 0) - (this.keys.KeyS || this.keys.ArrowDown ? 1 : 0);
       strafe = (this.keys.KeyD ? 1 : 0) - (this.keys.KeyA ? 1 : 0);
@@ -148,10 +138,10 @@ export class Player {
     let tz = fz * walk + rz * strafe;
     const tl = Math.hypot(tx, tz);
     if (tl > 1) { tx /= tl; tz /= tl; }
-    // run: Shift on the keyboard; on touch, keep walking for 1.5 s and it
-    // speeds up by itself; both hand fists held long do the same
+    // run: Shift on the keyboard; holding the pad's ▲ for 1.5 s speeds up by
+    // itself; both hand fists held long do the same
     this._walkT = walk > 0 ? (this._walkT || 0) + dt : 0;
-    const running = this.keys.ShiftLeft || this.keys.ShiftRight || ((this.mode === 'light' || this.hand.present) && this._walkT > 1.5);
+    const running = this.keys.ShiftLeft || this.keys.ShiftRight || ((this.keys.Pad || this.hand.present) && this._walkT > 1.5);
     const top = running ? RUN_SPEED : MAX_SPEED;
     const target = new THREE.Vector2(tx * top, tz * top);
 

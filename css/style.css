@@ -195,15 +195,6 @@ body::after {
 }
 .btn-enter:hover { background: var(--accent); color: var(--bg); }
 
-#touch-hint {
-  position: fixed; left: 50%; top: 6vh; transform: translateX(-50%) translateY(-6px);
-  z-index: 8; max-width: 80vw; text-align: center;
-  font-size: 1em; letter-spacing: 0.03em; color: var(--fg);
-  background: rgba(1,12,7,0.85); border: 2px solid rgba(186,255,201,0.45);
-  padding: 0.6em 1.2em; opacity: 0; pointer-events: none;
-  transition: opacity 0.4s ease, transform 0.4s ease;
-}
-#touch-hint.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 .toast {
   position: fixed; left: 50%; bottom: 6vh; transform: translateX(-50%) translateY(6px);
@@ -379,7 +370,47 @@ body::after {
   background: rgba(1, 8, 5, 0.55); padding: 0.4em 0.6em; text-wrap: balance;
 }
 
-body.inspecting #control-hud, body.inspecting #hand-legend, body.inspecting #touch-hint { opacity: 0 !important; }
+body.inspecting #control-hud, body.inspecting #hand-legend, body.inspecting #pad .pad-arrows { opacity: 0 !important; pointer-events: none; }
+
+/* on-screen pad for the buttons mode: arrows bottom-left, LOOK CLOSER bottom-right above mute */
+#pad {
+  position: fixed; inset: auto 0 0 0; z-index: 8; pointer-events: none;
+  opacity: 0; transition: opacity 0.5s ease;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+#pad.visible { opacity: 1; }
+#pad button {
+  pointer-events: auto; touch-action: none; cursor: pointer;
+  font-family: inherit; color: var(--fg); background: rgba(1,15,9,0.8);
+  border: 2px solid var(--dim); border-radius: 4px;
+  -webkit-tap-highlight-color: transparent;
+}
+#pad .pad-arrows {
+  position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom));
+  display: grid; grid-template-columns: repeat(3, 3.2em); grid-template-rows: repeat(2, 3.2em); gap: 0.35em;
+}
+#pad .pad-arrows button { font-size: 1.15em; width: 100%; height: 100%; }
+#pad .pad-up { grid-column: 2; grid-row: 1; }
+#pad .pad-arrows button[data-key="ArrowLeft"] { grid-column: 1; grid-row: 2; }
+#pad .pad-arrows button[data-key="ArrowDown"] { grid-column: 2; grid-row: 2; }
+#pad .pad-arrows button[data-key="ArrowRight"] { grid-column: 3; grid-row: 2; }
+#pad button.held { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+#pad .pad-inspect {
+  position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 3.6em);
+  font-size: 1em; letter-spacing: 0.04em; padding: 0.7em 0.8em;
+  color: var(--dim); opacity: 0.45; transition: opacity 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+#pad .pi-close, body.inspecting #pad .pi-open { display: none; }
+body.inspecting #pad .pi-close { display: inline; }
+body.can-inspect #pad .pad-inspect, body.inspecting #pad .pad-inspect { opacity: 1; color: var(--fg); border-color: var(--accent); box-shadow: var(--glow); }
+body.can-inspect #pad .pad-inspect:active, body.inspecting #pad .pad-inspect:active { background: var(--accent); color: var(--bg); }
+@media (hover: hover) {
+  #pad button:hover { border-color: var(--accent); }
+}
+/* the key legend sits between the pad's two halves on a desktop */
+body:has(#pad) #control-hud { max-width: calc(100vw - 2 * (10.3em + 32px)); }
+body:has(#pad) #inspect-overlay .inspect-card { margin-bottom: calc(max(16px, env(safe-area-inset-bottom)) + 7.6em); }
+body:has(#pad) #artwork-prompt { bottom: calc(max(16px, env(safe-area-inset-bottom)) + 7.6em); }
 
 /* in-page confirm dialog */
 .dialog {

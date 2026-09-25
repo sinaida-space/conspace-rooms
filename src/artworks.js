@@ -399,9 +399,11 @@ export class Artworks {
   }
 
   _setPrompt(candidate) {
+    document.body.classList.toggle('can-inspect', !!candidate);   // wakes the pad's LOOK CLOSER
     if (!candidate) { this._prompt.classList.remove('visible'); return; }
     const mode = this.player.mode;
-    const hint = t(mode === 'hands' ? 'promptHands' : mode === 'light' ? 'promptTouch' : 'promptKeys');
+    const touch = matchMedia('(pointer: coarse)').matches;
+    const hint = t(mode === 'hands' ? 'promptHands' : touch ? 'promptPad' : 'promptKeys');
     this._prompt.textContent = hint;
     this._prompt.classList.add('visible');
   }

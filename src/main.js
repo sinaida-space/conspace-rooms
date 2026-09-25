@@ -141,9 +141,9 @@ async function boot() {
   const { mode, cameraStream } = await ui.waitForEnter();
   ui.hideWelcome();
 
-  if (mode === 'light' && caps.device.isPhone) {
-    quality.tier = 0; // light mode contract on phones: tier 0, radius 1, no post, half-res, no webcam
-  } // tablets in light mode keep their detected tier; the FPS governor steps it down if needed
+  if (mode === 'keys' && caps.device.isPhone) {
+    quality.tier = 0; // buttons on a phone: tier 0, radius 1, no post, half-res, no webcam
+  } // tablets keep their detected tier; the FPS governor steps it down if needed
 
   const { createPost } = await import('./post.js');
   post = createPost(renderer, quality);
@@ -165,15 +165,12 @@ async function boot() {
 
   router.on('dive', delta => { if (player) player.zoom(delta); });
   router.attachKeyboardMouse(canvas);
-  let lightTouchAttached = false;
-  if (mode === 'light') {
-    router.attachLightTouch(canvas, state => { if (player) player.setTouch(state); });
-    lightTouchAttached = true;
-    ui.showTouchHint();
-  } else if (caps.touch) {
-    router.attachTouch(canvas);
-  }
-  if (mode === 'keys') ui.showControlHud();
+  if (caps.touch) router.attachTouch(canvas);   // pinch zoom only; walking is on the pad
+  const showButtons = () => {
+    ui.showPad({ keys: () => player ? player.keys : {}, pick: () => router.emit('pick') });
+    if (!caps.device.isTouch) ui.showControlHud();
+  };
+  if (mode === 'keys') showButtons();
   if (mode === 'hands') ui.showHandLegend();
 
   // Camera failure fallback, shared between the initial start() rejection and
@@ -188,23 +185,11 @@ async function boot() {
   function handleCameraFailure() {
     if (cameraFallbackDone) return;
     cameraFallbackDone = true;
-    if (caps.device.isTouch) {
-      activeMode = 'light';
-      if (player) player.mode = 'light';
-      if (!lightTouchAttached) {
-        router.attachLightTouch(canvas, state => { if (player) player.setTouch(state); });
-        lightTouchAttached = true;
-      }
-      ui.showTouchHint();
-      document.getElementById('hand-legend')?.remove();
-      ui.showToast(t('camTouch'));
-    } else {
-      activeMode = 'keys';
-      if (player) player.mode = 'keys';
-      document.getElementById('hand-legend')?.remove(); // one legend at a time, never stacked
-      ui.showControlHud();
-      ui.showToast(t('camKeys'));
-    }
+    activeMode = 'keys';
+    if (player) player.mode = 'keys';
+    document.getElementById('hand-legend')?.remove(); // one legend at a time, never stacked
+    showButtons();
+    ui.showToast(t('camKeys'));
   }
 
   ui.showExperienceControls({

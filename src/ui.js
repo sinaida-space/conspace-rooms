@@ -29,8 +29,7 @@ export function detectCapabilities() {
   else if (gpu) gpuClass = 'high';
 
   let recommendedMode = 'keys';
-  if (device.isMobile || device.coarsePointer) recommendedMode = 'light';
-  else if (webgl2 && gpuClass !== 'low' && device.hasCamera) recommendedMode = 'hands';
+  if (!(device.isMobile || device.coarsePointer) && webgl2 && gpuClass !== 'low' && device.hasCamera) recommendedMode = 'hands';
 
   return { webgl2, gpu, dpr, touch, isMobile, gpuClass, recommendedMode, device };
 }
@@ -137,11 +136,13 @@ export class UI {
 
   initModeSelect(recommendedMode, caps = {}) {
     const isTouch = !!(caps.device?.isTouch ?? caps.touch);
-    if (isTouch && recommendedMode === 'hands') recommendedMode = 'light';
+    if (isTouch && recommendedMode === 'hands') recommendedMode = 'keys';
     this.selectedMode = recommendedMode;
     const buttons = Array.from(document.querySelectorAll('#mode-select button'));
     const hasWebcam = !!navigator.mediaDevices?.getUserMedia;
     buttons.forEach(btn => {
+      // one method on every device: a phone gets the on-screen pad legend, no keyboard talk
+      if (btn.dataset.mode === 'keys' && isTouch) btn.querySelector('.mode-legend').textContent = t('legendPad');
       const isHands = btn.dataset.mode === 'hands';
       const isRecommended = btn.dataset.mode === recommendedMode && !(isHands && isTouch);
       btn.classList.toggle('selected', isRecommended);
@@ -154,7 +155,7 @@ export class UI {
       if (isHands && !hasWebcam) {
         const tag = document.createElement('span');
         tag.className = 'mode-legend';
-        tag.textContent = t(isTouch ? 'noCamTouch' : 'noCamKeys');
+        tag.textContent = t('noCamKeys');
         btn.appendChild(tag);
       }
       btn.addEventListener('click', () => {
@@ -206,17 +207,36 @@ export class UI {
     $('welcome')?.classList.add('hidden');
   }
 
-  // Shown once for light-mode touch controls; fades on its own or on first touch.
-  showTouchHint() {
-    if ($('touch-hint')) return;
+  // On-screen pad for the buttons mode: arrows hold the same keys the keyboard
+  // does, LOOK CLOSER inspects and wakes up only when an artwork is in reach
+  // (artworks.js sets body.can-inspect).
+  showPad({ keys, pick }) {
+    if ($('pad')) return;
     const el = document.createElement('div');
-    el.id = 'touch-hint';
-    el.textContent = t('touchHint');
+    el.id = 'pad';
+    const labels = t('padLabels');
+    el.innerHTML = `
+      <div class="pad-arrows">
+        <button type="button" data-key="ArrowUp" class="pad-up" aria-label="${labels[0]}">▲</button>
+        <button type="button" data-key="ArrowLeft" aria-label="${labels[2]}">◄</button>
+        <button type="button" data-key="ArrowDown" aria-label="${labels[1]}">▼</button>
+        <button type="button" data-key="ArrowRight" aria-label="${labels[3]}">►</button>
+      </div>
+      <button type="button" class="pad-inspect"><span class="pi-open">${t('padInspect')}</span><span class="pi-close">${t('padBack')}</span></button>`;
+    for (const b of el.querySelectorAll('[data-key]')) {
+      const set = v => e => {
+        e.preventDefault();
+        keys()[b.dataset.key] = v; keys().Pad = v && b.dataset.key === 'ArrowUp' ? 1 : 0;
+        b.classList.toggle('held', !!v);
+        if (v) b.setPointerCapture?.(e.pointerId);
+      };
+      b.addEventListener('pointerdown', set(1));
+      for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, set(0));
+    }
+    el.querySelector('.pad-inspect').addEventListener('click', () => { const b = document.body.classList; if (b.contains('can-inspect') || b.contains('inspecting')) pick(); });
+    el.addEventListener('contextmenu', e => e.preventDefault());
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('visible'));
-    const hide = () => { el.classList.remove('visible'); setTimeout(() => el.remove(), 600); };
-    const timer = setTimeout(hide, 5000);
-    addEventListener('touchstart', () => { clearTimeout(timer); hide(); }, { once: true });
   }
 
   // Publishes the bottom legend's height as --hud-h so the artwork prompt
@@ -228,7 +248,7 @@ export class UI {
   }
 
   // Persistent low-opacity key legend for keyboard mode — mirrors the
-  // touch-hint pattern above but stays up (no auto-fade) since keys mode has
+  // pad above but stays up (no auto-fade) since keys mode has
   // more bindings to remember than touch mode.
   showControlHud() {
     if ($('control-hud')) return;
@@ -319,7 +339,7 @@ export class UI {
     $('btn-mute')?.classList.add('hidden');
     $('hand-legend')?.remove();
     $('control-hud')?.remove();
-    $('touch-hint')?.remove();
+    $('pad')?.remove();
     $('farewell')?.classList.remove('hidden');
     $('btn-walk-again')?.addEventListener('click', () => location.reload(), { once: true });
   }
