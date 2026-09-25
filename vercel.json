@@ -1,6 +1,32 @@
 {
-  "rewrites": [{ "source": "/voprosy", "destination": "/voprosy.html" }],
+  "rewrites": [
+    {
+      "source": "/voprosy",
+      "destination": "/voprosy.html"
+    },
+    {
+      "source": "/gallery",
+      "destination": "/gallery.html"
+    }
+  ],
   "headers": [
-    { "source": "/voprosy(.html)?", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] }
+    {
+      "source": "/voprosy(.html)?",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/gallery(.html)?",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    }
   ]
 }

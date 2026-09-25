@@ -46,6 +46,21 @@
     <dt>Звук</dt><dd>Web Audio API, весь звук синтезируется в&nbsp;браузере.</dd>
   </dl>
 
+  <h2>Галерейный режим</h2>
+  <p>Для показа в&nbsp;пространстве: проектор или экран, компьютер и&nbsp;веб-камера у&nbsp;экрана. Откройте <a href="gallery">conspace-rooms.vercel.app/gallery</a>. Здесь нет стартовых экранов и&nbsp;кнопок. Камера замечает лицо: человек постоял перед экраном около секунды, и&nbsp;прогулка начинается, управление жестами. Если перед экраном никого нет 40&nbsp;секунд, возвращается заставка, а&nbsp;следующий посетитель попадает в&nbsp;новый лабиринт. Итоговая карточка с&nbsp;вопросами держится 25&nbsp;секунд.</p>
+  <p>Параметры в&nbsp;адресе:</p>
+  <dl>
+    <dt>lang</dt><dd>ru или en, по&nbsp;умолчанию ru.</dd>
+    <dt>idle</dt><dd>через сколько секунд без людей прогулка сбрасывается, по&nbsp;умолчанию 40.</dd>
+    <dt>card</dt><dd>сколько секунд видна итоговая карточка, по&nbsp;умолчанию 25.</dd>
+    <dt>volume</dt><dd>громкость от&nbsp;0 до&nbsp;1, по&nbsp;умолчанию 0.9.</dd>
+    <dt>seed</dt><dd>число: один постоянный лабиринт вместо нового для каждого посетителя.</dd>
+  </dl>
+  <p>Пример: <code>/gallery?lang=en&amp;idle=60&amp;volume=0.7</code></p>
+  <p>Чтобы звук и&nbsp;камера включались без нажатий, запустите Chrome в&nbsp;режиме киоска:</p>
+  <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required --use-fake-ui-for-media-stream "https://conspace-rooms.vercel.app/gallery"</code></pre>
+  <p>Клавиша F включает полный экран, если браузер открыт не&nbsp;в&nbsp;киоске. Без камеры режим ждёт нажатия любой клавиши и&nbsp;включает кнопки. Изображение с&nbsp;камеры, как и&nbsp;в&nbsp;обычном режиме жестов, обрабатывается только в&nbsp;браузере и&nbsp;никуда не&nbsp;отправляется.</p>
+
   <h2>Шрифт</h2>
   <p><strong>Departure Mono</strong> v1.500, автор Helena Zhang. Лицензия SIL Open Font License&nbsp;1.1: свободное использование, в&nbsp;том числе коммерческое. Файл шрифта хранится на&nbsp;этом же сайте, внешние сервисы шрифтов не&nbsp;используются.</p>
   <ul>
@@ -106,6 +121,21 @@
     <dt>Gestures</dt><dd>MediaPipe Tasks Vision 0.10.14, loaded only in&nbsp;gesture mode and only after you choose&nbsp;it.</dd>
     <dt>Sound</dt><dd>Web Audio API, every sound is synthesized in&nbsp;the browser.</dd>
   </dl>
+
+  <h2>Gallery mode</h2>
+  <p>For a&nbsp;space: a&nbsp;projector or&nbsp;a&nbsp;screen, a&nbsp;computer and&nbsp;a&nbsp;webcam by&nbsp;the screen. Open <a href="gallery?lang=en">conspace-rooms.vercel.app/gallery</a>. There are no start screens and no buttons. The camera notices a&nbsp;face: someone stands in&nbsp;front of&nbsp;the screen for about a&nbsp;second and the walk begins, steered by&nbsp;hands. When nobody has been in&nbsp;front for 40&nbsp;seconds, the attract screen comes back and the next visitor gets a&nbsp;new labyrinth. The closing card of&nbsp;questions stays up for 25&nbsp;seconds.</p>
+  <p>URL parameters:</p>
+  <dl>
+    <dt>lang</dt><dd>ru or&nbsp;en, Russian by&nbsp;default.</dd>
+    <dt>idle</dt><dd>seconds with nobody in&nbsp;front before the walk resets, 40 by&nbsp;default.</dd>
+    <dt>card</dt><dd>seconds the closing card stays up, 25 by&nbsp;default.</dd>
+    <dt>volume</dt><dd>0 to&nbsp;1, 0.9 by&nbsp;default.</dd>
+    <dt>seed</dt><dd>a&nbsp;number: one fixed labyrinth instead of&nbsp;a&nbsp;new one for each visitor.</dd>
+  </dl>
+  <p>Example: <code>/gallery?lang=en&amp;idle=60&amp;volume=0.7</code></p>
+  <p>For sound and camera to&nbsp;start without a&nbsp;click, run Chrome in&nbsp;kiosk mode:</p>
+  <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required --use-fake-ui-for-media-stream "https://conspace-rooms.vercel.app/gallery"</code></pre>
+  <p>F toggles fullscreen when the browser is&nbsp;not in&nbsp;kiosk mode. Without a&nbsp;camera the mode waits for any key and switches to&nbsp;buttons. As&nbsp;in&nbsp;the ordinary gesture mode, the camera image is&nbsp;processed only in&nbsp;the browser and never sent anywhere.</p>
 
   <h2>Typeface</h2>
   <p><strong>Departure Mono</strong> v1.500 by Helena Zhang. Licensed under the SIL Open Font License&nbsp;1.1, free for any use, commercial included. The font file is served from this site; no&nbsp;external font service is contacted.</p>

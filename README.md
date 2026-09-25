@@ -7,7 +7,9 @@
 A walk-through web installation by [Sinaida](https://sinaida.eu/) and
 [UVALISS](https://uvaliss.ru/) (Alisa Feer). Eighteen works from the SOULS series
 by UVALISS hang in a labyrinth of half-lit rooms that the browser builds as you
-walk. There is no map, no signage and no ending. Put on headphones and go slowly.
+walk. There is no map and no signage. A rose in the corner grows with every work
+you meet; find all eighteen and an arch of roses lets you out. Put on headphones
+and go slowly.
 
 ## What it is about
 
@@ -20,9 +22,12 @@ meets them in a different order.
 ## The vibe
 
 Half-remembered late Soviet interiors: green oil paint under whitewash, humming
-tubes, rugs on the walls, a television left on in an empty room. Liminal-space
-stillness with a green terminal screen for a front door. Candles are the map,
-some doors open only when you stand still, and every work hums its own note.
+tubes, rugs on the walls, a television left on in an empty room, beds and drip
+stands the hospital left behind. Liminal-space stillness with a green terminal
+screen for a front door. Candles are the map, a rare door gives way for a moment
+if you stand still in front of it, every work hums its own note, and the music is
+generated as you walk: lo-fi piano and a ward monitor in the corridors, an old
+gramophone in grandmother's room.
 
 ## Why it exists
 
@@ -98,6 +103,14 @@ opened, to the second (`src/world.js`), and from it follow the corridors, where
 the works hang, the portals, doors and the order of the souls' questions. Two
 visitors who arrive in the same second walk the same corridors. `?seed=<int>`
 pins one labyrinth for testing.
+
+## Gallery mode
+
+`/gallery` runs the piece as an installation: no start screens or buttons, the
+webcam watches for a face, the walk starts when someone stands in front of the
+screen and resets to a new labyrinth when nobody has been there for a while.
+Parameters (`lang`, `idle`, `card`, `volume`, `seed`) and the Chrome kiosk flags
+are on the tech page (`tech.html`); the code is in `src/gallery.js`.
 
 ## Languages
 

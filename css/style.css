@@ -484,4 +484,29 @@ body:has(#pad) #artwork-prompt { bottom: calc(max(16px, env(safe-area-inset-bott
 #final-card .fc-actions { display: flex; flex-wrap: wrap; gap: 0.8em; justify-content: center; }
 #final-card .btn-enter { font-size: 1em; padding: 0.55em 1.2em; }
 
+/* gallery mode (gallery.html): no cursor, no buttons, an attract screen */
+body.gallery { cursor: none; overflow: hidden; }
+body.gallery #final-card .fc-actions { display: none; }   /* nobody clicks in a gallery: the card leaves on its own */
+#attract {
+  position: fixed; inset: 0; z-index: 40; background: var(--bg);
+  display: flex; align-items: center; justify-content: center; padding: 6vh 6vw;
+  transition: opacity 1.2s ease;
+}
+#attract.gone { opacity: 0; pointer-events: none; }
+#attract::after {                                   /* the terminal's scanlines */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(57, 255, 106, 0.035) 0 1px, transparent 1px 4px);
+}
+.attract-col { max-width: 62ch; text-align: center; }
+.attract-mark {
+  font-size: clamp(2.4rem, 8vw, 6rem); letter-spacing: 0.14em; line-height: 1.1; color: var(--fg);
+  text-shadow: 0 0 10px rgba(57, 255, 106, 0.8), 0 0 36px rgba(57, 255, 106, 0.35);
+  animation: attract-breathe 4s ease-in-out infinite alternate;
+}
+@keyframes attract-breathe { from { opacity: 0.75; } to { opacity: 1; } }
+.attract-sub { color: var(--dim); letter-spacing: 0.2em; margin: 0.6em 0 2.4em; }
+.attract-line { font-size: clamp(1.2rem, 2.6vw, 1.9rem); margin-bottom: 1.4em; }
+#attract .expect { display: inline-block; text-align: left; margin-bottom: 1.6em; }
+.attract-note { color: var(--dim); font-size: 0.9em; }
+
 /* Je suis le spectre d'une rose que tu portais hier au bal. */

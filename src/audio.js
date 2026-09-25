@@ -223,7 +223,13 @@ export class AudioEngine {
 
   setMuted(m) {
     this.muted = m;
-    if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.9, this.ctx.currentTime, 0.1);
+    if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.9 * (this._volume ?? 1), this.ctx.currentTime, 0.1);
+  }
+
+  // overall level, 0..1 (gallery mode)
+  setVolume(v) {
+    this._volume = v;
+    if (this.ctx && !this.muted) this.master.gain.setTargetAtTime(0.9 * v, this.ctx.currentTime, 0.1);
   }
 }
 

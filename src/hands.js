@@ -26,6 +26,8 @@
 //   thumb-index pinch (either hand) → inspect
 const CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const FACE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite';
+const FACE_EVERY_MS = 250;   // presence needs no more than a few looks a second
 
 const NO_FRAMES_TIMEOUT_MS = 6000;
 const WATCHDOG_TIMEOUT_MS = 8000;
@@ -50,9 +52,14 @@ function classifyHand(l) {
 }
 
 export class HandInput {
-  constructor(onUpdate, onError) {
+  // faces: also watch for a face (gallery mode), so presence() can tell
+  // whether anyone is standing in front of the screen at all
+  constructor(onUpdate, onError, { faces = false } = {}) {
     this.onUpdate = onUpdate;
     this.onError = onError;
+    this.faces = faces;
+    this.lastPresence = 0;           // performance.now() of the last face or hand seen
+    this._faceAt = 0;
     this.stopped = false;
     this._errored = false;
     this.lastVideoTime = -1;
@@ -76,6 +83,11 @@ export class HandInput {
       this._watchdogTimer = null;
     }
   }
+
+  // milliseconds since anyone (a face or a hand) was last seen
+  idleMs() { return performance.now() - this.lastPresence; }
+  // a face seen within the last `ms`
+  faceWithin(ms) { return this._faceSeenAt !== undefined && performance.now() - this._faceSeenAt < ms; }
 
   async start(stream) {
     // Video element must be created and attached to the DOM before the
@@ -116,6 +128,11 @@ export class HandInput {
       } catch (e) {
         console.warn('[hands] GPU delegate failed, retrying on CPU', e);
         this.lm = await vision.HandLandmarker.createFromOptions(files, opts('CPU'));
+      }
+      if (this.faces) {
+        const fopts = d => ({ baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate: d }, runningMode: 'VIDEO', minDetectionConfidence: 0.5 });
+        try { this.fd = await vision.FaceDetector.createFromOptions(files, fopts('GPU')); }
+        catch (e) { this.fd = await vision.FaceDetector.createFromOptions(files, fopts('CPU')); }
       }
 
       this._armWatchdog();
@@ -199,6 +216,12 @@ export class HandInput {
       this._armWatchdog();
 
       const n = res.landmarks ? res.landmarks.length : 0;
+      if (n) this.lastPresence = now;
+      if (this.fd && now - this._faceAt > FACE_EVERY_MS) {
+        this._faceAt = now;
+        try { if (this.fd.detectForVideo(this.video, now).detections.length) { this.lastPresence = now; this._faceSeenAt = now; } }
+        catch (e) { /* a missed look is fine */ }
+      }
 
       if (n === 0) {
         this._prevHandDist = null;
@@ -249,6 +272,7 @@ export class HandInput {
     this._clearWatchdog();
     if (this.stream) this.stream.getTracks().forEach(t => t.stop());
     if (this.lm) this.lm.close();
+    if (this.fd) this.fd.close();
     if (this.video) {
       this.video.pause();
       this.video.srcObject = null;

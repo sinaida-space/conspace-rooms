@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Quality } from './quality.js';
 import { InputRouter } from './input.js';
 import { UI, detectCapabilities } from './ui.js';
-import { t, applyStatic } from './i18n.js';
+import { t, applyStatic, setLang, langFromUrl } from './i18n.js';
 import { mixZone, SoulStage } from './zones.js';
 
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
@@ -11,10 +11,22 @@ scrollTo(0, 0);
 const canvas = document.getElementById('gl');
 const caps = detectCapabilities();
 const ui = new UI();
+// gallery.html: an installation, no gates or buttons (gallery.js)
+const GALLERY = document.body.classList.contains('gallery');
+let gallery = null;
 
 if (!caps.webgl2) {
   applyStatic();
   ui.showWebglError();
+} else if (GALLERY) {
+  setLang(langFromUrl() || 'ru');
+  applyStatic();
+  import('./gallery.js').then(async m => {
+    gallery = m.createGallery();
+    const camera = gallery.startCamera();
+    boot();
+    await camera;
+  });
 } else {
   ui.gateLanguage().then(() => ui.gateConsent()).then(() => {
     const welcome = document.getElementById('welcome');
@@ -26,11 +38,13 @@ if (!caps.webgl2) {
 }
 
 async function boot() {
-  await ui.runBootSequence(caps);
-  ui.showCapabilityResult(caps);
-  ui.initModeSelect(caps.recommendedMode, caps);
-  document.getElementById('mode-select')?.classList.remove('hidden');
-  document.getElementById('btn-enter')?.classList.remove('hidden');
+  if (!GALLERY) {
+    await ui.runBootSequence(caps);
+    ui.showCapabilityResult(caps);
+    ui.initModeSelect(caps.recommendedMode, caps);
+    document.getElementById('mode-select')?.classList.remove('hidden');
+    document.getElementById('btn-enter')?.classList.remove('hidden');
+  }
 
   const quality = new Quality();
 
@@ -140,7 +154,7 @@ async function boot() {
   renderer.setAnimationLoop(frame);
   window.__app.frame = frame;   // dev hook: step the world by hand (headless checks, hidden tabs)
 
-  const { mode, cameraStream } = await ui.waitForEnter();
+  const { mode, cameraStream } = GALLERY ? await gallery.waitForVisitor() : await ui.waitForEnter();
   ui.hideWelcome();
 
   if (mode === 'keys' && caps.device.isPhone) {
@@ -156,8 +170,16 @@ async function boot() {
   audio = new AudioEngine();
   audio.start(); // called from the Enter click handler chain — counts as a user gesture
   window.__app.audio = audio;
+  if (GALLERY) {
+    // no gesture before the walk in a gallery: run Chrome with
+    // --autoplay-policy=no-user-gesture-required, or any touch wakes the sound
+    audio.setVolume?.(gallery.params.volume);
+    const wake = () => audio.ctx?.resume();
+    addEventListener('pointerdown', wake); addEventListener('keydown', wake);
+    gallery.watch();
+  }
   const muteBtn = document.getElementById('btn-mute');
-  muteBtn.classList.remove('hidden');
+  if (!GALLERY) muteBtn.classList.remove('hidden');
   let muted = false;
   muteBtn.addEventListener('click', () => {
     muted = !muted;
@@ -194,7 +216,7 @@ async function boot() {
     ui.showToast(t('camKeys'));
   }
 
-  ui.showExperienceControls({
+  if (!GALLERY) ui.showExperienceControls({
     onFinish: () => {
       if (player) player.locked = true;
       hands?.stop(); // release the camera and the detection loop, not just the view
@@ -210,10 +232,16 @@ async function boot() {
 
   if (mode === 'hands') {
     try {
-      const { HandInput } = await import('./hands.js');
-      hands = new HandInput(state => { if (player) player.setHand(state); }, handleCameraFailure);
-      const stream = cameraStream ? await cameraStream : null;
-      await hands.start(stream); // uses the pre-authorized stream from the Enter click, opt-in only
+      if (GALLERY) {                                  // already watching since the attract screen
+        hands = gallery.hands;
+        hands.onUpdate = state => { if (player) player.setHand(state); };
+        hands.onError = handleCameraFailure;
+      } else {
+        const { HandInput } = await import('./hands.js');
+        hands = new HandInput(state => { if (player) player.setHand(state); }, handleCameraFailure);
+        const stream = cameraStream ? await cameraStream : null;
+        await hands.start(stream); // uses the pre-authorized stream from the Enter click, opt-in only
+      }
     } catch (e) {
       console.warn('hand tracking unavailable, falling back:', e);
       handleCameraFailure();

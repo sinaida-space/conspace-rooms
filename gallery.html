@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>CONSPACE ROOMS · Gallery</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#010805">
+<link rel="icon" href="assets/icons/favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+<link rel="preload" href="assets/fonts/DepartureMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+</head>
+<body class="gallery">
+<canvas id="gl"></canvas>
+
+<!-- the attract screen: shown while nobody is in front of the camera -->
+<div id="attract">
+  <div class="attract-col">
+    <h1 class="attract-mark">CONSPACE ROOMS</h1>
+    <p class="attract-sub">SOULS · UVALISS × SINAIDA</p>
+    <p id="attract-line" class="attract-line"></p>
+    <ul class="expect" data-i18n-list="handLegend"></ul>
+    <p id="attract-note" class="attract-note"></p>
+  </div>
+</div>
+
+<button type="button" id="btn-mute" class="btn-mute hidden" data-i18n-aria="mute">♪</button>
+<div id="webgl-error" class="hidden"><p data-i18n="webglError"></p></div>
+
+<script type="module" src="src/main.js"></script>
+<!-- Je suis le spectre d'une rose que tu portais hier au bal. -->
+</body>
+</html>
