@@ -4,7 +4,10 @@
 // glow on and off in random order. Click one bulb, then another, and current runs
 // between them along the bonds: an arc crawls from bulb to bulb, every bulb on
 // the way flares, and the room hums like an old appliance switching on.
+// A third click lights the whole molecule at once and opens a small window
+// with a few lines about cortisol, which tears itself away after five seconds.
 // Runs only while the welcome screen is visible.
+import { t } from './i18n.js';
 
 // Cortisol, C21H30O5, as a 2D skeleton (bond length 1, y up). Ring A–C are
 // hexagons, ring D a pentagon; substituents follow the usual drawing.
@@ -51,7 +54,7 @@ export function startMolecule(host) {
   const adj = new Map(bulbs.map(b => [b, []]));
   for (const [a, b] of BONDS) { adj.get(byName[a]).push(byName[b]); adj.get(byName[b]).push(byName[a]); }
 
-  let scale = 60, r = 9, selected = null, arcs = [], audio = null;
+  let scale = 60, r = 9, selected = null, arcs = [], audio = null, clicks = 0, card = null;
 
   function layout() {
     const dpr = Math.min(2, devicePixelRatio || 1);
@@ -126,6 +129,7 @@ export function startMolecule(host) {
     const x = e.clientX, y = e.clientY;
     const hit = bulbs.find(b => Math.hypot(b.x - x, b.y - y) < Math.max(14, r * 1.8)); // stars are tiny; keep a generous hit area
     if (!hit) return;
+    if (++clicks >= 3) { clicks = 0; selected = null; lightAll(hit); return; }
     if (!selected || selected === hit) {
       selected = selected === hit ? null : hit;
       if (selected) { selected.target = 1; selected.until = performance.now() + 60000; click(); }
@@ -137,6 +141,42 @@ export function startMolecule(host) {
     zap(dur);
     selected.until = performance.now(); // the armed bulb lets go once current flows
     selected = null;
+  }
+
+  // Everything at once: current spreads from the clicked star along every
+  // bond in breadth-first waves, every star flares and stays lit a while.
+  function lightAll(from) {
+    const now = performance.now();
+    const depth = new Map([[from, 0]]), q = [from];
+    while (q.length) {
+      const n = q.shift();
+      for (const m of adj.get(n)) if (!depth.has(m)) { depth.set(m, depth.get(n) + 1); q.push(m); }
+    }
+    for (const [a, b] of BONDS) {
+      const A = byName[a], B = byName[b];
+      const [s0, s1] = depth.get(A) <= depth.get(B) ? [A, B] : [B, A];
+      arcs.push({ route: [s0, s1], t0: now + depth.get(s0) * 70, dur: 220 });
+    }
+    for (const b of bulbs) { b.target = 1; b.until = now + 5000 + depth.get(b) * 70; }
+    zap(1.6);
+    showCard();
+  }
+
+  // The info window: glitches in, holds five seconds, tears itself away.
+  function showCard() {
+    card?.remove();
+    card = document.createElement('aside');
+    card.className = 'cortisol-card';
+    card.setAttribute('role', 'note');
+    card.innerHTML = `<p class="cc-bar">CORTISOL.TXT</p><h3>${t('cortTitle')}</h3>`
+      + t('cortLines').map(l => `<p>${l}</p>`).join('');
+    // beside the text column if there is room, otherwise along the bottom
+    const col = host.querySelector('.welcome-col')?.getBoundingClientRect();
+    if (!col || innerWidth - col.right < 370) card.classList.add('cc-bottom');
+    host.appendChild(card);
+    const mine = card;
+    setTimeout(() => mine.classList.add('cc-out'), 5000);
+    setTimeout(() => { mine.remove(); if (card === mine) card = null; }, 5700);
   }
 
   // random glow: every so often a bulb decides to light up for a while
@@ -172,6 +212,7 @@ export function startMolecule(host) {
     // current running along a route: a jagged arc that crawls forward
     arcs = arcs.filter(arc => now - arc.t0 < arc.dur + 400);
     for (const arc of arcs) {
+      if (now < arc.t0) continue;                       // waiting for its wave
       const p = Math.min(1, (now - arc.t0) / arc.dur);
       const reach = p * (arc.route.length - 1);
       ctx.save();
@@ -222,6 +263,7 @@ export function startMolecule(host) {
     removeEventListener('resize', layout);
     host.removeEventListener('click', onClick);
     canvas.remove();
+    card?.remove();
     audio?.close?.();
   }
 
