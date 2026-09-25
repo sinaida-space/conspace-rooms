@@ -4,8 +4,8 @@ import { detectDevice } from './device.js';
 
 const TABLE = [
   { name: 'LOW',    pixelRatio: 1,   post: false, particles: 900,  segments: 16 },
-  { name: 'MEDIUM', pixelRatio: 1.5, post: true,  particles: 2000, segments: 24 },
-  { name: 'HIGH',   pixelRatio: 2,   post: true,  particles: 3200, segments: 32 },
+  { name: 'MEDIUM', pixelRatio: 1.25, post: true, particles: 2000, segments: 24 },
+  { name: 'HIGH',   pixelRatio: 1.5,  post: true, particles: 3200, segments: 32 }, // CRT post hides the difference from 2×
 ];
 
 export class Quality {
@@ -55,7 +55,7 @@ export class Quality {
     if (this._samples.length < 120) return;
     const avg = this._samples.reduce((a, b) => a + b, 0) / this._samples.length;
     this._samples.length = 0;
-    const target = this.isMobile ? 1 / 24 : 1 / 42; // hysteresis threshold
+    const target = this.isMobile ? 1 / 24 : 1 / 52; // desktop aims for 60: step down below ~52
     if (avg > target && this._cooldown <= 0) {
       this.tier--;
       this._cooldown = 12; // don't cascade

@@ -117,8 +117,7 @@ vec3 fixtureLight(vec3 P, vec3 N, vec3 lightCol){
       float ndl = max(dot(N, L / max(dist, 1e-3)), 0.0) * 0.7 + 0.3; // soft wrap
       float fl = 1.0;
       if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl = uFlickerAmt;
-      float boost = 1.0 + 0.6 * trailBoost(pc);
-      acc += lightCol * atten * ndl * fl * boost;
+      acc += lightCol * atten * ndl * fl;             // footstep boost lives on the fixtures themselves (ceiling)
     }
   }
   return acc;
@@ -146,6 +145,30 @@ vec3 fixtureSpec(vec3 P, vec3 N, vec3 V, vec3 lightCol, float shin){
   }
   return acc;
 }
+// Diffuse and specular from the same 3×3 fixtures in one pass (walls need
+// both; sharing the lamp search and attenuation halves the cost).
+void fixtureLightSpec(vec3 P, vec3 N, vec3 V, vec3 lightCol, float shin, out vec3 diff, out vec3 spec){
+  diff = vec3(0.0); spec = vec3(0.0);
+  float bx, bz;
+  int ix = nearestLine(P.x / ${CELL.toFixed(2)}, bx), iz = nearestLine(P.z / ${CELL.toFixed(2)}, bz);
+  for (int dz = -1; dz <= 1; dz++) {
+    for (int dx = -1; dx <= 1; dx++) {
+      vec2 cellL = vec2(bx + LINES[ix + dx], bz + LINES[iz + dz]);
+      vec2 pc = (cellL + 0.5) * ${CELL.toFixed(2)};
+      vec3 L = vec3(pc.x, PANEL_Y - 0.05, pc.y) - P;
+      float dist = length(L);
+      L /= max(dist, 1e-3);
+      float atten = 1.0 / (1.0 + 0.16 * dist + 0.10 * dist * dist);
+      float fl = 1.0;
+      if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl = uFlickerAmt;
+      vec3 c = lightCol * atten * fl;
+      float nl = dot(N, L);
+      diff += c * (max(nl, 0.0) * 0.7 + 0.3);
+      spec += c * pow(max(dot(N, normalize(L + V)), 0.0), shin) * step(0.0, nl);
+    }
+  }
+}
+
 // gentle filmic rolloff so light pools don't clip to flat white
 vec3 rolloff(vec3 c){ return c / (c + vec3(0.75)) * 1.45; }
 `;
@@ -174,12 +197,15 @@ ${LIB}
 // ── FEAR: Soviet hospital wall ──────────────────────────────────────────────
 // Whitewash above, glossy green oil paint below a hand-painted line at 1.5 m,
 // brush strokes you can see in the gloss, chips, damp rising from the floor.
-float fearHeight(float h, float y){                     // brush ridges for the bump
-  return y < 1.5 ? 0.5 * vnoise(vec2(h * 1.5, y * 28.0)) : 0.15 * vnoise(vec2(h, y) * 9.0);
+float fearHeight(float h, float y){                     // brush ridges, lumpy plaster above
+  return y < 1.5 ? 0.5 * vnoise(vec2(h * 1.5, y * 28.0))
+                 : 0.35 * vnoise(vec2(h, y) * 9.0) + 0.9 * vnoise(vec2(h, y) * 1.3);
 }
 vec3 fearWall(float h, float y, int oct, out float gloss){
   float n = fbm(vec2(h, y) * 1.6, oct);
-  vec3 white = vec3(0.70, 0.73, 0.68) * (0.82 + 0.3 * n);
+  vec3 white = vec3(0.70, 0.73, 0.68) * (0.78 + 0.34 * n + 0.06 * vnoise(vec2(h, y) * 30.0));
+  float crackN = abs(vnoise(vec2(h, y) * 1.6 + 2.0) - 0.5);           // hairline cracks in the plaster
+  white *= 1.0 - 0.5 * smoothstep(0.01, 0.0, crackN) * smoothstep(0.4, 0.65, vnoise(vec2(h, y) * 0.5));
   float edge = 1.5 + (fbm(vec2(h * 3.0, 0.0), 3) - 0.5) * 0.06;
   vec3 paint = vec3(0.13, 0.30, 0.23) * (0.88 + 0.16 * fbm(vec2(h, y) * 4.0, 2));
   float chip = smoothstep(0.70, 0.76, fbm(vec2(h, y) * 5.0 + 3.0, 3));
@@ -296,24 +322,52 @@ void main(){
   // ridges, plaster), so highlights break up the way they do on a real wall
   vec3 T = alongZ ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
   vec3 Nb = N;
-  if (uTier > 0) {
+  if (uTier > 1) {                                      // relief only on the high tier
     float e = 0.004, h0 = wallHeight(h, y, z);
     float du = (wallHeight(h + e, y, z) - h0) / e, dv = (wallHeight(h, y + e, z) - h0) / e;
-    Nb = normalize(N - (T * du + vec3(0.0, 1.0, 0.0) * dv) * 0.0035);
+    Nb = normalize(N - (T * du + vec3(0.0, 1.0, 0.0) * dv) * 0.006);
   }
 
-  // corners where wall meets floor and ceiling collect shadow
-  float ao = mix(0.55, 1.0, smoothstep(0.0, 0.45, y)) * mix(0.7, 1.0, smoothstep(PANEL_Y, PANEL_Y - 0.4, y));
+  // corners where wall meets floor and ceiling collect shadow; the edge of
+  // the grime is ragged, and damp runs down from the top in streaks, so the
+  // junction never reads as a ruler-straight line
+  float rag = (vnoise(vec2(h * 2.2, 3.0)) - 0.5) * 0.35 + (vnoise(vec2(h * 14.0, 1.0)) - 0.5) * 0.06;
+  float topGrime = smoothstep(PANEL_Y - 0.55 + rag, PANEL_Y - 0.02, y);
+  float streak = smoothstep(0.62, 0.8, vnoise(vec2(h * 5.0, 0.0))) * smoothstep(PANEL_Y - 1.4 + rag * 2.0, PANEL_Y, y);
+  float footRag = (vnoise(vec2(h * 2.6, 7.0)) - 0.5) * 0.18;
+  float ao = mix(0.5, 1.0, smoothstep(0.0, 0.45 + footRag, y)) * (1.0 - 0.45 * topGrime) * (1.0 - 0.25 * streak);
+  col = mix(col, col * vec3(0.85, 0.8, 0.66), topGrime * 0.6 + streak * 0.4);     // yellow-brown damp
 
   vec3 L = zoneLight(z);
   vec3 V = normalize(cameraPosition - vWorldPos);
-  vec3 diffuse = col * (fixtureLight(vWorldPos, Nb, L) + 0.04 * L + z.y * FILL_MEM * 1.6) * ao;
-  float shin = mix(18.0, 60.0, z.x) ;                   // oil paint is tight, paper broad
-  vec3 spec = fixtureSpec(vWorldPos, Nb, V, L, shin) * gloss * mix(0.25, 0.9, z.x) * ao;
+  float shin = mix(18.0, 60.0, z.x);                    // oil paint is tight, paper broad
+  vec3 dSum, sSum;
+  fixtureLightSpec(vWorldPos, Nb, V, L, shin, dSum, sSum);
+  vec3 diffuse = col * (dSum + 0.04 * L + z.y * FILL_MEM * 1.6) * ao;
+  vec3 spec = sSum * gloss * mix(0.25, 0.9, z.x) * ao;
   vec3 lit = rolloff(diffuse + spec);
   lit += z.z * (0.06 + 0.7 * lace) * LIGHT_ACC * 0.5;  // acceptance walls glow from inside, brightest at the lace rims
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
+}
+`;
+
+// Floor vertex shader: passes the corner occlusion from world.js.
+const VERT_FLOOR = /* glsl */`
+#include <common>
+#include <fog_pars_vertex>
+attribute float aAO;
+varying vec3 vWorldPos;
+varying vec3 vNormal;
+varying float vAO;
+void main(){
+  vAO = aAO;
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWorldPos = wp.xyz;
+  vNormal = normalize(mat3(modelMatrix) * normal);
+  vec4 mvPosition = viewMatrix * wp;
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
 }
 `;
 
@@ -322,6 +376,7 @@ const FRAG_FLOOR = /* glsl */`
 #include <common>
 #include <fog_pars_fragment>
 ${LIB}
+varying float vAO;
 
 // FEAR: speckled grey-green linoleum, sheet seams, a paler worn track.
 vec3 fearFloor(vec2 p, int oct){
@@ -372,6 +427,7 @@ void main(){
   col *= mix(mix(0.55, 1.0, smoothstep(0.42, 0.30, max(g.x, g.y))), 1.0, z.z + z.y); // carpet hides the seams
 
   vec3 L = zoneLight(z);
+  col *= pow(vAO, 1.6);                                 // shadow and dust gathered at the walls
   vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L + z.y * FILL_MEM * 1.2));
   lit += z.z * 0.05 * LIGHT_ACC;
   gl_FragColor = vec4(lit, 1.0);
@@ -386,11 +442,14 @@ const VERT_CEIL = /* glsl */`
 #include <common>
 #include <fog_pars_vertex>
 attribute float aLamp;
+attribute float aAO;
 varying vec3 vWorldPos;
 varying vec3 vNormal;
 varying float vLamp;
+varying float vAO;
 void main(){
   vLamp = aLamp;
+  vAO = aAO;
   vec4 wp = modelMatrix * vec4(position, 1.0);
   vWorldPos = wp.xyz;
   vNormal = normalize(mat3(modelMatrix) * normal);
@@ -405,6 +464,18 @@ const FRAG_CEIL = /* glsl */`
 #include <fog_pars_fragment>
 ${LIB}
 varying float vLamp;
+varying float vAO;
+
+// Old ceiling plaster: uneven trowel marks, hairline cracks, brown rings of
+// old leaks, soot creeping in from the walls. Returns a multiplier.
+float ceilingAge(vec2 p, int oct){
+  float trowel = 0.9 + 0.12 * fbm(p * vec2(0.7, 2.3), oct) + 0.05 * vnoise(p * 25.0);
+  float crackN = abs(vnoise(p * 1.8 + 4.0) - 0.5);
+  float crack = smoothstep(0.012, 0.0, crackN) * smoothstep(0.35, 0.6, vnoise(p * 0.4 + 9.0));
+  float leak = fbm(p * 0.35 + 21.0, 2);
+  float ring = band(leak, 0.62, 0.012) * 0.6 + smoothstep(0.6, 0.7, leak) * 0.25;
+  return trowel * (1.0 - 0.45 * crack) * (1.0 - ring);
+}
 
 // FEAR: a recessed fluorescent troffer. Grey metal housing, a darker inner
 // lip, two tubes with hot cores, faint louvre slats across them.
@@ -458,7 +529,9 @@ void main(){
   vec3 matteFear = vec3(0.66, 0.68, 0.64);
   vec3 matteMem  = vec3(0.07, 0.07, 0.06);              // smoke-darkened ceiling
   vec3 matteAcc  = vec3(0.92, 0.92, 0.89);
-  vec3 matte = (matteFear * z.x + matteMem * z.y + matteAcc * z.z) * (0.85 + 0.15 * fbm(p * 3.0, oct));
+  vec3 matte = (matteFear * z.x + matteMem * z.y + matteAcc * z.z) * ceilingAge(p, oct);
+  matte = mix(matte * vec3(0.8, 0.74, 0.62), matte, pow(vAO, 0.7));   // yellowed soot toward the walls
+  matte *= pow(vAO, 1.8);                                             // corner shadow
 
   vec3 L = zoneLight(z);
   vec3 lit = rolloff(matte * (0.12 * L + fixtureLight(vWorldPos, vec3(0.0, -1.0, 0.0), L) * 0.5));
@@ -513,6 +586,7 @@ export function createMaterials(quality) {
 
   const materials = { wall: mk(FRAG_WALL), floor: mk(FRAG_FLOOR), ceil: mk(FRAG_CEIL) };
   materials.ceil.vertexShader = VERT_CEIL;
+  materials.floor.vertexShader = VERT_FLOOR;
 
   // Flicker: a fixture near the visitor stutters now and then. How often
   // depends on the zone: constant unease in FEAR, rare in MEMORY, never in
