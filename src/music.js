@@ -155,8 +155,8 @@ export class Music {
   light(seconds = 5) {
     const ctx = this.ctx, t = ctx.currentTime;
     this._bright++;
-    this._mixLevels(0.6);
-    this.lightBus.gain.setTargetAtTime(1, t, 0.35);
+    this._mixLevels(1.2);
+    this.lightBus.gain.setTargetAtTime(1, t, 0.9);
     for (const [k, n] of LIGHT_NOTES.entries()) this._pad(midi(n), t + k * 0.12, seconds, 0.028);
     for (let k = 0; k < Math.floor(seconds / 0.45); k++) {
       const n = LIGHT_NOTES[Math.floor(Math.random() * LIGHT_NOTES.length)] + 12;
@@ -164,7 +164,7 @@ export class Music {
     }
     setTimeout(() => {
       this._bright = Math.max(0, this._bright - 1);
-      if (!this._bright) { this.lightBus.gain.setTargetAtTime(0, this.ctx.currentTime, 0.6); this._mixLevels(1.5); }
+      if (!this._bright) { this.lightBus.gain.setTargetAtTime(0, this.ctx.currentTime, 1.5); this._mixLevels(2.5); }
     }, seconds * 1000);
   }
   // the door slams: a body blow in the wall and the latch

@@ -27,7 +27,7 @@ function noise(ctx) {
 export function startAmbience(ctx, dest, index) {
   const out = ctx.createGain();
   out.gain.value = 0;
-  out.gain.setTargetAtTime(2.4, ctx.currentTime, 0.6); // it replaces the whole corridor, so it can be present
+  out.gain.setTargetAtTime(2.4, ctx.currentTime, 1.6); // swells in slowly // it replaces the whole corridor, so it can be present
   out.connect(dest);
   const nodes = [], timers = [];
   const keep = n => { nodes.push(n); return n; };
@@ -143,11 +143,11 @@ export function startAmbience(ctx, dest, index) {
   return function stop() {
     timers.forEach(clearTimeout);
     timers.length = 0;
-    out.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+    out.gain.setTargetAtTime(0, ctx.currentTime, 1.2);   // and fades as slowly
     setTimeout(() => {
       for (const n of nodes) { try { n.stop?.(); } catch (e) { /* already stopped */ } try { n.disconnect(); } catch (e) { /* ok */ } }
       out.disconnect();
-    }, 1600);
+    }, 7000);
   };
 }
 

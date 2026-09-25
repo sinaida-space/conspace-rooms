@@ -16,7 +16,8 @@ const INSPECT_DIST = 1.8;      // metres — proximity to show the prompt
 const INSPECT_FACING = 0.4;    // dot-product threshold (~66°) for "facing"
 const EYE_Y = 1.55;            // frame centre height
 const PLACARD_Y = 1.35;        // placard centre height
-const DOLLY_DIST = 1.3;        // metres in front of the artwork during inspect
+const DOLLY_DIST = 1.3;        // metres in front of the artwork during inspect, at least
+const DOLLY_MAX = 2.0;         // and at most: corridors are 2.4 m wide
 const DOLLY_TIME = 0.6;        // seconds
 
 // ── deterministic hashing (mirrors world.js's private hash family) ─────────
@@ -131,24 +132,28 @@ function wrapText(ctx, text, cx, y, maxWidth, lineHeight) {
 function buildPlacardTexture(art) {
   // a dark plate with pale letters: it has to read on whitewash and on wallpaper
   const c = document.createElement('canvas');
-  c.width = 640; c.height = 380;
+  c.width = 1024; c.height = 600;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#0d0f0e';
-  ctx.fillRect(0, 0, c.width, c.height);
-  ctx.strokeStyle = '#6f7a73';
-  ctx.lineWidth = 6;
-  ctx.strokeRect(3, 3, c.width - 6, c.height - 6);
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#f1ece0';
-  ctx.font = '400 44px "Departure Mono", ui-monospace, monospace';
-  ctx.fillText('UVALISS', c.width / 2, 92);
-  ctx.font = '400 42px "Departure Mono", ui-monospace, monospace';
-  wrapText(ctx, getLang() === 'ru' ? art.title_ru : art.title_en, c.width / 2, 200, c.width - 70, 52);
-  ctx.fillStyle = '#a9b3ac';
-  ctx.font = '400 30px "Departure Mono", ui-monospace, monospace';
-  ctx.fillText('SOULS', c.width / 2, c.height - 44);
   const tex = new THREE.CanvasTexture(c);
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
+  const draw = () => {
+    ctx.fillStyle = '#0d0f0e';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = '#6f7a73';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(4, 4, c.width - 8, c.height - 8);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f1ece0';
+    ctx.font = '400 96px "Departure Mono", ui-monospace, monospace';
+    wrapText(ctx, getLang() === 'ru' ? art.title_ru : art.title_en, c.width / 2, 255, c.width - 90, 112);
+    ctx.fillStyle = '#b9c2bb';
+    ctx.font = '400 54px "Departure Mono", ui-monospace, monospace';
+    ctx.fillText('UVALISS · SOULS', c.width / 2, c.height - 70);
+    tex.needsUpdate = true;
+  };
+  draw();
+  // canvas text uses whatever font is ready: redraw once the site font arrives
+  if (document.fonts && !document.fonts.check('64px "Departure Mono"')) document.fonts.load('64px "Departure Mono"').then(draw).catch(() => {});
   return tex;
 }
 
@@ -167,22 +172,13 @@ function ensureDom() {
 #artwork-prompt.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 #inspect-overlay {
   position: fixed; inset: 0; z-index: 6; pointer-events: none;
-  /* focus, never dim: the centre stays clear, the edges and the caption strip darken */
-  background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 38%, rgba(0,0,0,0.6) 100%),
-              linear-gradient(to top, rgba(0,0,0,0.7) 0, rgba(0,0,0,0) 22%);
+  /* focus, never dim: the centre stays clear, only the edges darken. The
+     placard beside the work is its only label: nothing covers the work. */
+  background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 38%, rgba(0,0,0,0.6) 100%);
   opacity: 0; transition: opacity 0.5s ease;
   display: flex; align-items: flex-end; justify-content: center;
 }
 #inspect-overlay.visible { opacity: 1; }
-#inspect-overlay .inspect-card {
-  margin-bottom: 9vh; text-align: center; font-family: 'Departure Mono', ui-monospace, monospace;
-  color: #baffc9; opacity: 0; transform: translateY(8px); transition: opacity 0.5s ease 0.2s, transform 0.5s ease 0.2s;
-  background: rgba(1,8,5,0.9); border: 1px solid #3f8a5a; padding: 0.8em 1.4em; max-width: calc(100vw - 32px);
-}
-#inspect-overlay.visible .inspect-card { opacity: 1; transform: translateY(0); }
-#inspect-overlay .ru { font-size: 1.25em; letter-spacing: 0.03em; margin-bottom: 0.25em; color: #baffc9; text-shadow: 0 0 8px rgba(57,255,106,0.45); }
-#inspect-overlay .en { font-size: 1em; color: #9fdcb2; margin-bottom: 0.5em; }
-#inspect-overlay .tag { font-size: 0.8em; letter-spacing: 0.12em; color: #6fcf8e; }
 `;
   document.head.appendChild(style);
 
@@ -192,7 +188,6 @@ function ensureDom() {
 
   const overlay = document.createElement('div');
   overlay.id = 'inspect-overlay';
-  overlay.innerHTML = '<div class="inspect-card"><p class="ru"></p><p class="en"></p><p class="tag">UVALISS — SOULS</p></div>';
   document.body.appendChild(overlay);
 }
 
@@ -224,8 +219,6 @@ export class Artworks {
     ensureDom();
     this._prompt = document.getElementById('artwork-prompt');
     this._overlay = document.getElementById('inspect-overlay');
-    this._overlayRu = this._overlay.querySelector('.ru');
-    this._overlayEn = this._overlay.querySelector('.en');
 
     this.inspecting = null;
     this._animT = 0;
@@ -300,7 +293,7 @@ export class Artworks {
     sub.add(frameMesh);
 
     const placardTex = this._getPlacard(art);
-    const pw = 0.42, ph = 0.25;
+    const pw = 0.46, ph = 0.27;
     const placard = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshBasicMaterial({ map: placardTex }));
     placard.position.set(width / 2 + border + 0.10 + pw / 2, PLACARD_Y - EYE_Y, 0.002);
     sub.add(placard);
@@ -421,13 +414,19 @@ export class Artworks {
     this._prompt.classList.remove('visible');
     this._animT = 0;
     this._animFrom = { pos: this.camera.position.clone(), quat: this.camera.quaternion.clone() };
-    const target = a.centerWorld.clone().addScaledVector(a.normal, DOLLY_DIST);
+    // Frame the work together with its placard: aim between them and step
+    // back until both fit, but never further than the corridor allows.
+    const cam = this.camera, vHalf = THREE.MathUtils.degToRad(cam.fov) / 2;
+    const hHalf = Math.atan(Math.tan(vHalf) * cam.aspect);
+    const left = a.width / 2 + 0.06, right = a.width / 2 + 0.06 + 0.10 + 0.46;
+    const dist = Math.min(DOLLY_MAX, Math.max(DOLLY_DIST,
+      ((left + right) / 2 + 0.12) / Math.tan(hHalf), (a.height / 2 + 0.18) / Math.tan(vHalf)));
+    const focus = a.centerWorld.clone().addScaledVector(new THREE.Vector3(a.normal.z, 0, -a.normal.x), (right - left) / 2);
+    const target = focus.clone().addScaledVector(a.normal, dist);
     // Camera-style orientation (looking down −Z at the artwork). A plain
     // Object3D.lookAt aims +Z instead, which turned the view 180° away.
-    const m = new THREE.Matrix4().lookAt(target, a.centerWorld, new THREE.Vector3(0, 1, 0));
+    const m = new THREE.Matrix4().lookAt(target, focus, new THREE.Vector3(0, 1, 0));
     this._animTo = { pos: target, quat: new THREE.Quaternion().setFromRotationMatrix(m) };
-    this._overlayRu.textContent = a.art.title_ru;
-    this._overlayEn.textContent = a.art.title_en;
     this._overlay.classList.add('visible');
     document.body.classList.add('inspecting'); // hide the key legend under the caption
   }

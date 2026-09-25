@@ -200,10 +200,10 @@ export class AudioEngine {
     const now = this.ctx.currentTime;
     if (this._stopAmbience) { this._stopAmbience(); this._stopAmbience = null; }
     if (index === null || index === undefined) {
-      this.bed.gain.setTargetAtTime(1, now, 0.8);
+      this.bed.gain.setTargetAtTime(1, now, 2.0);    // the corridor comes back gently
       return;
     }
-    this.bed.gain.setTargetAtTime(0, now, 0.4);
+    this.bed.gain.setTargetAtTime(0, now, 1.4);
     this._stopAmbience = startAmbience(this.ctx, this.master, index);
   }
 
