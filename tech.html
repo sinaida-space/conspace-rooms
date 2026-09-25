@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tech specs · CONSPACE ROOMS</title>
+<meta name="theme-color" content="#010805">
+<link rel="icon" href="assets/icons/favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+<link rel="preload" href="assets/fonts/DepartureMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/page.css">
+</head>
+<body class="doc">
+
+<p class="lang-switch"><a href="?lang=ru" lang="ru">RU</a> · <a href="?lang=en" lang="en">EN</a></p>
+
+<section lang="ru">
+  <h1>CONSPACE ROOMS: техническая информация</h1>
+  <p class="updated">Обновлено 25&nbsp;сентября 2026</p>
+
+  <h2>Что это</h2>
+  <p>Веб-инсталляция, совместный проект Sinaida и&nbsp;UVALISS. Бесконечный процедурный лабиринт, в&nbsp;котором висят восемнадцать работ из&nbsp;серии SOULS. Работает прямо в&nbsp;браузере, ничего устанавливать не&nbsp;нужно.</p>
+
+  <h2>Требования</h2>
+  <ul>
+    <li>Браузер с&nbsp;поддержкой WebGL2: свежие Chrome, Firefox, Safari или&nbsp;Edge.</li>
+    <li>Компьютер или современный телефон. На&nbsp;телефонах включается облегчённый режим.</li>
+    <li>Для управления жестами нужна веб-камера. Это необязательно.</li>
+  </ul>
+
+  <h2>Как это сделано</h2>
+  <dl>
+    <dt>Код</dt><dd>Чистый JavaScript (ES-модули), без сборки.</dd>
+    <dt>3D</dt><dd>three.js r166, библиотека лежит в&nbsp;самом проекте.</dd>
+    <dt>Материалы</dt><dd>Процедурные шейдеры GLSL. Стены, пол и&nbsp;свет генерируются кодом, без файлов текстур.</dd>
+    <dt>Качество</dt><dd>Три уровня графики. Автоматика следит за&nbsp;частотой кадров и&nbsp;снижает уровень, если устройство не&nbsp;справляется.</dd>
+    <dt>Жесты</dt><dd>MediaPipe Tasks Vision 0.10.14, только в&nbsp;режиме жестов и&nbsp;только после твоего выбора.</dd>
+    <dt>Звук</dt><dd>Web Audio API, весь звук синтезируется в&nbsp;браузере.</dd>
+  </dl>
+
+  <h2>Шрифт</h2>
+  <p><strong>Departure Mono</strong> v1.500, автор Helena Zhang. Лицензия SIL Open Font License&nbsp;1.1: свободное использование, в&nbsp;том числе коммерческое. Файл шрифта хранится на&nbsp;этом же сайте, внешние сервисы шрифтов не&nbsp;используются.</p>
+  <ul>
+    <li>Источник: <a href="https://github.com/rektdeckard/departure-mono" target="_blank" rel="noopener">github.com/rektdeckard/departure-mono</a></li>
+    <li>Сайт шрифта: <a href="https://departuremono.com/" target="_blank" rel="noopener">departuremono.com</a></li>
+    <li>Текст лицензии: <a href="assets/fonts/DepartureMono-OFL.txt">DepartureMono-OFL.txt</a></li>
+  </ul>
+
+  <h2>Лицензии</h2>
+  <dl>
+    <dt>Код проекта</dt><dd>Apache License&nbsp;2.0, © Sinaida Krivchenko.</dd>
+    <dt>Работы SOULS</dt><dd>© UVALISS (Алиса Феер), все права защищены.</dd>
+    <dt>three.js</dt><dd>MIT License.</dd>
+    <dt>MediaPipe</dt><dd>Apache License&nbsp;2.0.</dd>
+    <dt>Departure Mono</dt><dd>SIL Open Font License&nbsp;1.1.</dd>
+  </dl>
+
+  <h2>Приватность</h2>
+  <p>Аналитики, трекеров и&nbsp;рекламы нет. В&nbsp;браузере хранятся только уровень качества графики и&nbsp;отметка о&nbsp;прочитанном уведомлении. Язык хранится в&nbsp;адресе страницы. Изображение с&nbsp;камеры обрабатывается на&nbsp;устройстве и&nbsp;никуда не&nbsp;уходит. Подробнее в&nbsp;<a href="privacy.html?lang=ru">политике конфиденциальности</a>.</p>
+
+  <h2>Хостинг</h2>
+  <p>Сайт размещён на&nbsp;GitHub Pages. Он&nbsp;открывается из&nbsp;России без VPN (проверено 25&nbsp;сентября 2026). Режим жестов загружает MediaPipe с&nbsp;jsDelivr и&nbsp;Google, поэтому в&nbsp;некоторых сетях он&nbsp;может не&nbsp;запуститься. Тогда включится клавиатура или сенсорное управление.</p>
+
+  <h2>Авторы</h2>
+  <p>Концепция и&nbsp;дизайн взаимодействия: Sinaida (<a href="https://sinaida.eu/" target="_blank" rel="noopener">sinaida.eu</a>). Работы: UVALISS (<a href="https://uvaliss.ru/" target="_blank" rel="noopener">uvaliss.ru</a>).</p>
+
+  <a class="back" href="index.html?lang=ru">← назад в&nbsp;CONSPACE ROOMS</a>
+</section>
+
+<section lang="en">
+  <h1>CONSPACE ROOMS: tech specs</h1>
+  <p class="updated">Updated 25&nbsp;September 2026</p>
+
+  <h2>What it is</h2>
+  <p>A&nbsp;web installation, a&nbsp;collaboration between Sinaida and&nbsp;UVALISS. An&nbsp;endless procedural labyrinth that holds eighteen works from the SOULS series. It&nbsp;runs in&nbsp;the browser with nothing to&nbsp;install.</p>
+
+  <h2>Requirements</h2>
+  <ul>
+    <li>A&nbsp;browser with WebGL2: a&nbsp;recent Chrome, Firefox, Safari, or&nbsp;Edge.</li>
+    <li>A&nbsp;computer or&nbsp;a&nbsp;modern phone. Phones get a&nbsp;lighter mode.</li>
+    <li>A&nbsp;webcam for gesture control. It&nbsp;is optional.</li>
+  </ul>
+
+  <h2>How it is made</h2>
+  <dl>
+    <dt>Code</dt><dd>Plain JavaScript (ES modules), no build step.</dd>
+    <dt>3D</dt><dd>three.js r166, bundled with the project.</dd>
+    <dt>Materials</dt><dd>Procedural GLSL shaders. Walls, floors, and light are generated in&nbsp;code, with no texture files.</dd>
+    <dt>Quality</dt><dd>Three graphics tiers. A&nbsp;governor watches the frame rate and steps down when the device struggles.</dd>
+    <dt>Gestures</dt><dd>MediaPipe Tasks Vision 0.10.14, loaded only in&nbsp;gesture mode and only after you choose&nbsp;it.</dd>
+    <dt>Sound</dt><dd>Web Audio API, every sound is synthesized in&nbsp;the browser.</dd>
+  </dl>
+
+  <h2>Typeface</h2>
+  <p><strong>Departure Mono</strong> v1.500 by Helena Zhang. Licensed under the SIL Open Font License&nbsp;1.1, free for any use, commercial included. The font file is served from this site; no&nbsp;external font service is contacted.</p>
+  <ul>
+    <li>Source: <a href="https://github.com/rektdeckard/departure-mono" target="_blank" rel="noopener">github.com/rektdeckard/departure-mono</a></li>
+    <li>Font site: <a href="https://departuremono.com/" target="_blank" rel="noopener">departuremono.com</a></li>
+    <li>License text: <a href="assets/fonts/DepartureMono-OFL.txt">DepartureMono-OFL.txt</a></li>
+  </ul>
+
+  <h2>Licenses</h2>
+  <dl>
+    <dt>Project code</dt><dd>Apache License&nbsp;2.0, © Sinaida Krivchenko.</dd>
+    <dt>SOULS artworks</dt><dd>© UVALISS (Alisa Feer), all rights reserved.</dd>
+    <dt>three.js</dt><dd>MIT License.</dd>
+    <dt>MediaPipe</dt><dd>Apache License&nbsp;2.0.</dd>
+    <dt>Departure Mono</dt><dd>SIL Open Font License&nbsp;1.1.</dd>
+  </dl>
+
+  <h2>Privacy</h2>
+  <p>No&nbsp;analytics, no&nbsp;trackers, no&nbsp;ads. Your browser keeps only the graphics tier and a&nbsp;note that you have read the notice. The language lives in&nbsp;the page address. The camera image is processed on&nbsp;your device and goes nowhere. Details in&nbsp;the <a href="privacy.html?lang=en">privacy policy</a>.</p>
+
+  <h2>Hosting</h2>
+  <p>The site runs on&nbsp;GitHub Pages. It&nbsp;opens from Russia without a&nbsp;VPN (checked on&nbsp;25&nbsp;September 2026). Gesture mode loads MediaPipe from jsDelivr and Google, so on&nbsp;some networks it&nbsp;may fail to&nbsp;start. Keyboard or&nbsp;touch controls take over when that happens.</p>
+
+  <h2>Credits</h2>
+  <p>Concept and experience design: Sinaida (<a href="https://sinaida.eu/" target="_blank" rel="noopener">sinaida.eu</a>). Artworks: UVALISS (<a href="https://uvaliss.ru/" target="_blank" rel="noopener">uvaliss.ru</a>).</p>
+
+  <a class="back" href="index.html?lang=en">← back to&nbsp;CONSPACE ROOMS</a>
+</section>
+
+<footer id="site-footer"></footer>
+<script src="src/doc-lang.js"></script>
+<script type="module">
+  import { renderFooter } from './src/footer.js';
+  renderFooter(document.documentElement.lang);
+</script>
+</body>
+</html>
+<!-- Je suis le spectre d'une rose que tu portais hier au bal. -->

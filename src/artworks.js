@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONSPACE_SEED, chunkRooms } from './world.js';
+import { t, getLang } from './i18n.js';
 
 // ── conspace-rooms · artworks.js ────────────────────────────────────────────
 // The 18 SOULS pieces by UVALISS, hung framed on labyrinth walls with English
@@ -133,12 +134,12 @@ function buildPlacardTexture(art) {
   ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#171512';
-  ctx.font = '700 24px ui-monospace, "SF Mono", monospace';
+  ctx.font = '700 24px "Departure Mono", ui-monospace, monospace';
   ctx.fillText('UVALISS', c.width / 2, 54);
-  ctx.font = '400 21px ui-monospace, "SF Mono", monospace';
-  wrapText(ctx, art.title_en, c.width / 2, 108, c.width - 40, 26);
+  ctx.font = '400 21px "Departure Mono", ui-monospace, monospace';
+  wrapText(ctx, getLang() === 'ru' ? art.title_ru : art.title_en, c.width / 2, 108, c.width - 40, 26);
   ctx.fillStyle = '#8a8171';
-  ctx.font = '400 17px ui-monospace, "SF Mono", monospace';
+  ctx.font = '400 17px "Departure Mono", ui-monospace, monospace';
   ctx.fillText('SOULS', c.width / 2, c.height - 28);
   const tex = new THREE.CanvasTexture(c);
   tex.anisotropy = 4;
@@ -151,8 +152,8 @@ function ensureDom() {
   const style = document.createElement('style');
   style.textContent = `
 #artwork-prompt {
-  position: fixed; left: 50%; bottom: 8vh; transform: translateX(-50%) translateY(6px);
-  z-index: 5; font-family: ui-monospace, 'SF Mono', monospace; font-size: 0.85em;
+  position: fixed; left: 50%; bottom: calc(2vh + var(--hud-h, 0px) + 12px); transform: translateX(-50%) translateY(6px);
+  z-index: 5; font-family: 'Departure Mono', ui-monospace, monospace; font-size: 0.85em;
   color: #f2f2f2; background: rgba(10,10,10,0.55); border: 1px solid rgba(242,242,242,0.35);
   padding: 0.5em 1em; letter-spacing: 0.04em; opacity: 0; pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -160,12 +161,15 @@ function ensureDom() {
 #artwork-prompt.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 #inspect-overlay {
   position: fixed; inset: 0; z-index: 6; pointer-events: none;
-  background: rgba(6,6,6,0.55); opacity: 0; transition: opacity 0.5s ease;
+  /* focus, never dim: the centre stays clear, the edges and the caption strip darken */
+  background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 38%, rgba(0,0,0,0.6) 100%),
+              linear-gradient(to top, rgba(0,0,0,0.7) 0, rgba(0,0,0,0) 22%);
+  opacity: 0; transition: opacity 0.5s ease;
   display: flex; align-items: flex-end; justify-content: center;
 }
 #inspect-overlay.visible { opacity: 1; }
 #inspect-overlay .inspect-card {
-  margin-bottom: 9vh; text-align: center; font-family: ui-monospace, 'SF Mono', monospace;
+  margin-bottom: 9vh; text-align: center; font-family: 'Departure Mono', ui-monospace, monospace;
   color: #f2f2f2; opacity: 0; transform: translateY(8px); transition: opacity 0.5s ease 0.2s, transform 0.5s ease 0.2s;
 }
 #inspect-overlay.visible .inspect-card { opacity: 1; transform: translateY(0); }
@@ -397,9 +401,7 @@ export class Artworks {
   _setPrompt(candidate) {
     if (!candidate) { this._prompt.classList.remove('visible'); return; }
     const mode = this.player.mode;
-    const hint = mode === 'hands' ? 'pinch to look closer'
-      : mode === 'light' ? 'tap to look closer'
-      : 'press E to look closer';
+    const hint = t(mode === 'hands' ? 'promptHands' : mode === 'light' ? 'promptTouch' : 'promptKeys');
     this._prompt.textContent = hint;
     this._prompt.classList.add('visible');
   }
@@ -411,13 +413,14 @@ export class Artworks {
     this._animT = 0;
     this._animFrom = { pos: this.camera.position.clone(), quat: this.camera.quaternion.clone() };
     const target = a.centerWorld.clone().addScaledVector(a.normal, DOLLY_DIST);
-    const look = new THREE.Object3D();
-    look.position.copy(target);
-    look.lookAt(a.centerWorld);
-    this._animTo = { pos: target, quat: look.quaternion.clone() };
+    // Camera-style orientation (looking down −Z at the artwork). A plain
+    // Object3D.lookAt aims +Z instead, which turned the view 180° away.
+    const m = new THREE.Matrix4().lookAt(target, a.centerWorld, new THREE.Vector3(0, 1, 0));
+    this._animTo = { pos: target, quat: new THREE.Quaternion().setFromRotationMatrix(m) };
     this._overlayRu.textContent = a.art.title_ru;
     this._overlayEn.textContent = a.art.title_en;
     this._overlay.classList.add('visible');
+    document.body.classList.add('inspecting'); // hide the key legend under the caption
   }
 
   _updateInspectAnim(dt) {
@@ -429,6 +432,7 @@ export class Artworks {
 
   _closeInspect() {
     this.inspecting = null;
+    document.body.classList.remove('inspecting');
     this.player.locked = false;
     this._overlay.classList.remove('visible');
     this.player.update(0); // snap camera back to the player's frozen transform
@@ -441,3 +445,5 @@ export class Artworks {
     this._overlay?.remove();
   }
 }
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

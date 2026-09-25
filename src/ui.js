@@ -1,5 +1,7 @@
 // Welcome screen: collab statement, links, machine capability check, mode select.
 import { detectDevice } from './device.js';
+import { t, getLang, setLang, langFromUrl, applyStatic } from './i18n.js';
+import { renderFooter } from './footer.js';
 
 const $ = id => document.getElementById(id);
 const wait = ms => new Promise(res => setTimeout(res, ms));
@@ -38,6 +40,32 @@ export class UI {
     this.selectedMode = null;
   }
 
+  // Language gate: the very first screen. A ?lang= link (or a reload after
+  // choosing) skips it. Nothing is stored; the choice lives in the URL.
+  async gateLanguage() {
+    const gate = $('lang-gate');
+    const preset = langFromUrl();
+    if (preset) {
+      setLang(preset);
+      gate?.classList.add('hidden');
+      applyStatic();
+      renderFooter(getLang());
+      return;
+    }
+    const el = $('lang-boot');
+    if (el) await this._typeLine(el, 'C:\\CONSPACE>ВЫБЕРИТЕ ЯЗЫК / SELECT LANGUAGE_');
+    const byBrowser = (navigator.language || '').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+    gate?.querySelector(`[data-lang="${byBrowser}"]`)?.focus({ preventScroll: true });
+    const chosen = await new Promise(res => {
+      gate?.querySelectorAll('[data-lang]').forEach(b =>
+        b.addEventListener('click', () => res(b.dataset.lang), { once: true }));
+    });
+    setLang(chosen);
+    applyStatic();
+    renderFooter(getLang());
+    gate?.classList.add('hidden');
+  }
+
   // Cookie/consent gate: shown once (persisted in localStorage) before the
   // welcome screen. Resolves immediately if consent was already given.
   async gateConsent() {
@@ -47,6 +75,7 @@ export class UI {
       $('cookie-gate')?.classList.add('hidden');
       return;
     }
+    $('cookie-gate')?.classList.remove('hidden');
     await this._typeCookieBoot();
     await new Promise(res => {
       $('btn-consent')?.addEventListener('click', () => {
@@ -60,12 +89,7 @@ export class UI {
   async _typeCookieBoot() {
     const el = $('cookie-boot');
     if (!el) return;
-    const lines = [
-      'C:\\CONSPACE>SCANNING VISITOR...',
-      'C:\\CONSPACE>GETTING INSIDE YOUR MIND...',
-      'C:\\CONSPACE>LOCATING CONSENT.SYS...',
-      'C:\\CONSPACE>AWAITING PERMISSION_',
-    ];
+    const lines = t('cookieBoot');
     for (const line of lines) {
       await this._typeLine(el, line);
       await wait(120);
@@ -77,11 +101,10 @@ export class UI {
     if (!el) return;
     el.classList.remove('hidden');
     if (!caps.webgl2) {
-      el.textContent = 'WebGL2 is not available on this device or browser. This experience needs it to run.';
+      el.textContent = t('noWebgl');
       return;
     }
-    el.textContent = `capability check — GPU: ${caps.gpuClass} · pixel ratio: ${caps.dpr} · `
-      + `${caps.touch ? 'touch detected' : 'no touch'}`;
+    el.textContent = t('capability', { gpu: caps.gpuClass, dpr: caps.dpr, touch: t(caps.touch ? 'touchYes' : 'touchNo') });
   }
 
   // DOS-style typed boot sequence, run once on load before the capability
@@ -90,12 +113,8 @@ export class UI {
   async runBootSequence(caps) {
     const el = $('boot-sequence');
     if (!el) return;
-    const lines = [
-      'C:\\CONSPACE>LOADING KERNEL.SYS...',
-      'C:\\CONSPACE>MOUNTING SOULS.DAT...',
-      `C:\\CONSPACE>GPU: ${(caps.gpuClass || 'unknown').toUpperCase()} — OK`,
-      'C:\\CONSPACE>ROOMS.EXE READY_',
-    ];
+    this._armPacman();
+    const lines = t('boot', { gpu: (caps.gpuClass || 'unknown').toUpperCase() });
     for (const line of lines) {
       await this._typeLine(el, line);
       await wait(120);
@@ -129,15 +148,13 @@ export class UI {
       if (isRecommended) {
         const tag = document.createElement('span');
         tag.className = 'mode-legend';
-        tag.textContent = 'recommended for this device';
+        tag.textContent = t('recommended');
         btn.appendChild(tag);
       }
       if (isHands && !hasWebcam) {
         const tag = document.createElement('span');
         tag.className = 'mode-legend';
-        tag.textContent = isTouch
-          ? 'no camera detected — this option will fall back to touch controls'
-          : 'no camera detected — this option will fall back to keyboard';
+        tag.textContent = t(isTouch ? 'noCamTouch' : 'noCamKeys');
         btn.appendChild(tag);
       }
       btn.addEventListener('click', () => {
@@ -145,6 +162,19 @@ export class UI {
         btn.classList.add('selected');
         this.selectedMode = btn.dataset.mode;
       });
+    });
+  }
+
+  // Easter egg: clicking the CONSPACE ROOMS wordmark opens a small Pac-Man
+  // in the site's phosphor greens (src/pacman.js, loaded on demand).
+  _armPacman() {
+    if (this._eggArmed) return;
+    this._eggArmed = true;
+    const mark = $('wordmark');
+    if (!mark) return;
+    mark.addEventListener('click', async () => {
+      const { openPacman } = await import('./pacman.js');
+      openPacman();
     });
   }
 
@@ -181,12 +211,20 @@ export class UI {
     if ($('touch-hint')) return;
     const el = document.createElement('div');
     el.id = 'touch-hint';
-    el.textContent = 'hold top half to walk · drag to turn · tap artwork to inspect';
+    el.textContent = t('touchHint');
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('visible'));
     const hide = () => { el.classList.remove('visible'); setTimeout(() => el.remove(), 600); };
     const timer = setTimeout(hide, 5000);
     addEventListener('touchstart', () => { clearTimeout(timer); hide(); }, { once: true });
+  }
+
+  // Publishes the bottom legend's height as --hud-h so the artwork prompt
+  // (artworks.js) can sit just above it instead of on top of it.
+  _trackHudHeight(el) {
+    const set = () => document.documentElement.style.setProperty('--hud-h', `${el.offsetHeight}px`);
+    set();
+    new ResizeObserver(set).observe(el);
   }
 
   // Persistent low-opacity key legend for keyboard mode — mirrors the
@@ -196,9 +234,9 @@ export class UI {
     if ($('control-hud')) return;
     const el = document.createElement('div');
     el.id = 'control-hud';
-    el.innerHTML = '<span>&uarr;/W walk</span><span>&darr;/S back</span>'
-      + '<span>&larr;/&rarr; turn</span><span>A/D strafe</span><span>E inspect</span>';
+    el.innerHTML = t('hud').map(s => `<span>${s}</span>`).join('');
     document.body.appendChild(el);
+    this._trackHudHeight(el);
     requestAnimationFrame(() => el.classList.add('visible'));
   }
 
@@ -207,10 +245,9 @@ export class UI {
     if ($('hand-legend')) return;
     const el = document.createElement('div');
     el.id = 'hand-legend';
-    el.innerHTML = '<span>both fists = walk</span><span>point right hand = turn right</span>'
-      + '<span>point left hand = turn left</span><span>both palms = stop</span>'
-      + '<span>spread/pinch palms = zoom</span><span>finger pinch = inspect</span>';
+    el.innerHTML = t('handLegend').map(s => `<span>${s}</span>`).join('');
     document.body.appendChild(el);
+    this._trackHudHeight(el);
     requestAnimationFrame(() => el.classList.add('visible'));
   }
 
@@ -223,7 +260,7 @@ export class UI {
     const fsBtn = $('btn-fullscreen');
     const syncFsLabel = () => {
       const active = !!document.fullscreenElement;
-      fsBtn.innerHTML = active ? '⛶ <span>Exit fullscreen</span>' : '⛶ <span>Fullscreen</span>';
+      fsBtn.querySelector('span').textContent = t(active ? 'exitFullscreen' : 'fullscreen');
     };
     fsBtn.addEventListener('click', () => {
       if (document.fullscreenElement) document.exitFullscreen?.();
@@ -231,27 +268,50 @@ export class UI {
     });
     document.addEventListener('fullscreenchange', syncFsLabel);
 
-    $('btn-main-screen').addEventListener('click', () => {
-      if (!confirm('Leave the labyrinth and return to the main screen?')) return;
-      location.reload();
+    // In-page confirm: window.confirm() is silently blocked in some embedded
+    // browsers, which left this button doing nothing.
+    $('btn-main-screen').addEventListener('click', async () => {
+      if (await this.confirmDialog(t('confirmLeave'))) location.href = `index.html?lang=${getLang()}`;
     });
 
     $('btn-finish').addEventListener('click', () => onFinish?.());
+  }
+
+  // Terminal-styled yes/no dialog. Resolves true on Yes/Enter, false on
+  // No/Escape/backdrop click.
+  confirmDialog(text) {
+    return new Promise(res => {
+      const wrap = document.createElement('div');
+      wrap.className = 'dialog';
+      wrap.innerHTML = `<div class="dialog-box" role="alertdialog" aria-modal="true">
+        <p class="dialog-bar">SYSTEM</p><p class="dialog-text"></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn-enter" data-v="1">${t('yes')}</button>
+          <button type="button" class="btn-enter dialog-no" data-v="0">${t('no')}</button>
+        </div></div>`;
+      wrap.querySelector('.dialog-text').textContent = text;
+      document.body.appendChild(wrap);
+      document.exitPointerLock?.();
+      const done = v => { removeEventListener('keydown', onKey, true); wrap.remove(); res(v); };
+      const onKey = e => {
+        if (e.code === 'Escape') { e.stopPropagation(); done(false); }
+        if (e.code === 'Enter') { e.stopPropagation(); done(true); }
+      };
+      addEventListener('keydown', onKey, true);
+      wrap.addEventListener('click', e => {
+        const b = e.target.closest('button');
+        if (b) done(b.dataset.v === '1');
+        else if (e.target === wrap) done(false);
+      });
+      wrap.querySelector('[data-v="1"]').focus({ preventScroll: true });
+    });
   }
 
   // Farewell screen: one existential-dread question drawn at random each
   // time, plus credits/links. Purely a DOM overlay — caller is responsible
   // for pausing movement/audio before calling this.
   showFarewell() {
-    const questions = [
-      'If the room forgot you the moment you left it, would you have been here at all?',
-      "Name the version of yourself you buried to become who is reading this. Does it know it's dead?",
-      'When you finally stop moving, what will you have been walking toward?',
-      'Which of your memories would you erase first, if erasing it meant losing the person who gave it to you?',
-      "If your soul were hung on this wall tonight, framed and lit — would you recognize it, or is it a stranger you're required to love?",
-      'What part of you only exists because someone else is watching?',
-      "You will forget this labyrinth. What makes you so sure you won't forget yourself the same way?",
-    ];
+    const questions = t('questions');
     const q = questions[Math.floor(Math.random() * questions.length)];
     const qEl = $('farewell-question');
     if (qEl) qEl.textContent = q;
@@ -277,3 +337,5 @@ export class UI {
     }, 3500);
   }
 }
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

@@ -26,7 +26,7 @@ export class InputRouter {
       e.preventDefault();
       this.emit('dive', e.deltaY > 0 ? 0.9 : -0.9);
     }, { passive: false });
-    canvas.addEventListener('click', () => this.emit('pick'));
+    canvas.addEventListener('click', () => { if ((canvas.dragDist || 0) < 6) this.emit('pick'); }); // a drag to look is not a click
   }
 
   // Light mode: single-touch. Hold anywhere in the top half of the screen to
@@ -90,3 +90,5 @@ export class InputRouter {
     });
   }
 }
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

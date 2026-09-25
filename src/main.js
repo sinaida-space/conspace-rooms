@@ -2,16 +2,25 @@ import * as THREE from 'three';
 import { Quality } from './quality.js';
 import { InputRouter } from './input.js';
 import { UI, detectCapabilities } from './ui.js';
+import { t, applyStatic } from './i18n.js';
+import { mixZone, SoulStage } from './zones.js';
+
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+scrollTo(0, 0);
 
 const canvas = document.getElementById('gl');
 const caps = detectCapabilities();
 const ui = new UI();
 
 if (!caps.webgl2) {
+  applyStatic();
   ui.showWebglError();
 } else {
-  ui.gateConsent().then(() => {
-    document.getElementById('welcome')?.classList.remove('hidden');
+  ui.gateLanguage().then(() => ui.gateConsent()).then(() => {
+    const welcome = document.getElementById('welcome');
+    welcome?.classList.remove('hidden');
+    if (welcome) welcome.scrollTop = 0; // always open at the top
+    import('./molecule.js').then(m => m.startMolecule(document.getElementById('welcome')));
     boot();
   });
 }
@@ -27,6 +36,12 @@ async function boot() {
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.tier > 0, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(quality.p.pixelRatio, devicePixelRatio));
+  // when the governor steps the tier down, render fewer pixels right away
+  quality.onDowngrade = () => {
+    renderer.setPixelRatio(Math.min(quality.p.pixelRatio, devicePixelRatio));
+    renderer.setSize(innerWidth, innerHeight);
+    window.__app?.post?.resize();
+  };
   renderer.setSize(innerWidth, innerHeight);
 
   const far = quality.tier === 0 ? 60 : 120;
@@ -65,7 +80,8 @@ async function boot() {
   let player = null;
   let artworks = null;
 
-  window.__app = { scene, camera, renderer, quality };
+  const stage = new SoulStage(); // advanced only by walking through portals
+  window.__app = { scene, camera, renderer, quality, stage };
 
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight);
@@ -74,11 +90,12 @@ async function boot() {
   });
 
   const clock = new THREE.Clock();
-  let t = 0, atmo = null, post = null, audio = null;
+  let elapsed = 0, atmo = null, post = null, audio = null; // not `t`: that name is the translator
   let prevBobSin = 0, prevYaw = 0;
+  const dustLight = new THREE.Color();
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
-    t += dt;
+    elapsed += dt;
     quality.govern(dt);
     audio = audio ?? window.__app.audio;
     let speed = 0;
@@ -86,7 +103,23 @@ async function boot() {
       player.update(dt);
       world.update(player.pos.x, player.pos.y);
       atmo = atmo ?? window.__app.atmo;
-      if (atmo) atmo.update(dt, t, camera.position);
+      // "Путь души": fog and clear colour follow the zone the visitor stands in
+      stage.update(dt);
+      const zone = stage.weights();
+      window.__app.zone = zone;
+      if (scene.fog?.isFogExp2) {
+        mixZone(scene.fog.color, zone, 0x0e1f14, 0x030905, 0xa9b0a2);
+        const base = quality.tier === 0 ? 1.5 : 1;
+        scene.fog.density = base * (0.03 * zone.fear + 0.045 * zone.memory + 0.038 * zone.accept);
+        renderer.setClearColor(scene.fog.color);
+      }
+      if (atmo) atmo.update(dt, elapsed, camera.position, zone);
+      if (window.__app.dust) {
+        mixZone(dustLight, zone, 0xd6e8da, 0xff5a48, 0xeeeee2);
+        window.__app.dust.update(elapsed, camera.position, dustLight);
+        window.__app.spots?.update(elapsed, camera.position, dustLight);
+      }
+      if (window.__app.soul) window.__app.soul.update(dt, elapsed, zone);
       if (artworks) { artworks.sync(); artworks.update(dt); }
       speed = player.vel.length();
       if (audio) {
@@ -101,7 +134,7 @@ async function boot() {
     }
     post = post ?? window.__app.post;
     if (audio) audio.motion(speed);
-    if (post) post.render(scene, camera, dt, t, speed);
+    if (post) post.render(scene, camera, dt, elapsed, speed);
     else renderer.render(scene, camera);
   });
 
@@ -164,12 +197,13 @@ async function boot() {
       }
       ui.showTouchHint();
       document.getElementById('hand-legend')?.remove();
-      ui.showToast('Camera unavailable. Switched to touch controls.');
+      ui.showToast(t('camTouch'));
     } else {
       activeMode = 'keys';
       if (player) player.mode = 'keys';
+      document.getElementById('hand-legend')?.remove(); // one legend at a time, never stacked
       ui.showControlHud();
-      ui.showToast('Camera unavailable. Switched to keyboard controls.');
+      ui.showToast(t('camKeys'));
     }
   }
 
@@ -226,5 +260,14 @@ async function boot() {
     window.__app.player = player;
     window.__app.atmo = atmo;
     window.__app.artworks = artworks;
+
+    const { createDust } = await import('./dust.js');
+    window.__app.dust = createDust(scene, quality);
+    const { createSpots } = await import('./spots.js');
+    window.__app.spots = createSpots(scene, quality);
+    const { SoulPath } = await import('./soulpath.js');
+    window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage });
   }
 }
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

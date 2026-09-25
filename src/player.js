@@ -11,7 +11,8 @@ import { CELL } from './world.js';
 
 const EYE = 1.65;          // eye height (m)
 const RADIUS = 0.3;        // capsule radius (m)
-const MAX_SPEED = 2.2;     // m/s
+const MAX_SPEED = 3.2;     // m/s, walking
+const RUN_SPEED = 6.0;     // m/s, Shift held (or a long touch-walk)
 const ACCEL = 9;           // approach rate toward target velocity (1/s)
 const YAW_RATE = 1.8;      // rad/s while turning
 const DEADZONE = 0.15;     // touch-turn deadzone
@@ -22,6 +23,8 @@ const BOB_FREQ = 9;        // head-bob rate scaler
 const MIN_FOV = 35;        // deg — fully zoomed in
 const MAX_FOV = 70;        // deg — resting FOV, matches main.js's initial camera
 const ZOOM_SENS = 240;     // FOV degrees per unit of hand-distance change
+
+export const EYE_HEIGHT = EYE;
 
 export class Player {
   constructor(world, camera, canvas, opts = {}) {
@@ -38,6 +41,9 @@ export class Player {
     this.yaw = 0;
     this.pitch = 0;
     this.bob = 0;
+    this.eye = EYE;        // current eye height; soulpath.js lowers it for the child-height secret
+    this.eyeTarget = EYE;
+    this.intent = 0;       // last walk intent: 1 forward, -1 backward, 0 still
 
     this.keys = Object.create(null);
     this.hand = {
@@ -66,19 +72,30 @@ export class Player {
 
   _attach() {
     addEventListener('keydown', e => {
-      if (e.code === 'Escape') { document.exitPointerLock?.(); return; }
       this.keys[e.code] = 1;
     });
     addEventListener('keyup', e => { this.keys[e.code] = 0; });
 
-    // pointer-lock mouse look (keyboard mode)
-    this.canvas.addEventListener('click', () => {
-      if (this.mode === 'keys') this.canvas.requestPointerLock?.();
+    // Mouse look by dragging: hold the button and move. No pointer lock, so the
+    // cursor stays free for the toolbar and the first mouse event can never
+    // jerk the camera into the floor. Spikes (tab switches, trackpad jumps)
+    // are dropped. canvas.dragDist lets input.js tell a drag from a click.
+    this.dragging = false;
+    this.canvas.dragDist = 0;
+    this.canvas.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      this.dragging = true;
+      this.canvas.dragDist = 0;
     });
+    addEventListener('mouseup', () => { this.dragging = false; });
+    addEventListener('blur', () => { this.dragging = false; });
     addEventListener('mousemove', e => {
-      if (document.pointerLockElement !== this.canvas) return;
-      this.yaw -= e.movementX * MOUSE_SENS;
-      this.pitch = clamp(this.pitch - e.movementY * MOUSE_SENS, -PITCH_LIMIT, PITCH_LIMIT);
+      if (!this.dragging || this.locked) return;
+      const mx = e.movementX, my = e.movementY;
+      if (Math.abs(mx) > 150 || Math.abs(my) > 150) return;
+      this.canvas.dragDist += Math.abs(mx) + Math.abs(my);
+      this.yaw -= mx * MOUSE_SENS;
+      this.pitch = clamp(this.pitch - my * MOUSE_SENS, -PITCH_LIMIT, PITCH_LIMIT);
     });
   }
 
@@ -121,6 +138,9 @@ export class Player {
       strafe = (this.keys.KeyD ? 1 : 0) - (this.keys.KeyA ? 1 : 0);
     }
 
+    this.intent = walk;
+    this.eye += (this.eyeTarget - this.eye) * Math.min(1, dt * 1.2); // slow, dreamlike height change
+
     // heading basis (camera faces -Z at yaw 0)
     const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw); // forward
     const rx = -fz, rz = fx;                                   // right
@@ -128,7 +148,12 @@ export class Player {
     let tz = fz * walk + rz * strafe;
     const tl = Math.hypot(tx, tz);
     if (tl > 1) { tx /= tl; tz /= tl; }
-    const target = new THREE.Vector2(tx * MAX_SPEED, tz * MAX_SPEED);
+    // run: Shift on the keyboard; on touch, keep walking for 1.5 s and it
+    // speeds up by itself; both hand fists held long do the same
+    this._walkT = walk > 0 ? (this._walkT || 0) + dt : 0;
+    const running = this.keys.ShiftLeft || this.keys.ShiftRight || ((this.mode === 'light' || this.hand.present) && this._walkT > 1.5);
+    const top = running ? RUN_SPEED : MAX_SPEED;
+    const target = new THREE.Vector2(tx * top, tz * top);
 
     // soft accel toward target velocity
     const k = Math.min(1, ACCEL * dt);
@@ -177,7 +202,7 @@ export class Player {
   }
 
   _apply(bobY = 0) {
-    this.camera.position.set(this.pos.x, EYE + bobY, this.pos.y);
+    this.camera.position.set(this.pos.x, this.eye + bobY, this.pos.y);
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
   }
 }
@@ -191,3 +216,5 @@ function closestOnSeg(px, pz, ax, az, bx, bz) {
   t = t < 0 ? 0 : t > 1 ? 1 : t;
   return { x: ax + vx * t, z: az + vz * t };
 }
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

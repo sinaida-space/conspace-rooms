@@ -46,20 +46,85 @@ Then open http://localhost:4800/ in a browser. Requires WebGL2.
 
 ## Deploy
 
-Served as a static site from `main` (root) via GitHub Pages:
+Primary: GitHub Pages from `main` (root):
 https://sinaida-space.github.io/conspace-rooms/
 
-All asset and module paths are relative, so the site works unmodified under the
-`/conspace-rooms/` subpath. To (re)enable Pages:
+Mirror: Neocities, https://conspace-rooms.neocities.org/
+
+Both are free and both open from Russia without a VPN (checked with
+check-host.net Russian nodes on 2026-09-25). Cloudflare Pages is not used:
+Cloudflare is throttled in Russia. Codeberg Pages is not used either: its terms
+require free licenses and the artworks are all rights reserved.
+
+All asset and module paths are relative, so the site works unmodified under a
+subpath or at a domain root. To (re)enable GitHub Pages:
 
 ```
 gh api repos/sinaida-space/conspace-rooms/pages -X POST \
   -f build_type=legacy -f "source[branch]=main" -f "source[path]=/"
 ```
 
+To update the Neocities mirror (log in once with `neocities login`, you type
+the password yourself):
+
+```
+gem install neocities
+./scripts/neocities-deploy.sh
+```
+
+The script uploads only tracked site files (no `.git`, `reel/`, `.claude/`).
+
+Before any hosting change, check reachability from Russia:
+
+```
+curl -s -H 'Accept: application/json' \
+  "https://check-host.net/check-http?host=https://sinaida-space.github.io/conspace-rooms/&max_nodes=40"
+```
+
+then read `https://check-host.net/check-result/<request_id>` and look at the
+`ru*` nodes.
+
+## Путь души (soul path)
+
+The labyrinth follows the arc of the SOULS series, from trauma to accepting
+oneself. Distance from spawn picks the zone (`src/zones.js`, blended in the
+shaders in `src/materials.js`):
+
+- **Fear** (0–45 m): hospital corridors, green oil paint under whitewash, damp,
+  linoleum, cold tubes that flicker often.
+- **Memory** (80–135 m): grandmother's flat, rosette wallpaper, rugs on the
+  walls, parquet, warm lampshades.
+- **Acceptance** (175 m and on): pale walls dissolving into lace and light.
+
+`src/soulpath.js` adds the responsive layer. The world stays in one stage and
+moves on only through a portal: a scratched baroque frame with a shimmering
+veil. Candles along the walls are the map: in the hospital corridors their
+flames redden toward a portal into the red rooms; in the red rooms the flame
+turns yellow toward the next portal and the wax itself reddens toward
+grandmother's room. In that room three souls drift (someone close, a child, a
+grown-up); walk into one and its question types itself on the television.
+Terminal printouts on the walls ask questions of their own, chalk writings sit
+at a child's height, red scratches lead to unseen works, some doors lift after
+three seconds of stillness. Every work hums its own note, and when you look
+closely at one (E) it opens its own sound world (`src/ambience.js`: rain,
+wind, fire, a clock, a music box, a heart monitor…). Shift runs.
+`src/dust.js` hangs dust in the lamp beams. Nothing is stored.
+
+Secrets: walk backwards for 30 s; stand still for a minute in the last stage.
+
+## Languages
+
+The first screen asks for Russian or English. The choice is kept only in the
+URL (`?lang=ru` / `?lang=en`), never in storage, so a link with `?lang=ru`
+opens straight in Russian. All strings live in `src/i18n.js`. The text pages
+(`tech.html`, `privacy.html`) hold both languages and switch the same way.
+
+Easter egg: click the CONSPACE ROOMS title on the welcome screen.
+
 ## Stack
 
 - Vanilla JS (ES modules), no build step
+- [Departure Mono](https://github.com/rektdeckard/departure-mono) by Helena Zhang (SIL OFL 1.1), self-hosted in `assets/fonts/`
 - [three.js](https://threejs.org/) (vendored) for rendering
 - Procedural GLSL materials — no texture files for the labyrinth geometry itself
 - [MediaPipe Tasks Vision](https://developers.google.com/mediapipe) hand landmarker for gesture mode (loaded lazily, opt-in)

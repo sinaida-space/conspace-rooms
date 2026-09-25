@@ -24,7 +24,7 @@ export const CEIL_H = 3.2;               // ceiling height
 const BAND = new Set([4, 5, 10, 11]);
 
 // ── deterministic hashing ───────────────────────────────────────────────────
-function hash2i(seed, x, y) {
+export function hash2i(seed, x, y) {
   let h = seed | 0;
   h = Math.imul(h ^ (x | 0), 0x27d4eb2d);
   h ^= h >>> 15;
@@ -36,7 +36,7 @@ function hash2i(seed, x, y) {
 }
 
 // mulberry32 — small deterministic PRNG seeded from a chunk hash
-function mulberry32(seed) {
+export function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) | 0;
@@ -110,12 +110,35 @@ function pushQuad(pos, nrm, a, b, c, d, nx, ny, nz) {
   for (let i = 0; i < 6; i++) nrm.push(nx, ny, nz);
 }
 
-function buildGeometry(pos, nrm) {
+function buildGeometry(pos, nrm, lamp, ao, wallU, wallCorner) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
   g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nrm), 3));
+  if (lamp) g.setAttribute('aLamp', new THREE.BufferAttribute(new Float32Array(lamp), 1));
+  if (ao) g.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(ao), 1));
+  if (wallU) g.setAttribute('aU', new THREE.BufferAttribute(new Float32Array(wallU), 1));
+  if (wallCorner) g.setAttribute('aCorner', new THREE.BufferAttribute(new Float32Array(wallCorner), 2));
   g.computeBoundingSphere();
   return g;
+}
+
+// ── ceiling fixtures ────────────────────────────────────────────────────────
+// A fixture hangs in the centre of a cell whose local row and column (mod the
+// 16-cell chunk) are both on LAMP_LINES. Rows 5 and 11 run down the corridor
+// lattice, so every corridor gets a lamp every 3–4 cells, and each fixture
+// is smaller than one cell, so a wall can never cut it. materials.js and
+// dust.js light from exactly these points.
+export const LAMP_LINES = [1, 5, 8, 11, 14];
+const LAMP_SET = new Set(LAMP_LINES);
+const mod16 = v => ((v % 16) + 16) % 16;
+export function isLampCell(gi, gj) { return LAMP_SET.has(mod16(gi)) && LAMP_SET.has(mod16(gj)); }
+// nearest lamp line (global cell index) to a cell coordinate, plus offset k
+export function lampLineNear(c, k = 0) {
+  const ext = [-5, -2, 1, 5, 8, 11, 14, 17, 21];
+  const base = Math.floor(c / 16) * 16, lc = c - base;
+  let best = 2, bd = Infinity;
+  for (let i = 1; i < 8; i++) { const d = Math.abs(ext[i] + 0.5 - lc); if (d < bd) { bd = d; best = i; } }
+  return base + ext[Math.max(0, Math.min(8, best + k))];
 }
 
 // ── World ───────────────────────────────────────────────────────────────────
@@ -160,7 +183,23 @@ export class World {
   }
 
   _buildChunk(cx, cz) {
-    const wp = [], wn = [], fp = [], fn = [], cp = [], cn = [];
+    const wp = [], wn = [], fp = [], fn = [], cp = [], cn = [], cl = [], fa = [], ca = [], wu = [], wc = [];
+    // wall corners: what each vertical edge of a wall face meets. -1 an inner
+    // corner (shadow gathers), +1 an outer corner (the edge catches light),
+    // 0 the wall simply continues. Softens every corner in the shader.
+    const edgeType = (gi, gj, sx, sz, tx, tz) => (solidAtGlobal(gi + tx, gj + tz) ? -1
+      : solidAtGlobal(gi + tx + sx, gj + tz + sz) ? 0 : 1);
+    const wallQuad = (gi, gj, sx, sz, tx, tz, a, b, c, d, nx, nz) => {
+      pushQuad(wp, wn, a, b, c, d, nx, 0, nz);
+      wu.push(0, 1, 1, 0, 1, 0);                  // vertex order a b c a c d: a and d on the left edge
+      const L = edgeType(gi, gj, sx, sz, -tx, -tz), R = edgeType(gi, gj, sx, sz, tx, tz);
+      for (let v = 0; v < 6; v++) wc.push(L, R);
+    };
+    // corner occlusion: how many of the four cells around a grid corner are
+    // wall. Floor and ceiling darken softly toward walls, the way real
+    // corners collect shadow and dust.
+    const cornerAO = (gx, gz) => 1 - 0.2 * ((solidAtGlobal(gx - 1, gz - 1) ? 1 : 0) + (solidAtGlobal(gx, gz - 1) ? 1 : 0)
+      + (solidAtGlobal(gx - 1, gz) ? 1 : 0) + (solidAtGlobal(gx, gz) ? 1 : 0));
     const gi0 = cx * CHUNK, gj0 = cz * CHUNK;
     for (let j = 0; j < CHUNK; j++) {
       for (let i = 0; i < CHUNK; i++) {
@@ -170,23 +209,30 @@ export class World {
         const z0 = gj * CELL, z1 = z0 + CELL;
         // floor (y=0) + ceiling (y=CEIL_H)
         pushQuad(fp, fn, [x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1], 0, 1, 0);
+        { const a = cornerAO(gi, gj), b = cornerAO(gi + 1, gj), c = cornerAO(gi + 1, gj + 1), d = cornerAO(gi, gj + 1);
+          fa.push(a, b, c, a, c, d); }
         pushQuad(cp, cn, [x0, CEIL_H, z1], [x1, CEIL_H, z1], [x1, CEIL_H, z0], [x0, CEIL_H, z0], 0, -1, 0);
+        { const a = cornerAO(gi, gj + 1), b = cornerAO(gi + 1, gj + 1), c = cornerAO(gi + 1, gj), d = cornerAO(gi, gj);
+          ca.push(a, b, c, a, c, d); }
+        const ok = isLampCell(gi, gj) ? 1 : 0;
+        for (let v = 0; v < 6; v++) cl.push(ok);
         // walls where a neighbour is solid (queried globally → seamless)
+        // (the along-wall direction t runs from the face's left edge to its right)
         if (solidAtGlobal(gi + 1, gj)) // +X face
-          pushQuad(wp, wn, [x1, 0, z0], [x1, 0, z1], [x1, CEIL_H, z1], [x1, CEIL_H, z0], -1, 0, 0);
+          wallQuad(gi, gj, 1, 0, 0, 1, [x1, 0, z0], [x1, 0, z1], [x1, CEIL_H, z1], [x1, CEIL_H, z0], -1, 0);
         if (solidAtGlobal(gi - 1, gj)) // -X face
-          pushQuad(wp, wn, [x0, 0, z1], [x0, 0, z0], [x0, CEIL_H, z0], [x0, CEIL_H, z1], 1, 0, 0);
+          wallQuad(gi, gj, -1, 0, 0, -1, [x0, 0, z1], [x0, 0, z0], [x0, CEIL_H, z0], [x0, CEIL_H, z1], 1, 0);
         if (solidAtGlobal(gi, gj + 1)) // +Z face
-          pushQuad(wp, wn, [x1, 0, z1], [x0, 0, z1], [x0, CEIL_H, z1], [x1, CEIL_H, z1], 0, 0, -1);
+          wallQuad(gi, gj, 0, 1, -1, 0, [x1, 0, z1], [x0, 0, z1], [x0, CEIL_H, z1], [x1, CEIL_H, z1], 0, -1);
         if (solidAtGlobal(gi, gj - 1)) // -Z face
-          pushQuad(wp, wn, [x0, 0, z0], [x1, 0, z0], [x1, CEIL_H, z0], [x0, CEIL_H, z0], 0, 0, 1);
+          wallQuad(gi, gj, 0, -1, 1, 0, [x0, 0, z0], [x1, 0, z0], [x1, CEIL_H, z0], [x0, CEIL_H, z0], 0, 1);
       }
     }
     const group = new THREE.Group();
     group.name = 'chunk_' + cx + '_' + cz;
-    if (fp.length) group.add(new THREE.Mesh(buildGeometry(fp, fn), this.mat.floor));
-    if (cp.length) group.add(new THREE.Mesh(buildGeometry(cp, cn), this.mat.ceil));
-    if (wp.length) group.add(new THREE.Mesh(buildGeometry(wp, wn), this.mat.wall));
+    if (fp.length) group.add(new THREE.Mesh(buildGeometry(fp, fn, null, fa), this.mat.floor));
+    if (cp.length) group.add(new THREE.Mesh(buildGeometry(cp, cn, cl, ca), this.mat.ceil));
+    if (wp.length) group.add(new THREE.Mesh(buildGeometry(wp, wn, null, null, wu, wc), this.mat.wall));
     this.scene.add(group);
     return group;
   }
@@ -282,3 +328,5 @@ export class World {
     return slots;
   }
 }
+
+// Je suis le spectre d'une rose que tu portais hier au bal.
