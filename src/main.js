@@ -93,7 +93,7 @@ async function boot() {
   let elapsed = 0, atmo = null, post = null, audio = null; // not `t`: that name is the translator
   let prevBobSin = 0, prevYaw = 0;
   const dustLight = new THREE.Color();
-  renderer.setAnimationLoop(() => {
+  const frame = () => {
     const dt = Math.min(clock.getDelta(), 0.05);
     elapsed += dt;
     quality.govern(dt);
@@ -136,7 +136,9 @@ async function boot() {
     if (audio) audio.motion(speed);
     if (post) post.render(scene, camera, dt, elapsed, speed);
     else renderer.render(scene, camera);
-  });
+  };
+  renderer.setAnimationLoop(frame);
+  window.__app.frame = frame;   // dev hook: step the world by hand (headless checks, hidden tabs)
 
   const { mode, cameraStream } = await ui.waitForEnter();
   ui.hideWelcome();

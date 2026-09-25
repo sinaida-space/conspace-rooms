@@ -14,6 +14,7 @@ const box = (w, h, d) => roundedBox(w, h, d, Math.min(0.04, Math.min(w, h, d) * 
 // every Soviet stairwell had. It swings open on its hinges.
 
 const DOOR_W = 0.9, DOOR_H = 2.05, FRAME = 0.08, WALL_T = 0.2;
+const CEIL_TOP = 3.1;   // just under the ceiling (world.js CEIL_H 3.2)
 
 function canvasTex(w, h, draw) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -153,6 +154,75 @@ export function buildDoorway(span, wallMat, stage, text) {
     plaque.position.set(DOOR_W / 2, 1.38, f * 0.027); plaque.rotation.y = f > 0 ? 0 : Math.PI; pivot.add(plaque);
   }
   return { group: g, pivot, door, side, gap: DOOR_W };
+}
+
+// ── light behind a door ─────────────────────────────────────────────────────
+// What pours out when a presence door gives way for a moment: the doorway
+// fills with white, and shafts of light fan out through the air toward the
+// visitor, streaked like sun through dust. Additive planes (a vertical and a
+// horizontal fan) that start in the door gap and widen as they reach out.
+// Built in the doorway's own frame, reaching along +Z; set(k, time) fades it.
+const RAY_VERT = /* glsl */`
+varying vec2 vUv;
+void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+`;
+const RAY_FRAG = /* glsl */`
+uniform float uK;
+uniform float uTime;
+varying vec2 vUv;
+void main(){
+  float along = vUv.y, across = vUv.x;
+  float streak = 0.5 + 0.5 * sin(across * 41.0 + uTime * 0.5) * sin(across * 17.0 - uTime * 0.31);
+  streak = streak * streak * streak;                   // narrow shafts with dark air between
+  float fade = pow(1.0 - along, 1.7);
+  float edge = smoothstep(0.0, 0.22, across) * smoothstep(1.0, 0.78, across);
+  float a = uK * fade * edge * (0.08 + 0.92 * streak) * 0.12;
+  gl_FragColor = vec4(vec3(1.0, 0.97, 0.9) * a, 1.0);
+}
+`;
+const GAP_FRAG = /* glsl */`
+uniform float uK;
+varying vec2 vUv;
+void main(){
+  vec2 d = abs(vUv - 0.5) * 2.0;
+  float soft = 1.0 - smoothstep(0.75, 1.0, max(d.x, d.y));
+  gl_FragColor = vec4(vec3(1.0, 0.97, 0.9) * uK * (0.55 + 0.45 * soft), 1.0);
+}
+`;
+export function buildLightRays(reach = 4.5) {
+  const g = new THREE.Group();
+  const uniforms = { uK: { value: 0 }, uTime: { value: 0 } };
+  const mat = new THREE.ShaderMaterial({ uniforms, vertexShader: RAY_VERT, fragmentShader: RAY_FRAG,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const z0 = WALL_T / 2, z1 = z0 + reach;
+  const nearW = DOOR_W, nearH = DOOR_H, farW = 2.3, farH = CEIL_TOP;
+  // one blade: a quad from a line in the gap to a line in the far rectangle
+  const blade = (a0, a1, b0, b1) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([...a0, ...a1, ...b1, ...b0], 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+    geo.setIndex([0, 1, 2, 0, 2, 3]);
+    return new THREE.Mesh(geo, mat);
+  };
+  for (let k = 0; k <= 6; k++) {                        // vertical fan
+    const f = k / 6, nx = (f - 0.5) * nearW * 0.92, fx = (f - 0.5) * farW;
+    g.add(blade([nx, 0, z0], [nx, nearH, z0], [fx, 0, z1], [fx, farH, z1]));
+  }
+  for (let k = 0; k <= 4; k++) {                        // horizontal fan
+    const f = k / 4, ny = 0.1 + f * (nearH - 0.2), fy = 0.05 + f * (farH - 0.1);
+    g.add(blade([-nearW / 2, ny, z0], [nearW / 2, ny, z0], [-farW / 2, fy, z1], [farW / 2, fy, z1]));
+  }
+  const gapMat = new THREE.ShaderMaterial({ uniforms, vertexShader: RAY_VERT, fragmentShader: GAP_FRAG,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  const gap = new THREE.Mesh(new THREE.PlaneGeometry(nearW, nearH), gapMat);
+  gap.position.set(0, nearH / 2, -WALL_T / 2 - 0.01);   // the far face of the wall: the gap turns to white
+  g.add(gap);
+  g.visible = false;
+  return {
+    group: g,
+    set(k, time) { uniforms.uK.value = k; uniforms.uTime.value = time; g.visible = k > 0.002; },
+    dispose() { g.traverse(o => o.geometry?.dispose()); mat.dispose(); gapMat.dispose(); },
+  };
 }
 
 // Je suis le spectre d'une rose que tu portais hier au bal.

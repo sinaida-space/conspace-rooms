@@ -5,7 +5,7 @@ import { t } from './i18n.js';
 import { EYE_HEIGHT } from './player.js';
 import { buildKitchen, createKitchenRig, buildScatter, tickCandles } from './kitchen.js';
 import { baroqueFrame } from './frames.js';
-import { buildDoorway } from './doorway.js';
+import { buildDoorway, buildLightRays } from './doorway.js';
 import { artworkSlots } from './artworks.js';
 import { createWardKit, wardPlan, reserveSlot, reserveAround, cellKey } from './ward.js';
 
@@ -19,8 +19,9 @@ import { createWardKit, wardPlan, reserveSlot, reserveAround, cellKey } from './
 //                   are seen, onward, away from where you started
 //   wall writings   scrawled at a child's height, one per some chunks, voiced
 //                   by the zone; turn around and some of them have changed
-//   presence doors  a few corridor crossings are shut; stand still in front of
-//                   one for a few seconds and it lifts
+//   presence doors  very rarely a corridor crossing is shut by a door; stand
+//                   still in front of it and it gives way: light pours out,
+//                   the music clears, "not yet", and it slams shut for good
 //   portals         shimmering doorways further out; walking through one moves
 //                   the whole world to the next stage (fear → memory → light).
 //                   Nothing else changes the stage.
@@ -47,6 +48,10 @@ const SEEN_DIST = 3.2;           // metres: an artwork this close and in view co
 
 const WRITING_Y = 0.72;          // child's height
 const DOOR_WAIT = 3.0;           // seconds of stillness that open a door
+const DOOR_EVERY = 0.0625;       // chance per chunk edge: about one door in eight chunks
+const DOOR_SWING = 1.15;         // radians the door gives way
+const DOOR_HOLD = 4.2;           // seconds the light pours out before the door slams
+const DOOR_SLAM = 0.22;          // seconds to slam shut
 const CHILD_AFTER = 30;          // seconds of walking backwards
 const CHILD_EYE = 0.98;
 const STILL_FOR_19 = 60;         // seconds of stillness in acceptance
@@ -237,7 +242,9 @@ export class SoulPath {
     this.kitchenRig = createKitchenRig(scene, renderer, quality);
     this.seen = new Set();          // art ids seen this visit
     this.chunkStuff = new Map();    // chunk key -> { group, writings[], doors[], kitchen }
-    this.doorsOpen = new Set();     // door keys opened this visit
+    this.doorsOpen = new Set();     // door keys opened this visit (none now: doors only give way for a moment)
+    this.doorsDone = new Set();     // doors that already gave way and slammed: they stay shut
+    this._doorLights = [];          // light from a door ajar, for the walls to catch
     this.textures = [];
 
     // red scratches: a small pool of wall decals, re-placed along the route
@@ -396,9 +403,8 @@ export class SoulPath {
       const rd = mulberry32(hash2i(SEED_DOOR, cx, cz));
       for (const edge of ['west', 'north']) {
         const band = rd() < 0.5 ? 4 : 10;
-        if (rd() > 0.26 || usedEdges.has(edge)) continue; // about one crossing in four
+        if (rd() > DOOR_EVERY || usedEdges.has(edge)) continue;
         const key = `${cx}:${cz}:${edge}`;
-        if (this.doorsOpen.has(key)) continue;
         stuff.doors.push(this._makeDoor(group, cx, cz, edge, band, key));
       }
     }
@@ -483,14 +489,16 @@ export class SoulPath {
 
   // A line typed across the lower screen, then gone.
   _say(label, text) {
-    this._tvText = text;                               // the television shows exactly what is said
-    this._tvUntil = performance.now() + 11000;
-    this._tvDirty = true;
+    if (label !== null) {                               // the television shows exactly what a soul says
+      this._tvText = text;
+      this._tvUntil = performance.now() + 11000;
+      this._tvDirty = true;
+    }
     document.getElementById('soul-q')?.remove();
     const el = document.createElement('div');
     el.id = 'soul-q';
     el.innerHTML = `<p class="sq-label"></p><p class="sq-text"></p>`;
-    el.querySelector('.sq-label').textContent = label;
+    if (label) el.querySelector('.sq-label').textContent = label; else el.querySelector('.sq-label').remove();
     document.body.appendChild(el);
     const tEl = el.querySelector('.sq-text');
     let i = 0;
@@ -525,7 +533,8 @@ export class SoulPath {
     const walls = [segAlong(-span / 2, -d.gap / 2), segAlong(d.gap / 2, span / 2)];
     const seg = segAlong(-d.gap / 2, d.gap / 2);
     const routeSeg = segAlong(-span / 2, span / 2);   // path-finding treats the closed crossing as shut
-    return { key, pivot: d.pivot, leaf: d.door, walls, seg, routeSeg, x, z, waitT: 0, lift: 0, open: false };
+    return { key, group: d.group, pivot: d.pivot, leaf: d.door, walls, seg, routeSeg, x, z, waitT: 0, t: 0, open: false,
+      phase: this.doorsDone.has(key) ? 'done' : 'wait', rays: null, dir: 1 };   // open stays false: a door never lets you through
   }
 
 
@@ -967,23 +976,50 @@ export class SoulPath {
       w.behindT = d < 14 && (fx * dx + fz * dz) / (d || 1) < -0.2 ? w.behindT + dt : 0;
     }
 
-    // presence doors: stand still close to one and it lifts into the ceiling
+    // presence doors: stand still close to one and it gives way. Light pours
+    // out through the gap, the music clears, "not yet", and it slams shut.
+    this._doorLights = [];
     for (const s of this.chunkStuff.values()) for (const d of s.doors) {
-      if (d.open) {
-        if (d.lift < 1) {                             // swing open on the hinges, slowing at the end
-          d.lift = Math.min(1, d.lift + dt / 1.8);
-          d.pivot.rotation.y = -1.75 * (1 - (1 - d.lift) ** 3);
-        }
-        continue;
+      if (d.phase === 'done') continue;
+      if (d.phase === 'wait') {
+        const near = Math.hypot(d.x - P.pos.x, d.z - P.pos.y) < 2.8;
+        d.waitT = near && speed < 0.08 && !P.locked ? d.waitT + dt : Math.max(0, d.waitT - dt * 2);
+        d.leaf.material.color.setScalar(0.8 + 0.2 * Math.min(1, d.waitT / DOOR_WAIT));
+        if (d.waitT < DOOR_WAIT) continue;
+        d.phase = 'open'; d.t = 0; d.said = false;
+        const local = d.group.worldToLocal(new THREE.Vector3(P.pos.x, 1, P.pos.y));
+        d.dir = local.z >= 0 ? 1 : -1;                 // the side the visitor stands on
+        d.rays ??= buildLightRays();
+        d.rays.group.rotation.y = d.dir > 0 ? 0 : Math.PI;
+        d.group.add(d.rays.group);
+        this.audio?.doorLight?.(DOOR_HOLD + 1.5);
       }
-      const near = Math.hypot(d.x - P.pos.x, d.z - P.pos.y) < 2.8;
-      d.waitT = near && speed < 0.08 && !P.locked ? d.waitT + dt : Math.max(0, d.waitT - dt * 2);
-      const glow = 0.8 + 0.2 * Math.min(1, d.waitT / DOOR_WAIT);
-      d.leaf.material.color.setScalar(glow);
-      if (d.waitT >= DOOR_WAIT) {
-        d.open = true;
-        this.doorsOpen.add(d.key);
-        this.audio?.chime();
+      d.t += dt;
+      let swing = 0, k = 0;
+      if (d.phase === 'open') {
+        const e = Math.min(1, d.t / 1.3);
+        swing = DOOR_SWING * (1 - (1 - e) ** 3);        // gives way, slowing at the end
+        k = Math.min(1, Math.max(0, (d.t - 0.15) / 0.9));
+        if (!d.said && d.t > 0.8) { d.said = true; this._say(null, t('doorNotYet')); }
+        if (d.t >= DOOR_HOLD) { d.phase = 'slam'; d.t = 0; }
+      } else if (d.phase === 'slam') {
+        const e = Math.min(1, d.t / DOOR_SLAM);
+        swing = DOOR_SWING * (1 - e * e);               // accelerating shut
+        k = Math.max(0, 1 - d.t / 0.12);
+        if (e >= 1) {
+          d.phase = 'done'; this.doorsDone.add(d.key);
+          d.leaf.material.color.setScalar(0.8);
+          this.audio?.doorSlam?.();
+          this.post?.burst?.(0.7);
+        }
+      }
+      d.pivot.rotation.y = -d.dir * swing;               // away from the visitor
+      d.rays?.set(k, time);
+      if (k > 0.01) {                                    // the walls and floor catch it
+        for (const [z, y] of [[0.6, 1.3], [2.0, 1.0]]) {
+          const p = d.rays.group.localToWorld(new THREE.Vector3(0, y, z));
+          this._doorLights.push({ x: p.x, y: p.y, z: p.z, col: new THREE.Color(1, 0.97, 0.9).multiplyScalar(0.55 * k) });
+        }
       }
     }
 
@@ -1117,7 +1153,7 @@ export class SoulPath {
       all.sort((a, b) => a[0] - b[0]);
       this._nearCandles = all.slice(0, 8).map(e => e[1]);
     }
-    window.__app?.atmo?.setCandles(this._nearCandles || [], time);
+    window.__app?.atmo?.setCandles(this._doorLights.length ? this._doorLights.concat(this._nearCandles || []).slice(0, 8) : this._nearCandles || [], time);
 
     // voices of the works nearby
     this._updateVoices(zone);
