@@ -199,6 +199,21 @@ export class AudioEngine {
     this.chime();
   }
 
+  // Television snow: a hiss whose level the caller sets (0 silent .. 1 close).
+  tvStatic(level) {
+    if (!this.ctx) return;
+    if (!this._tvGain) {
+      const ctx = this.ctx, len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 7000;
+      this._tvGain = ctx.createGain(); this._tvGain.gain.value = 0;
+      src.connect(hp); hp.connect(lp); lp.connect(this._tvGain); this._tvGain.connect(this.master); src.start();
+    }
+    this._tvGain.gain.setTargetAtTime(this.muted ? 0 : level * 0.05, this.ctx.currentTime, 0.15);
+  }
+
   // Standing at a work (or looking closely at it): its own sound world rises
   // and the corridor falls silent. index: artwork index, or null to leave.
   nearWork(index) {

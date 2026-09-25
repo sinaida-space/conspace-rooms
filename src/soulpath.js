@@ -428,28 +428,14 @@ export class SoulPath {
     const text = qs[this._soulIdx[cat]++ % qs.length];
     const label = t('soulLabels')[cat];
     this.audio?.whisper?.();
-    // on the television: black screen, phosphor text
-    for (const sc of room?.screens || []) {
-      const c = document.createElement('canvas'); c.width = 512; c.height = 384;
-      const g = c.getContext('2d');
-      g.fillStyle = '#050000'; g.fillRect(0, 0, 512, 384);
-      g.fillStyle = '#ffd2c4'; g.shadowColor = '#ff4a30'; g.shadowBlur = 14; // bright phosphor with a red bloom
-      g.font = '34px "Departure Mono", monospace';
-      const words = text.split(' '); let line = '', y = 96;
-      for (const w of words) { const tt = line ? line + ' ' + w : w; if (g.measureText(tt).width > 450 && line) { g.fillText(line, 30, y); line = w; y += 44; } else line = tt; }
-      g.fillText(line, 30, y);
-      g.shadowBlur = 0;
-      for (let yy = 0; yy < 384; yy += 3) { g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, yy, 512, 1); }
-      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
-      const prev = sc.material.map;
-      sc.material.map = tex; sc.material.needsUpdate = true;
-      setTimeout(() => { sc.material.map = prev; sc.material.needsUpdate = true; tex.dispose(); }, 12000);
-    }
     this._say(label, text);
   }
 
   // A line typed across the lower screen, then gone.
   _say(label, text) {
+    this._tvText = text;                               // the television shows exactly what is said
+    this._tvUntil = performance.now() + 11000;
+    this._tvDirty = true;
     document.getElementById('soul-q')?.remove();
     const el = document.createElement('div');
     el.id = 'soul-q';
@@ -603,6 +589,49 @@ export class SoulPath {
       const [cx, cz] = key.split(':').map(Number);
       st.scatter = this._buildScatter(st.group, cx, cz);
     }
+  }
+
+  // ── the television ─────────────────────────────────────────────────────
+  // One screen texture for every room: the current question in bright
+  // phosphor while it is being asked, otherwise snow (black and white static).
+  _tvTexture() {
+    if (this._tv) return this._tv;
+    const c = document.createElement('canvas'); c.width = 256; c.height = 192;
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    this._tv = { c, g: c.getContext('2d'), tex, img: null, frame: 0 };
+    return this._tv;
+  }
+  _drawTV() {
+    const tv = this._tvTexture(), g = tv.g, W = tv.c.width, H = tv.c.height;
+    const talking = this._tvText && performance.now() < this._tvUntil;
+    if (talking) {
+      if (!this._tvDirty) return true;
+      this._tvDirty = false;
+      g.fillStyle = '#050000'; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#ffd2c4'; g.shadowColor = '#ff4a30'; g.shadowBlur = 8;
+      g.font = '17px "Departure Mono", monospace';
+      const words = this._tvText.split(/\s+/); let line = '', y = 44;
+      for (const w of words) { const tt = line ? line + ' ' + w : w; if (g.measureText(tt).width > 224 && line) { g.fillText(line, 16, y); line = w; y += 22; } else line = tt; }
+      g.fillText(line, 16, y);
+      g.shadowBlur = 0;
+      for (let yy = 0; yy < H; yy += 2) { g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(0, yy, W, 1); }
+      tv.tex.needsUpdate = true;
+      return true;
+    }
+    // snow: redraw every other frame, grey-white dots on black, a rolling bar
+    if ((tv.frame++ & 1) === 0) {
+      if (!tv.img) tv.img = g.createImageData(W, H);
+      const d = tv.img.data, bar = (performance.now() / 12) % H;
+      for (let i = 0; i < W * H; i++) {
+        const y = (i / W) | 0;
+        let v = Math.random() < 0.5 ? Math.random() * 90 : 120 + Math.random() * 135;
+        if (Math.abs(y - bar) < 8) v *= 1.25;
+        d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255;
+      }
+      g.putImageData(tv.img, 0, 0);
+      tv.tex.needsUpdate = true;
+    }
+    return false;
   }
 
   // ── roaming souls ──────────────────────────────────────────────────────
@@ -996,13 +1025,22 @@ export class SoulPath {
         }
       }
     }
+    // the television: attach the shared screen once, draw it, hiss when it snows
+    if (room) {
+      const tv = this._tvTexture();
+      for (const sc of room.screens) if (sc.material.map !== tv.tex) { sc.material.map = tv.tex; sc.material.needsUpdate = true; }
+      const talking = this._drawTV();
+      const tvPos = room.tv;
+      const dTv = tvPos ? Math.hypot(tvPos.x - P.pos.x, tvPos.z - P.pos.y) : 99;
+      this.audio?.tvStatic?.(talking ? 0 : Math.max(0, 1 - dTv / 7));
+    } else this.audio?.tvStatic?.(0);
     if (room) {
       for (const { flame, halo } of room.flames.concat(room.trail || [])) {
         const f = 1.7 + Math.sin(time * 13 + flame.id) * 0.25 + Math.random() * 0.2;
         flame.scale.set(1, f, 1);
         halo.material.opacity = 0.7 + Math.random() * 0.3;
       }
-      for (const sc of room.screens) sc.material.color.setScalar(0.8 + 0.2 * Math.random());
+      for (const sc of room.screens) sc.material.color.setScalar(0.92 + 0.08 * Math.random());
     }
 
     if (this.guide) this._updateGuide(dt, time);
