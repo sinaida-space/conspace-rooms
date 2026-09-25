@@ -69,3 +69,5 @@ export class Quality {
     try { localStorage.setItem('conspace-tier', String(this.tier)); } catch (e) {}
   }
 }
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

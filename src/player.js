@@ -216,3 +216,5 @@ function closestOnSeg(px, pz, ax, az, bx, bz) {
   t = t < 0 ? 0 : t > 1 ? 1 : t;
   return { x: ax + vx * t, z: az + vz * t };
 }
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

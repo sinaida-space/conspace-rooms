@@ -254,6 +254,14 @@ export class SoulPath {
     this._stillT = 0; this.nineteenth = null;
     this._inKitchen = false;
     this._soulIdx = [0, 0, 0];            // next question per soul
+    // guide: five presses of the M key (any layout: physical key) toggles it
+    this.guide = null; this._mTimes = [];
+    addEventListener('keydown', e => {
+      if (e.code !== 'KeyM' || e.repeat) return;
+      const now = performance.now();
+      this._mTimes = this._mTimes.filter(tm => now - tm < 2500).concat(now);
+      if (this._mTimes.length >= 5) { this._mTimes = []; this._toggleGuide(); }
+    });
 
     // doors take part in collision: wrap World's wall query once
     const orig = world.wallSegmentsNear.bind(world);
@@ -588,6 +596,59 @@ export class SoulPath {
     }
   }
 
+  // ── guide ──────────────────────────────────────────────────────────────
+  _toggleGuide() {
+    if (this.guide) {
+      this.scene.remove(this.guide.mesh); this.guide.mesh.geometry.dispose(); this.guide.mesh.material.dispose();
+      this.guide = null; return;
+    }
+    const shape = new THREE.Shape();                    // a broad chevron lying on the floor
+    shape.moveTo(0, 0.45); shape.lineTo(0.42, -0.05); shape.lineTo(0.24, -0.05); shape.lineTo(0, 0.2);
+    shape.lineTo(-0.24, -0.05); shape.lineTo(-0.42, -0.05); shape.closePath();
+    const geo = new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2).scale(1.4, 1, 1.4);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x7dff9a, transparent: true, opacity: 0.9, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
+    const mesh = new THREE.InstancedMesh(geo, mat, 80);
+    mesh.count = 0; mesh.frustumCulled = false; mesh.renderOrder = 3;
+    this.scene.add(mesh);
+    this.guide = { mesh, t: 0 };
+  }
+
+  // Where the guide leads: in fear to the nearest portal into the red rooms,
+  // in the red rooms to the nearest grandmother's room, then to the way on.
+  _guideTarget() {
+    const P = this.player, cx = Math.floor(P.pos.x / (CHUNK * CELL)), cz = Math.floor(P.pos.y / (CHUNK * CELL));
+    let best = null, bd = Infinity;
+    const consider = (x, z) => { const d = Math.hypot(x - P.pos.x, z - P.pos.y); if (d < bd) { bd = d; best = { x, z }; } };
+    for (let dz = -5; dz <= 5; dz++) for (let dx = -5; dx <= 5; dx++) {
+      if (this.stage.stage === 1 && !this.visitedRoom) { const k = kitchenPlan(cx + dx, cz + dz); if (k) consider(k.x, k.z); }
+      else for (const p of portalPlan(cx + dx, cz + dz)) if (p.target === this.stage.stage + 1) consider(p.x, p.z);
+    }
+    return best;
+  }
+
+  _updateGuide(dt, time) {
+    const g = this.guide;
+    g.t -= dt;
+    g.mesh.material.opacity = 0.6 + 0.35 * Math.sin(time * 4);
+    if (g.t > 0) return;
+    g.t = 1;
+    const target = this._guideTarget();
+    if (!target) { g.mesh.count = 0; return; }
+    const tx = cellOf(target.x - 0.01), tz = cellOf(target.z - 0.01);
+    const path = this._route((i, j) => (Math.abs(i - tx) <= 1 && Math.abs(j - tz) <= 1 ? Infinity : -Math.hypot(i - tx, j - tz)),
+      cellOf(this.player.pos.x), cellOf(this.player.pos.y), 40000);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
+    let n = 0;
+    for (let k = 1; k < path.length - 1 && n < 80; k += 2) {
+      const [i, j] = path[k], [ni, nj] = path[k + 1];
+      q.setFromAxisAngle(up, Math.atan2(-(ni - i), -(nj - j)));  // point along the route
+      m.compose(new THREE.Vector3(centreOf(i), 0.04, centreOf(j)), q, one);
+      g.mesh.setMatrixAt(n++, m);
+    }
+    g.mesh.count = n;
+    g.mesh.instanceMatrix.needsUpdate = true;
+  }
+
   _doorsNear(x, z) {
     const out = [];
     for (const stuff of this.chunkStuff.values()) {
@@ -844,6 +905,8 @@ export class SoulPath {
       }
       for (const sc of room.screens) sc.material.color.setScalar(0.8 + 0.2 * Math.random());
     }
+
+    if (this.guide) this._updateGuide(dt, time);
 
     // candles: flames breathe; the 8 nearest light the walls
     tickCandles(time);

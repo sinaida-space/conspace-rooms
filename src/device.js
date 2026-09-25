@@ -21,3 +21,5 @@ export function detectDevice() {
 
   return { isTouch, isIOS, isIPadOS, isPhone, isTablet, isMobile, hasCamera, secureContext, coarsePointer };
 }
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

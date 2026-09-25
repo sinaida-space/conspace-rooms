@@ -314,3 +314,5 @@ export class World {
     return slots;
   }
 }
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

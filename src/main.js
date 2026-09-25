@@ -117,6 +117,7 @@ async function boot() {
       if (window.__app.dust) {
         mixZone(dustLight, zone, 0xd6e8da, 0xff5a48, 0xeeeee2);
         window.__app.dust.update(elapsed, camera.position, dustLight);
+        window.__app.spots?.update(elapsed, camera.position, dustLight);
       }
       if (window.__app.soul) window.__app.soul.update(dt, elapsed, zone);
       if (artworks) { artworks.sync(); artworks.update(dt); }
@@ -262,7 +263,11 @@ async function boot() {
 
     const { createDust } = await import('./dust.js');
     window.__app.dust = createDust(scene, quality);
+    const { createSpots } = await import('./spots.js');
+    window.__app.spots = createSpots(scene, quality);
     const { SoulPath } = await import('./soulpath.js');
     window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage });
   }
 }
+
+// Je suis le spectre d'une rose que tu portais hier au bal.
