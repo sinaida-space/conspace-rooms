@@ -13,7 +13,19 @@ import * as THREE from 'three';
 // fixed lattice of corridors that always opens edge cells {4,5,10,11} — so cells
 // 4 and 11 on every shared edge are open and adjacent chunks always stitch.
 
-export const CONSPACE_SEED = 20260709;   // global seed constant
+// A new labyrinth for every visit: the seed is the universal date and time
+// (UTC, to the second) when the page opened, so two visitors who arrive in the
+// same second walk the same corridors. ?seed=<int> pins one for testing or
+// sharing. Every other seed (artworks, portals, doors, souls) derives from it.
+function visitSeed() {
+  const q = typeof location !== 'undefined' && new URLSearchParams(location.search).get('seed');
+  if (q && /^-?\d+$/.test(q)) return Number(q) | 0;
+  const d = new Date();
+  const stamp = d.getUTCFullYear() * 1e4 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();       // 20260925
+  const clock = d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();         // seconds into the UTC day
+  return (Math.imul(stamp, 0x9e3779b1) ^ Math.imul(clock + 1, 0x85ebca6b)) | 0;
+}
+export const CONSPACE_SEED = visitSeed();
 export const CELL = 1.2;                 // metres per grid cell
 export const CHUNK = 16;                 // cells per chunk edge
 export const CHUNK_M = CELL * CHUNK;     // 19.2m

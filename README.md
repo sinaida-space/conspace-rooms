@@ -93,6 +93,12 @@ shaders in `src/materials.js`):
 and candles along the walls point the way. `src/ambience.js` gives every work
 its own sound, `src/dust.js` hangs dust in the lamp beams. Shift runs.
 
+Every visit builds a new labyrinth. The seed is the UTC date and time the page
+opened, to the second (`src/world.js`), and from it follow the corridors, where
+the works hang, the portals, doors and the order of the souls' questions. Two
+visitors who arrive in the same second walk the same corridors. `?seed=<int>`
+pins one labyrinth for testing.
+
 ## Languages
 
 The first screen asks for Russian or English. The choice is kept only in the

@@ -58,6 +58,7 @@ const SEED_KITCHEN = CONSPACE_SEED ^ 0x4b17;
 const SEED_PORTAL = CONSPACE_SEED ^ 0x9047;
 const SEED_SCATTER = CONSPACE_SEED ^ 0x5ca7;
 const SEED_POSTER = CONSPACE_SEED ^ 0x7057;
+const SEED_SOULQ = CONSPACE_SEED ^ 0x50a1;
 const SOUL_COLORS = [0xffd27a, 0x5dff8a, 0xd0202a]; // someone close · a child · a grown-up
 
 // Portals of one chunk as a pure function, so any chunk can ask where the
@@ -431,10 +432,24 @@ export class SoulPath {
   // visitor has walked a few steps since.
   _soulReady(time) { return time - this._soulAt >= SOUL_HOLD && this._walked >= SOUL_WALK; }
 
+  // Each soul asks its questions in an order shuffled by the visit's seed.
+  _soulOrder(cat, n) {
+    this._soulOrders ??= [];
+    let o = this._soulOrders[cat];
+    if (!o || o.length !== n) {
+      o = Array.from({ length: n }, (_, i) => i);
+      const r = mulberry32(hash2i(SEED_SOULQ, cat, n));
+      for (let i = n - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; }
+      this._soulOrders[cat] = o;
+    }
+    return o;
+  }
+
   _askSoul(cat, room, time) {
     this._soulAt = time; this._walked = 0;
     const qs = t('soulQuestions')[cat];
-    const text = qs[this._soulIdx[cat]++ % qs.length];
+    const order = this._soulOrder(cat, qs.length);
+    const text = qs[order[this._soulIdx[cat]++ % qs.length]];
     const label = t('soulLabels')[cat];
     this.audio?.whisper?.();
     this._say(label, text);
