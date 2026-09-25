@@ -249,7 +249,7 @@ export class SoulPath {
     // ── grandmother's kitchen: rare, only deep in the memory zone
     const rooms = chunkRooms(cx, cz);
     const room = rooms.find(r => r.x1 - r.x0 >= 4 && r.y1 - r.y0 >= 4);
-    if (room && hash2i(SEED_KITCHEN, cx, cz) % 6 === 0) {
+    if (room && hash2i(SEED_KITCHEN, cx, cz) % 13 === 0) {
       const x = (cx * CHUNK + (room.x0 + room.x1 + 1) / 2) * CELL;
       const z = (cz * CHUNK + (room.y0 + room.y1 + 1) / 2) * CELL;
       if (zoneWeights(x, z).memory > 0.8) {
@@ -321,7 +321,7 @@ export class SoulPath {
     add(new THREE.SphereGeometry(0.03, 8, 6), M(0x7a2f1e), 0.1, 0.96, 0);
     add(new THREE.CylinderGeometry(0.04, 0.035, 0.08, 12), M(0xe9e4d6), -0.25, 0.82, 0.12);
     // a fabric lampshade low over the table, glowing warm
-    const shade = add(new THREE.ConeGeometry(0.34, 0.26, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xd8883a, side: THREE.DoubleSide, fog: true }), 0, 2.2, 0);
+    const shade = add(new THREE.ConeGeometry(0.34, 0.26, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xc99a4a, side: THREE.DoubleSide, fog: true }), 0, 2.2, 0);
     shade.rotation.x = 0;
     add(new THREE.SphereGeometry(0.07, 12, 8), M(0xfff1c8), 0, 2.08, 0);
     add(new THREE.CylinderGeometry(0.006, 0.006, CEIL_H - 2.3, 4), woodDark, 0, (CEIL_H + 2.3) / 2, 0);
@@ -522,7 +522,16 @@ export class SoulPath {
   // Find the wall straight ahead and hang an empty frame on it.
   _hangNineteenth() {
     const P = this.player;
-    const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+    // straight ahead if there is a wall there, otherwise the nearest one to the side
+    for (const off of [0, 0.4, -0.4, 0.9, -0.9, 1.57, -1.57, 3.14]) {
+      if (this._hangAt(P.yaw + off)) return;
+    }
+    this._stillT = 0; // nothing to hang it on; try again after another minute
+  }
+
+  _hangAt(yaw) {
+    const P = this.player;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
     let pi = cellOf(P.pos.x), pj = cellOf(P.pos.y);
     for (let s = 0.2; s < 9; s += 0.1) {
       const x = P.pos.x + fx * s, z = P.pos.y + fz * s;
@@ -536,7 +545,7 @@ export class SoulPath {
         g.position.set(wx + nx * 0.012, 1.55, wz + nz * 0.012);
         g.rotation.y = Math.atan2(nx, nz);
         const canvas = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.45),
-          new THREE.MeshBasicMaterial({ color: 0xf2f4ea, transparent: true, opacity: 0.6 }));
+          new THREE.MeshBasicMaterial({ color: 0xf6f7ef, transparent: true, opacity: 0.6, fog: false }));
         g.add(canvas);
         const frame = new THREE.Mesh(new THREE.BoxGeometry(1.22, 1.57, 0.05), new THREE.MeshBasicMaterial({ color: 0x3b2c17 }));
         frame.position.z = -0.03;
@@ -548,11 +557,11 @@ export class SoulPath {
         this.scene.add(g);
         this.nineteenth = { group: g, canvas };
         this.audio?.chime();
-        return;
+        return true;
       }
       pi = gi; pj = gj;
     }
-    this._stillT = 0; // nothing to hang it on; try again after another minute
+    return false;
   }
 
   _updateVoices(zone) {

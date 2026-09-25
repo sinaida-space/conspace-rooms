@@ -84,6 +84,27 @@ curl -s -H 'Accept: application/json' \
 then read `https://check-host.net/check-result/<request_id>` and look at the
 `ru*` nodes.
 
+## Путь души (soul path)
+
+The labyrinth follows the arc of the SOULS series, from trauma to accepting
+oneself. Distance from spawn picks the zone (`src/zones.js`, blended in the
+shaders in `src/materials.js`):
+
+- **Fear** (0–45 m): hospital corridors, green oil paint under whitewash, damp,
+  linoleum, cold tubes that flicker often.
+- **Memory** (80–135 m): grandmother's flat, rosette wallpaper, rugs on the
+  walls, parquet, warm lampshades.
+- **Acceptance** (175 m and on): pale walls dissolving into lace and light.
+
+`src/soulpath.js` adds the responsive layer: red scratches on the walls lead to
+the nearest SOULS piece not yet seen, chalk writings sit at a child's height and
+change behind you when you turn around, some crossings have doors that lift
+after three seconds of standing still, and every nearby work hums its own note
+(`src/audio.js`). `src/dust.js` hangs dust in the lamp beams. Nothing is stored.
+
+Secrets: walk backwards for 30 s; look for grandmother's kitchen in the memory
+zone; stand still for a minute in acceptance.
+
 ## Languages
 
 The first screen asks for Russian or English. The choice is kept only in the
