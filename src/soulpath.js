@@ -372,7 +372,8 @@ export class SoulPath {
       const kg = new THREE.Group();                   // only exists in the memory stage
       group.add(kg);
       stuff.kitchen = { ...kp, group: kg, room: buildKitchen(kg, kp.x, kp.z) };
-      stuff.kitchen.wisps = SOUL_COLORS.map((color, cat) => {
+      stuff.kitchen.wisps = [0, 1, 2, 0, 1, 2].map(cat => {
+        const color = SOUL_COLORS[cat];
         const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
           map: glowTexture(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
         }));
@@ -422,14 +423,16 @@ export class SoulPath {
     const label = t('soulLabels')[cat];
     this.audio?.whisper?.();
     // on the television: black screen, phosphor text
-    for (const sc of room.screens) {
+    for (const sc of room?.screens || []) {
       const c = document.createElement('canvas'); c.width = 512; c.height = 384;
       const g = c.getContext('2d');
       g.fillStyle = '#050000'; g.fillRect(0, 0, 512, 384);
-      g.fillStyle = '#ff3a2a'; g.font = '26px "Departure Mono", monospace';
-      const words = text.split(' '); let line = '', y = 110;
-      for (const w of words) { const tt = line ? line + ' ' + w : w; if (g.measureText(tt).width > 440 && line) { g.fillText(line, 36, y); line = w; y += 36; } else line = tt; }
-      g.fillText(line, 36, y);
+      g.fillStyle = '#ffd2c4'; g.shadowColor = '#ff4a30'; g.shadowBlur = 14; // bright phosphor with a red bloom
+      g.font = '34px "Departure Mono", monospace';
+      const words = text.split(' '); let line = '', y = 96;
+      for (const w of words) { const tt = line ? line + ' ' + w : w; if (g.measureText(tt).width > 450 && line) { g.fillText(line, 30, y); line = w; y += 44; } else line = tt; }
+      g.fillText(line, 30, y);
+      g.shadowBlur = 0;
       for (let yy = 0; yy < 384; yy += 3) { g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, yy, 512, 1); }
       const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
       const prev = sc.material.map;
@@ -593,6 +596,70 @@ export class SoulPath {
       st.scatter?.dispose();
       const [cx, cz] = key.split(':').map(Number);
       st.scatter = this._buildScatter(st.group, cx, cz);
+    }
+  }
+
+  // ── roaming souls ──────────────────────────────────────────────────────
+  // Five souls wander the corridors around the visitor once the room has
+  // been found. They drift on their own; stand still and one comes to you;
+  // walk into it and it asks. Then it scatters and returns somewhere else.
+  _spawnRoamer(r) {
+    const P = this.player;
+    for (let tries = 0; tries < 40; tries++) {
+      const a = Math.random() * 6.28, d = 7 + Math.random() * 12;
+      const x = P.pos.x + Math.cos(a) * d, z = P.pos.y + Math.sin(a) * d;
+      if (solidAtGlobal(cellOf(x), cellOf(z))) continue;
+      r.pos.set(x, 1.3 + Math.random() * 0.5, z);
+      r.aim = r.pos.clone();
+      r.gone = false; r.sprite.material.opacity = 0;
+      r.tail.forEach(t => t.position.copy(r.pos));
+      return;
+    }
+  }
+  _updateRoamers(dt, time, speed) {
+    const P = this.player;
+    if (!this.roamers) {
+      this.roamers = [0, 1, 2, 0, 1].map(cat => {
+        const mk = (k) => new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: SOUL_COLORS[cat], transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: k }));
+        const sprite = mk(1); sprite.scale.set(0.35, 0.35, 1); this.scene.add(sprite);
+        const tail = [0.6, 0.42, 0.28].map(k => { const t2 = mk(k); t2.scale.set(0.35 * k, 0.35 * k, 1); this.scene.add(t2); return t2; });
+        const r = { cat, sprite, tail, pos: new THREE.Vector3(), aim: new THREE.Vector3(), gone: false, back: 0, seed: Math.random() * 10 };
+        this._spawnRoamer(r);
+        return r;
+      });
+    }
+    for (const r of this.roamers) {
+      if (r.gone) {
+        r.sprite.material.opacity = Math.max(0, r.sprite.material.opacity - dt);
+        r.tail.forEach(t => { t.visible = false; });
+        if (time > r.back) this._spawnRoamer(r);
+        continue;
+      }
+      const toP = new THREE.Vector3(P.pos.x - r.pos.x, 0, P.pos.y - r.pos.z), dP = toP.length();
+      if (dP > 26) { this._spawnRoamer(r); continue; }   // left behind: come back nearer
+      // wander toward a new aim now and then; a still visitor draws it in
+      if (r.pos.distanceTo(r.aim) < 0.3 || Math.random() < dt * 0.1) {
+        const nx = r.pos.x + (Math.random() - 0.5) * 6, nz = r.pos.z + (Math.random() - 0.5) * 6;
+        if (!solidAtGlobal(cellOf(nx), cellOf(nz))) r.aim.set(nx, 1.3 + Math.random() * 0.5, nz);
+      }
+      const drawn = speed < 0.1 && dP < 7;
+      const goal = drawn ? new THREE.Vector3(P.pos.x, 1.5, P.pos.y) : r.aim;
+      const step = goal.clone().sub(r.pos);
+      const len = step.length();
+      if (len > 1e-3) {
+        step.multiplyScalar(Math.min(len, dt * (drawn ? 0.9 : 0.35)) / len);
+        const nx = r.pos.x + step.x, nz = r.pos.z + step.z;
+        if (!solidAtGlobal(cellOf(nx), cellOf(nz))) r.pos.add(step); else r.aim.copy(r.pos); // never through walls
+      }
+      r.sprite.material.opacity = Math.min(1, r.sprite.material.opacity + dt * 0.5);
+      r.sprite.position.set(r.pos.x, r.pos.y + Math.sin(time * 0.9 + r.seed) * 0.1, r.pos.z);
+      const s2 = 0.32 + 0.05 * Math.sin(time * 3 + r.seed); r.sprite.scale.set(s2, s2, 1);
+      let lead = r.sprite.position;
+      for (const t of r.tail) { t.visible = true; t.position.lerp(lead, Math.min(1, dt * 4)); lead = t.position; }
+      if (dP < 1.1) {
+        r.gone = true; r.back = time + 12;
+        this._askSoul(r.cat, null);
+      }
     }
   }
 
@@ -907,6 +974,9 @@ export class SoulPath {
     }
 
     if (this.guide) this._updateGuide(dt, time);
+
+    // after grandmother's room the souls leave it and roam the corridors
+    if (this.visitedRoom && this.stage.stage >= 1) this._updateRoamers(dt, time, speed);
 
     // candles: flames breathe; the 8 nearest light the walls
     tickCandles(time);

@@ -75,6 +75,25 @@ function textures() {
       v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.65)');
       g.fillStyle = v; g.fillRect(0, 0, w, h);
     }),
+    // porcelain: warm white glaze with a fine crackle, a gold band near the
+    // rim, a ring of small cabbage roses, a few chips down to grey body.
+    // Mapped around a lathe: u runs around, v runs up the profile.
+    porcelain: canvasTex(1024, 256, (g, w, h) => {
+      const glaze = g.createLinearGradient(0, 0, 0, h);
+      glaze.addColorStop(0, '#f3ecdc'); glaze.addColorStop(1, '#e2d8c2');
+      g.fillStyle = glaze; g.fillRect(0, 0, w, h);
+      g.strokeStyle = 'rgba(120,100,70,0.12)'; g.lineWidth = 0.6;            // crackle
+      for (let i = 0; i < 160; i++) { let x = Math.random() * w, y = Math.random() * h; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (Math.random() - 0.5) * 24; y += (Math.random() - 0.5) * 14; g.lineTo(x, y); } g.stroke(); }
+      const gold = (y, t) => { const gg = g.createLinearGradient(0, y - t, 0, y + t); gg.addColorStop(0, '#6e4f18'); gg.addColorStop(0.5, '#e8c46a'); gg.addColorStop(1, '#6e4f18'); g.fillStyle = gg; g.fillRect(0, y - t, w, t * 2); };
+      gold(h * 0.08, 5); gold(h * 0.2, 2);                                   // rim bands (top of the lathe is v = 1 → canvas y 0 after flip)
+      for (let x = 40; x < w; x += 128) {                                    // roses with two leaves
+        const y = h * 0.5;
+        g.fillStyle = '#3f6b3a';
+        for (const s of [-1, 1]) { g.beginPath(); g.ellipse(x + s * 22, y + 8, 16, 6, s * 0.5, 0, 7); g.fill(); }
+        for (let r = 16; r > 2; r -= 3) { g.fillStyle = r % 2 ? '#a3202a' : '#d24a4f'; g.beginPath(); g.arc(x + (Math.random() - 0.5) * 2, y, r, 0, 7); g.fill(); }
+      }
+      for (let i = 0; i < 6; i++) { g.fillStyle = '#6d6a64'; const x = Math.random() * w, y = Math.random() < 0.6 ? Math.random() * h * 0.1 : h - Math.random() * 12; g.beginPath(); g.ellipse(x, y, 3 + Math.random() * 6, 2 + Math.random() * 3, 0, 0, 7); g.fill(); }
+    }),
     // speaker grille on the television's side panel
     grille: canvasTex(64, 128, (g, w, h) => {
       g.fillStyle = '#1c1915'; g.fillRect(0, 0, w, h);
@@ -112,7 +131,8 @@ export function buildKitchen(group, x, z) {
   const std = (opts) => new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0, ...opts });
   const wood = std({ map: T.wood, roughness: 0.55 });
   const cloth = std({ map: T.cloth, roughness: 0.38 });              // oilcloth has a soft sheen
-  const enamel = std({ color: 0xe9e3d5, roughness: 0.28 });
+  const enamel = std({ map: T.porcelain, roughness: 0.22 });
+  const glazeWhite = std({ color: 0xefe8d8, roughness: 0.2 });
   const enamelRed = std({ color: 0x9a1b1b, roughness: 0.3 });
   const brass = std({ color: 0x6b4a22, roughness: 0.35, metalness: 0.8 });
   const wax = std({ color: 0xe6dac0, roughness: 0.6 });
@@ -167,28 +187,36 @@ export function buildKitchen(group, x, z) {
     blob(0.6, 0.6, sx, 0.013, 0, 0.7);
   }
 
-  // ── enamel teapot: lathe body, red rim, tube spout, torus handle ──
+  // ── porcelain teapot: lathe body with a real wall, gold bands and roses, a
+  // curved spout, an ear-shaped handle, a lid with a knob ──
   const tp = { x: 0.12, z: 0.05, y: TOP + 0.025 };
-  add(lathe([[0, 0], [0.055, 0], [0.085, 0.015], [0.1, 0.05], [0.098, 0.085], [0.08, 0.115], [0.05, 0.13], [0.042, 0.135], [0, 0.135]]), enamel, tp.x, tp.y, tp.z);
-  const rim = add(new THREE.TorusGeometry(0.043, 0.004, 6, 24), enamelRed, tp.x, tp.y + 0.135, tp.z);
-  rim.rotation.x = Math.PI / 2;
-  add(lathe([[0, 0], [0.042, 0], [0.03, 0.02], [0.012, 0.025], [0.014, 0.04], [0, 0.045]], 20), enamel, tp.x, tp.y + 0.132, tp.z);
-  const spoutCurve = new THREE.QuadraticBezierCurve3(
-    new THREE.Vector3(x + tp.x + 0.08, tp.y + 0.05, z + tp.z),
-    new THREE.Vector3(x + tp.x + 0.15, tp.y + 0.06, z + tp.z),
-    new THREE.Vector3(x + tp.x + 0.17, tp.y + 0.14, z + tp.z));
-  const spout = new THREE.Mesh(new THREE.TubeGeometry(spoutCurve, 12, 0.012, 8, false), enamel);
+  add(lathe([[0, 0], [0.05, 0], [0.058, 0.006], [0.085, 0.02], [0.1, 0.052], [0.098, 0.088], [0.082, 0.114], [0.054, 0.128], [0.046, 0.13], [0.046, 0.136], [0.04, 0.136], [0.04, 0.128], [0, 0.126]], 40), enamel, tp.x, tp.y, tp.z);
+  add(lathe([[0, 0.0], [0.043, 0.0], [0.044, 0.004], [0.036, 0.016], [0.018, 0.024], [0.01, 0.026], [0.013, 0.034], [0.01, 0.044], [0, 0.046]], 32), glazeWhite, tp.x, tp.y + 0.134, tp.z);
+  const spoutCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(x + tp.x + 0.085, tp.y + 0.04, z + tp.z),
+    new THREE.Vector3(x + tp.x + 0.13, tp.y + 0.06, z + tp.z),
+    new THREE.Vector3(x + tp.x + 0.16, tp.y + 0.11, z + tp.z),
+    new THREE.Vector3(x + tp.x + 0.18, tp.y + 0.145, z + tp.z)]);
+  const spout = new THREE.Mesh(new THREE.TubeGeometry(spoutCurve, 24, 0.011, 12, false), glazeWhite);
   spout.castShadow = true; group.add(spout);
-  const handle = add(new THREE.TorusGeometry(0.045, 0.008, 8, 20, Math.PI * 1.1), enamel, tp.x - 0.1, tp.y + 0.07, tp.z);
-  handle.rotation.z = Math.PI / 2 - 0.2;
+  const earCurve = (cx, cy, cz, sx, sy) => new THREE.CatmullRomCurve3([   // a D-shaped handle
+    new THREE.Vector3(cx, cy + sy, cz), new THREE.Vector3(cx - sx * 0.7, cy + sy * 1.05, cz),
+    new THREE.Vector3(cx - sx, cy + sy * 0.3, cz), new THREE.Vector3(cx - sx * 0.8, cy - sy * 0.6, cz),
+    new THREE.Vector3(cx, cy - sy * 0.8, cz)]);
+  const potHandle = new THREE.Mesh(new THREE.TubeGeometry(earCurve(x + tp.x - 0.095, tp.y + 0.07, z + tp.z, 0.05, 0.04), 32, 0.008, 10, false), glazeWhite);
+  potHandle.castShadow = true; group.add(potHandle);
   blob(0.3, 0.3, tp.x, TOP + 0.026, tp.z, 0.6);
 
-  // ── cup on a saucer ──
+  // ── cup on a saucer: a thin porcelain wall with a lip, a foot ring, a well
+  // in the saucer, an ear handle ──
   const cp = { x: -0.28, z: 0.2, y: TOP + 0.025 };
-  add(lathe([[0, 0], [0.07, 0.002], [0.075, 0.01], [0.02, 0.006], [0, 0.006]]), enamel, cp.x, cp.y, cp.z);
-  add(lathe([[0, 0.006], [0.028, 0.006], [0.042, 0.03], [0.046, 0.075], [0.043, 0.075], [0.04, 0.035], [0, 0.03]]), enamel, cp.x, cp.y, cp.z);
-  const ch = add(new THREE.TorusGeometry(0.018, 0.005, 6, 14), enamel, cp.x + 0.052, cp.y + 0.045, cp.z);
-  ch.rotation.y = Math.PI / 2;
+  add(lathe([[0, 0], [0.02, 0], [0.024, 0.003], [0.034, 0.004], [0.06, 0.008], [0.072, 0.014], [0.075, 0.017], [0.072, 0.017], [0.058, 0.011], [0.032, 0.008], [0.024, 0.008], [0, 0.007]], 48), enamel, cp.x, cp.y, cp.z);
+  add(lathe([[0, 0.008], [0.022, 0.008], [0.024, 0.012], [0.03, 0.016], [0.04, 0.03], [0.045, 0.055], [0.047, 0.073], [0.048, 0.076], [0.046, 0.077], [0.044, 0.074], [0.042, 0.055], [0.037, 0.03], [0.026, 0.018], [0, 0.017]], 48), enamel, cp.x, cp.y, cp.z);
+  const cupHandle = new THREE.Mesh(new THREE.TubeGeometry(earCurve(x + cp.x - 0.044, cp.y + 0.048, z + cp.z, 0.022, 0.018), 28, 0.0045, 8, false), glazeWhite);
+  cupHandle.castShadow = true; group.add(cupHandle);
+  // tea inside, dark and still, catching the light
+  const tea = add(new THREE.CircleGeometry(0.041, 32).rotateX(-Math.PI / 2), std({ color: 0x3a1a08, roughness: 0.05 }), cp.x, cp.y + 0.062, cp.z, false);
+  tea.castShadow = false;
   blob(0.2, 0.2, cp.x, TOP + 0.026, cp.z, 0.55);
 
   // ── candelabra: turned brass base and stem, four curved arms, five candles ──
