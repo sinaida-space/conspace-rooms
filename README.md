@@ -1,4 +1,8 @@
+![CONSPACE ROOMS](.github/conspace.png)
+
 # CONSPACE ROOMS
+
+**Live:** https://conspace-rooms.vercel.app/
 
 An interactive web installation — a collaboration between Sinaida and UVALISS.
 
@@ -46,39 +50,26 @@ Then open http://localhost:4800/ in a browser. Requires WebGL2.
 
 ## Deploy
 
-Primary: GitHub Pages from `main` (root):
-https://sinaida-space.github.io/conspace-rooms/
+Vercel, from `main` (root), no build step:
+https://conspace-rooms.vercel.app/
 
-Mirror: Neocities, https://conspace-rooms.neocities.org/
+Every push to `main` redeploys production. Project settings: Application
+Preset `Other`, Root Directory `./`, build, output and install commands left
+empty. Vercel Web Analytics and Speed Insights stay off: the privacy policy
+promises no analytics.
 
-Both are free and both open from Russia without a VPN (checked with
-check-host.net Russian nodes on 2026-09-25). Cloudflare Pages is not used:
-Cloudflare is throttled in Russia. Codeberg Pages is not used either: its terms
-require free licenses and the artworks are all rights reserved.
+Cloudflare Pages is not used: Cloudflare is throttled in Russia. Codeberg
+Pages is not used either: its terms require free licenses and the artworks are
+all rights reserved.
 
 All asset and module paths are relative, so the site works unmodified under a
-subpath or at a domain root. To (re)enable GitHub Pages:
-
-```
-gh api repos/sinaida-space/conspace-rooms/pages -X POST \
-  -f build_type=legacy -f "source[branch]=main" -f "source[path]=/"
-```
-
-To update the Neocities mirror (log in once with `neocities login`, you type
-the password yourself):
-
-```
-gem install neocities
-./scripts/neocities-deploy.sh
-```
-
-The script uploads only tracked site files (no `.git`, `reel/`, `.claude/`).
+subpath or at a domain root.
 
 Before any hosting change, check reachability from Russia:
 
 ```
 curl -s -H 'Accept: application/json' \
-  "https://check-host.net/check-http?host=https://sinaida-space.github.io/conspace-rooms/&max_nodes=40"
+  "https://check-host.net/check-http?host=https://conspace-rooms.vercel.app/&max_nodes=40"
 ```
 
 then read `https://check-host.net/check-result/<request_id>` and look at the
