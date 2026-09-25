@@ -426,7 +426,7 @@ export function createWardKit(atmo, quality) {
   const withModels = quality.tier > 0;
   const models = withModels ? loadModels(atmo) : Promise.resolve(null);
   let ready = null;
-  models.then(m => { ready = m; }).catch(() => {});
+  models.then(m => { ready = m; }).catch(e => console.warn('[ward] models did not load; beds and wheelchairs are left out', e));
 
   return {
     withModels,

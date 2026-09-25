@@ -263,10 +263,15 @@ export class UI {
       el.style.fontSize = '0.8em';
       if (!room()) el.classList.add('no-room');
     };
-    const set = () => { fit(); document.documentElement.style.setProperty('--hud-h', `${el.classList.contains('no-room') ? 0 : el.offsetHeight}px`); };
+    const watch = new MutationObserver(() => set());
+    const set = () => {
+      if (!el.isConnected) { watch.disconnect(); removeEventListener('resize', set); return; }   // the legend was replaced
+      fit();
+      document.documentElement.style.setProperty('--hud-h', `${el.classList.contains('no-room') ? 0 : el.offsetHeight}px`);
+    };
     set();
     addEventListener('resize', set);
-    new MutationObserver(set).observe(document.body, { childList: true });   // the pad arrives later
+    watch.observe(document.body, { childList: true });   // the pad arrives later
   }
 
   // Persistent low-opacity key legend for keyboard mode — mirrors the

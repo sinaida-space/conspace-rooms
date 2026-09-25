@@ -1045,7 +1045,7 @@ export class SoulPath {
 
     // presence doors: stand still close to one and it gives way. Light pours
     // out through the gap, the music clears, "not yet", and it slams shut.
-    this._doorLights = [];
+    this._doorLights.length = 0;
     for (const s of this.chunkStuff.values()) for (const d of s.doors) {
       if (d.phase === 'done') continue;
       if (d.phase === 'wait') {
@@ -1083,9 +1083,12 @@ export class SoulPath {
       d.pivot.rotation.y = -d.dir * swing;               // away from the visitor
       d.rays?.set(k, time);
       if (k > 0.01) {                                    // the walls and floor catch it
-        for (const [z, y] of [[0.6, 1.3], [2.0, 1.0]]) {
-          const p = d.rays.group.localToWorld(new THREE.Vector3(0, y, z));
-          this._doorLights.push({ x: p.x, y: p.y, z: p.z, col: new THREE.Color(1, 0.97, 0.9).multiplyScalar(0.55 * k) });
+        d.lights ??= [[0.6, 1.3], [2.0, 1.0]].map(([z, y]) => ({ at: new THREE.Vector3(0, y, z), p: new THREE.Vector3(), x: 0, y: 0, z: 0, col: new THREE.Color() }));
+        for (const l of d.lights) {                      // reused every frame: nothing allocated while it shines
+          d.rays.group.localToWorld(l.p.copy(l.at));
+          l.x = l.p.x; l.y = l.p.y; l.z = l.p.z;
+          l.col.setRGB(1, 0.97, 0.9).multiplyScalar(0.55 * k);
+          this._doorLights.push(l);
         }
       }
     }
