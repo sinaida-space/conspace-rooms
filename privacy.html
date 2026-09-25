@@ -2,6 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<script>
+  // Old GitHub Pages link: forward to the Vercel home, keeping the page, ?lang and #hash.
+  if (location.hostname.endsWith('github.io')) {
+    location.replace('https://conspace-rooms.vercel.app' +
+      location.pathname.replace(/^\/conspace-rooms/, '') + location.search + location.hash);
+  }
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy · CONSPACE ROOMS</title>
 <meta name="robots" content="noindex">

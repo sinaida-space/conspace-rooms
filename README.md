@@ -76,6 +76,10 @@ promises no analytics.
 All asset and module paths are relative, so the site works unmodified under a
 subpath or at a domain root.
 
+The old GitHub Pages address (https://sinaida-space.github.io/conspace-rooms/)
+stays on and forwards every page to Vercel: a small script at the top of each
+HTML page redirects any `github.io` host, keeping the path, `?lang` and hash.
+
 Before any hosting change, check reachability from Russia:
 
 ```
@@ -86,7 +90,7 @@ curl -s -H 'Accept: application/json' \
 then read `https://check-host.net/check-result/<request_id>` and look at the
 `ru*` nodes.
 
-## Путь души (soul path)
+## Soul path
 
 The labyrinth follows the arc of the SOULS series, from trauma to accepting
 oneself. Distance from spawn picks the zone (`src/zones.js`, blended in the
