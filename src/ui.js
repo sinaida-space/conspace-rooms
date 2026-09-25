@@ -362,6 +362,8 @@ export class UI {
     $('hand-legend')?.remove();
     $('control-hud')?.remove();
     $('pad')?.remove();
+    $('roses')?.remove();
+    $('final-card')?.remove();
     $('farewell')?.classList.remove('hidden');
     $('btn-walk-again')?.addEventListener('click', () => location.reload(), { once: true });
   }
@@ -371,8 +373,8 @@ export class UI {
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = text;
-    const bar = $('hud-toolbar');                       // just under the toolbar, never on it
-    const top = bar && !bar.classList.contains('hidden') ? bar.getBoundingClientRect().bottom + 12 : 16;
+    let top = 16;                                       // under the toolbar and the rose, never on them
+    for (const el of [$('hud-toolbar'), $('roses')]) if (el && !el.classList.contains('hidden')) top = Math.max(top, el.getBoundingClientRect().bottom + 12);
     el.style.setProperty('--toast-top', `${Math.round(top)}px`);
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('visible'));

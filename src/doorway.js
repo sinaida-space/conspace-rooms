@@ -189,13 +189,13 @@ void main(){
   gl_FragColor = vec4(vec3(1.0, 0.97, 0.9) * uK * (0.55 + 0.45 * soft), 1.0);
 }
 `;
-export function buildLightRays(reach = 4.5) {
+export function buildLightRays(reach = 4.5, { nearW = DOOR_W, nearH = DOOR_H, farW = 2.3, farH = CEIL_TOP, gapZ = -WALL_T / 2 - 0.01, z0 = WALL_T / 2, gapK = 1 } = {}) {
   const g = new THREE.Group();
   const uniforms = { uK: { value: 0 }, uTime: { value: 0 } };
+  const gapUniforms = { uK: { value: 0 } };
   const mat = new THREE.ShaderMaterial({ uniforms, vertexShader: RAY_VERT, fragmentShader: RAY_FRAG,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
-  const z0 = WALL_T / 2, z1 = z0 + reach;
-  const nearW = DOOR_W, nearH = DOOR_H, farW = 2.3, farH = CEIL_TOP;
+  const z1 = z0 + reach;
   // one blade: a quad from a line in the gap to a line in the far rectangle
   const blade = (a0, a1, b0, b1) => {
     const geo = new THREE.BufferGeometry();
@@ -212,15 +212,15 @@ export function buildLightRays(reach = 4.5) {
     const f = k / 4, ny = 0.1 + f * (nearH - 0.2), fy = 0.05 + f * (farH - 0.1);
     g.add(blade([-nearW / 2, ny, z0], [nearW / 2, ny, z0], [-farW / 2, fy, z1], [farW / 2, fy, z1]));
   }
-  const gapMat = new THREE.ShaderMaterial({ uniforms, vertexShader: RAY_VERT, fragmentShader: GAP_FRAG,
+  const gapMat = new THREE.ShaderMaterial({ uniforms: gapUniforms, vertexShader: RAY_VERT, fragmentShader: GAP_FRAG,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   const gap = new THREE.Mesh(new THREE.PlaneGeometry(nearW, nearH), gapMat);
-  gap.position.set(0, nearH / 2, -WALL_T / 2 - 0.01);   // the far face of the wall: the gap turns to white
+  gap.position.set(0, nearH / 2, gapZ);                 // the far face of the wall: the gap turns to white
   g.add(gap);
   g.visible = false;
   return {
     group: g,
-    set(k, time) { uniforms.uK.value = k; uniforms.uTime.value = time; g.visible = k > 0.002; },
+    set(k, time) { uniforms.uK.value = k; gapUniforms.uK.value = k * gapK; uniforms.uTime.value = time; g.visible = k > 0.002; },
     dispose() { g.traverse(o => o.geometry?.dispose()); mat.dispose(); gapMat.dispose(); },
   };
 }

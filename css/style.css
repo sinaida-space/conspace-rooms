@@ -444,4 +444,44 @@ body:has(#pad) #artwork-prompt { bottom: calc(max(16px, env(safe-area-inset-bott
 .dialog-actions .btn-enter { font-size: 1em; padding: 0.5em 1.2em; }
 .dialog-no { color: var(--dim); border-color: var(--dim); }
 
+/* the rose in the top-left corner: one leaf, bud or flower per few works seen */
+#roses {
+  position: fixed; left: max(12px, env(safe-area-inset-left)); top: max(8px, env(safe-area-inset-top)); z-index: 8;
+  width: 58px; height: 88px; pointer-events: auto; opacity: 0; transition: opacity 1s ease;
+}
+#roses.visible { opacity: 1; }
+.roses svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 1.2px rgba(1, 8, 5, 0.95)) drop-shadow(0 0 3px rgba(1, 8, 5, 0.5)); }   /* reads on whitewash too */
+.roses .rstem { fill: none; stroke: #3c8f5a; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.4s ease; }
+.roses [data-leaf], .roses [data-bud], .roses [data-bloom] {
+  opacity: 0; transform: scale(0.3); transform-box: fill-box; transform-origin: center;
+  transition: opacity 0.9s ease, transform 0.9s ease;
+}
+.roses .on { opacity: 1; transform: scale(1); }
+.roses .rl { fill: #4fa36c; }
+.roses .rr { fill: #c3141c; }
+.roses .rd { fill: #8e0f15; }
+.roses .rc { fill: none; stroke: #f0707a; stroke-width: 0.6; }
+.roses .rs { fill: none; stroke: #3f8a5a; stroke-width: 0.9; stroke-linecap: round; }
+.roses.grew svg { animation: rose-grew 1.2s ease; }
+.roses.full svg { animation: rose-glow 2.6s ease-in-out infinite alternate; }
+@keyframes rose-grew { 40% { filter: drop-shadow(0 0 1.2px rgba(1, 8, 5, 0.95)) drop-shadow(0 0 7px rgba(57, 255, 106, 0.85)); } }
+@keyframes rose-glow {
+  from { filter: drop-shadow(0 0 1.2px rgba(1, 8, 5, 0.95)) drop-shadow(0 0 3px rgba(255, 70, 80, 0.6)) drop-shadow(0 0 7px rgba(57, 255, 106, 0.3)); }
+  to { filter: drop-shadow(0 0 1.2px rgba(1, 8, 5, 0.95)) drop-shadow(0 0 6px rgba(255, 70, 80, 0.95)) drop-shadow(0 0 16px rgba(57, 255, 106, 0.6)); }
+}
+
+/* the end of a walk: the card of questions */
+#final-card {
+  position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, 0.94);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2em;
+  padding: 16px; opacity: 0; transition: opacity 0.8s ease; overflow-y: auto;
+}
+#final-card.visible { opacity: 1; }
+#final-card .fc-canvas {
+  height: min(74vh, calc((100vw - 32px) * 16 / 9)); width: auto; aspect-ratio: 9 / 16;
+  border: 1px solid var(--dim); box-shadow: 0 0 30px rgba(57, 255, 106, 0.15);
+}
+#final-card .fc-actions { display: flex; flex-wrap: wrap; gap: 0.8em; justify-content: center; }
+#final-card .btn-enter { font-size: 1em; padding: 0.55em 1.2em; }
+
 /* Je suis le spectre d'une rose que tu portais hier au bal. */

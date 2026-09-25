@@ -8,6 +8,8 @@ import { baroqueFrame } from './frames.js';
 import { buildDoorway, buildLightRays } from './doorway.js';
 import { artworkSlots } from './artworks.js';
 import { createWardKit, wardPlan, reserveSlot, reserveAround, cellKey } from './ward.js';
+import { createRoseCounter, buildRoseArch, findArchSpot } from './roses.js';
+import { showCard } from './card.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
 // Everything that makes the labyrinth respond to the visitor on the way from
@@ -31,6 +33,10 @@ import { createWardKit, wardPlan, reserveSlot, reserveAround, cellKey } from './
 //                   types itself on the television and across the screen.
 //   posters         old terminal printouts pinned to corridor walls, each
 //                   asking one question
+//   roses           every work seen grows the rose in the top-left corner;
+//                   with all of them an arch of roses opens a couple of steps
+//                   away, and walking through it ends the walk with the card
+//                   of every question the souls asked (roses.js, card.js)
 //   secrets         walk backwards long enough and you shrink to a child's
 //                   height; grandmother's kitchen hides in the memory zone; in
 //                   acceptance, a minute of stillness hangs a nineteenth frame
@@ -241,6 +247,11 @@ export class SoulPath {
     this._prevPos = { x: player.pos.x, z: player.pos.y };
     this.kitchenRig = createKitchenRig(scene, renderer, quality);
     this.seen = new Set();          // art ids seen this visit
+    this.asked = [];                // what the souls asked, in order, for the card
+    this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
+    this.roses = createRoseCounter(this.total);
+    this.roses.set(0, t('rosesLabel', { n: 0, total: this.total }));
+    this.finale = null;
     this.chunkStuff = new Map();    // chunk key -> { group, writings[], doors[], kitchen }
     this.doorsOpen = new Set();     // door keys opened this visit (none now: doors only give way for a moment)
     this.doorsDone = new Set();     // doors that already gave way and slammed: they stay shut
@@ -482,9 +493,61 @@ export class SoulPath {
     const qs = t('soulQuestions')[cat];
     const order = this._soulOrder(cat, qs.length);
     const text = qs[order[this._soulIdx[cat]++ % qs.length]];
+    if (!this.asked.includes(text)) this.asked.push(text);
     const label = t('soulLabels')[cat];
     this.audio?.whisper?.();
     this._say(label, text);
+  }
+
+  // ── the finale ─────────────────────────────────────────────────────────
+  // The view turns a little toward open floor, and a couple of steps away an
+  // arch of roses grows out of it with light pouring through.
+  _beginFinale() {
+    const P = this.player;
+    let spot = findArchSpot(P.pos.x, P.pos.y, P.yaw);
+    if (!spot) {                                        // nowhere better: straight ahead
+      const dx = -Math.sin(P.yaw), dz = -Math.cos(P.yaw);
+      spot = { x: P.pos.x + dx * 2.2, z: P.pos.y + dz * 2.2, dir: [dx, dz], yaw: P.yaw };
+    }
+    const arch = buildRoseArch(t('archText'));
+    arch.group.position.set(spot.x, 0, spot.z);
+    arch.group.rotation.y = Math.atan2(-spot.dir[0], -spot.dir[1]);   // its face toward the visitor
+    this.scene.add(arch.group);
+    let turn = spot.yaw - P.yaw;
+    turn = Math.atan2(Math.sin(turn), Math.cos(turn));                 // the short way round
+    this.finale = { arch, spot, from: P.yaw, turn, t: 0, side: null };
+    this.audio?.doorLight?.(9);
+    this.post?.burst?.(0.4);
+  }
+
+  _updateFinale(dt, time) {
+    const f = this.finale, P = this.player;
+    if (f.t < 1) {
+      f.t = Math.min(1, f.t + dt / 1.6);
+      const e = f.t * f.t * (3 - 2 * f.t);
+      P.yaw = f.from + f.turn * e;
+    }
+    f.arch.update(dt, time);
+    // walking through: the visitor's side of the arch flips while inside its span
+    const [dx, dz] = f.spot.dir, rx = P.pos.x - f.spot.x, rz = P.pos.y - f.spot.z;
+    const side = -(rx * dx + rz * dz), across = Math.abs(rx * -dz + rz * dx);
+    if (f.side !== null && f.side > 0 && side <= 0 && across < f.arch.halfWidth && !this._carded) this._endWalk();
+    f.side = side;
+  }
+
+  _endWalk() {
+    this._carded = true;
+    this.player.locked = true;
+    this.audio?.chime?.();
+    showCard({
+      questions: this.asked,
+      strings: {
+        heading: t('cardHeading'), empty: t('cardEmpty'), boot: t('cardBoot'),
+        save: t('cardSave'), back: t('cardBack'), again: t('walkAgain'),
+      },
+      onBack: () => { this.player.locked = false; this._carded = false; },
+      onAgain: () => location.reload(),
+    });
   }
 
   // A line typed across the lower screen, then gone.
@@ -953,6 +1016,10 @@ export class SoulPath {
       if (d < SEEN_DIST && (fx * dx + fz * dz) / (d || 1) > 0.5) this.seen.add(a.art.id);
     }
     if (this.artworks.inspecting) this.seen.add(this.artworks.inspecting.art.id);
+    if (this.seen.size !== this._seenShown) {
+      this._seenShown = this.seen.size;
+      this.roses.set(this.seen.size, t('rosesLabel', { n: this.seen.size, total: this.total }));
+    }
 
     this._repathT -= dt;
     if (this._repathT <= 0) { this._repathT = REPATH_EVERY; this._updateMarks(); }
@@ -1139,6 +1206,10 @@ export class SoulPath {
 
     // after grandmother's room the souls leave it and roam the corridors
     if (this.visitedRoom && this.stage.stage >= 1) this._updateRoamers(dt, time, speed);
+
+    // all the works seen: the arch of roses, once nothing else holds the view
+    if (!this.finale && this.seen.size >= this.total && !P.locked) this._beginFinale();
+    if (this.finale) this._updateFinale(dt, time);
 
     // candles: flames breathe; the 8 nearest light the walls
     tickCandles(time);
