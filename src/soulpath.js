@@ -22,7 +22,7 @@ import { baroqueFrame } from './frames.js';
 //                   the whole world to the next stage (fear → memory → light).
 //                   Nothing else changes the stage.
 //   souls           in grandmother's room three lights drift: the soul of
-//                   someone close (gold), of a child (pale blue), of a grown-up
+//                   someone close (gold), of a child (green), of a grown-up
 //                   (deep red). Walk into one and it scatters; its question
 //                   types itself on the television and across the screen.
 //   posters         old terminal printouts pinned to corridor walls, each
@@ -54,7 +54,7 @@ const SEED_KITCHEN = CONSPACE_SEED ^ 0x4b17;
 const SEED_PORTAL = CONSPACE_SEED ^ 0x9047;
 const SEED_SCATTER = CONSPACE_SEED ^ 0x5ca7;
 const SEED_POSTER = CONSPACE_SEED ^ 0x7057;
-const SOUL_COLORS = [0xffd27a, 0xbfe6ff, 0xd0202a]; // someone close · a child · a grown-up
+const SOUL_COLORS = [0xffd27a, 0x5dff8a, 0xd0202a]; // someone close · a child · a grown-up
 
 // Portals of one chunk as a pure function, so any chunk can ask where the
 // nearest portal is without that chunk being built.
