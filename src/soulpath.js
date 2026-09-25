@@ -142,9 +142,13 @@ function doorTexture(text, zone) {
     ctx.fillRect(Math.random() * c.width, Math.random() * c.height, 2, 2);
   }
   ctx.fillStyle = zone.accept > 0.5 ? 'rgba(40,44,40,0.8)' : 'rgba(230,236,226,0.85)';
-  ctx.font = '22px "Departure Mono", monospace';
+  ctx.font = '20px "Departure Mono", monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(text, c.width / 2, 168);
+  // wrap onto two lines when needed
+  const words = text.split(' '); let line = '', lines = [];
+  for (const w of words) { const tt = line ? line + ' ' + w : w; if (ctx.measureText(tt).width > c.width - 40 && line) { lines.push(line); line = w; } else line = tt; }
+  lines.push(line);
+  lines.forEach((l, i) => ctx.fillText(l, c.width / 2, 168 + (i - (lines.length - 1) / 2) * 24));
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -371,7 +375,7 @@ export class SoulPath {
       const rd = mulberry32(hash2i(SEED_DOOR, cx, cz));
       for (const edge of ['west', 'north']) {
         const band = rd() < 0.5 ? 4 : 10;
-        if (rd() > 0.16 || usedEdges.has(edge)) continue; // about one crossing in six
+        if (rd() > 0.26 || usedEdges.has(edge)) continue; // about one crossing in four
         const key = `${cx}:${cz}:${edge}`;
         if (this.doorsOpen.has(key)) continue;
         stuff.doors.push(this._makeDoor(group, cx, cz, edge, band, key));
@@ -487,13 +491,21 @@ export class SoulPath {
       seg = { a: { x: x - span / 2, z }, b: { x: x + span / 2, z }, nx: 0, nz: 1 };
     }
     const zone = this.stage.weights();
-    const tex = doorTexture(t('doorWait'), zone);
+    const lines = t('doorWait');
+    const tex = doorTexture(lines[Math.abs(hash2i(SEED_DOOR, cx * 3 + band, cz * 5 + (edge === 'west' ? 1 : 2))) % lines.length], zone);
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(span, CEIL_H, 0.08),
       new THREE.MeshBasicMaterial({ map: tex, color: 0x9a9a9a }));
     mesh.position.set(x, CEIL_H / 2, z);
     mesh.rotation.y = rotY;
     group.add(mesh);
-    return { key, mesh, seg, x, z, waitT: 0, lift: 0, open: false };
+    // warm light spilling from under the door, on both sides, seen from afar
+    const slit = new THREE.Mesh(new THREE.PlaneGeometry(span - 0.1, 1.2).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ map: glowTexture(), color: 0xffc070, transparent: true, depthWrite: false,
+        blending: THREE.AdditiveBlending, opacity: 1, fog: true }));
+    slit.position.set(x, 0.015, z);
+    slit.rotation.y = rotY;
+    group.add(slit);
+    return { key, mesh, slit, seg, x, z, waitT: 0, lift: 0, open: false };
   }
 
   // A doorway of light across a 2.4 m corridor crossing: a baroque frame
@@ -756,6 +768,7 @@ export class SoulPath {
       d.mesh.material.color.setScalar(glow);
       if (d.waitT >= DOOR_WAIT) {
         d.open = true;
+        d.slit.visible = false;
         this.doorsOpen.add(d.key);
         this.audio?.chime();
       }
