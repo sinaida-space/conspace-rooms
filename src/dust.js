@@ -8,7 +8,6 @@ import { CEIL_H } from './world.js';
 // materials.js), which turns the lamps into visible beams.
 
 const BOX = new THREE.Vector3(16, CEIL_H, 16);
-const SPACING = 4.8;
 
 const VERT = /* glsl */`
 uniform float uTime;
@@ -16,14 +15,22 @@ uniform vec3 uCam;
 uniform vec3 uBox;
 uniform float uPx;           // point size scale (pixel ratio aware)
 attribute float aSeed;
+const float LINES[9] = float[9](-5.0, -2.0, 1.0, 5.0, 8.0, 11.0, 14.0, 17.0, 21.0);
 varying float vBright;
 void main(){
   // slow drift, each mote on its own path, wrapped into a box around the camera
   vec3 p = position + vec3(sin(uTime * 0.07 + aSeed * 6.3) * 0.6, -uTime * 0.035 * (0.5 + aSeed), cos(uTime * 0.05 + aSeed * 4.1) * 0.6);
   p = mod(p - uCam + uBox * 0.5, uBox) + uCam - uBox * 0.5;
   p.y = mod(p.y, uBox.y);
-  // brightness: inside a beam under the nearest fixture, fading with depth
-  vec2 f = mod(p.xz, ${SPACING.toFixed(1)}) - ${(SPACING / 2).toFixed(1)};
+  // brightness: inside a beam under the nearest fixture (same lamp lines as
+  // world.js / materials.js), fading with depth
+  vec2 cl = p.xz / 1.2, base = floor(cl / 16.0) * 16.0, lc = cl - base, best = vec2(1e9), near = vec2(0.0);
+  for (int i = 0; i < 9; i++) {
+    float L = LINES[i] + 0.5;
+    if (abs(L - lc.x) < best.x) { best.x = abs(L - lc.x); near.x = L; }
+    if (abs(L - lc.y) < best.y) { best.y = abs(L - lc.y); near.y = L; }
+  }
+  vec2 f = (lc - near) * 1.2;
   float beamR = mix(0.35, 1.3, 1.0 - p.y / uBox.y);          // cone widens toward the floor
   vBright = smoothstep(beamR, beamR * 0.4, length(f)) * (0.35 + 0.65 * aSeed);
   vec4 mv = viewMatrix * vec4(p, 1.0);

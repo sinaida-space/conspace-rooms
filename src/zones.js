@@ -39,4 +39,26 @@ export function mixZone(target, w, fearHex, memHex, accHex) {
   return target;
 }
 
+// The stage the visitor has reached: 0 fear, 1 memory, 2 acceptance. It only
+// moves forward, and only when the visitor walks through a portal
+// (soulpath.js). The whole world renders in the current stage; a crossing
+// blends from the old look to the new one over a couple of seconds.
+const ONE_HOT = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+export class SoulStage {
+  constructor() { this.stage = 0; this.from = 0; this.t = 1; }
+  go(n) {
+    if (n <= this.stage || n > 2) return false;
+    this.from = this.stage; this.stage = n; this.t = 0;
+    return true;
+  }
+  update(dt) { this.t = Math.min(1, this.t + dt / 2.5); }
+  weights() {
+    const k = this.t * this.t * (3 - 2 * this.t), a = ONE_HOT[this.from], b = ONE_HOT[this.stage];
+    return {
+      fear: a[0] + (b[0] - a[0]) * k, memory: a[1] + (b[1] - a[1]) * k, accept: a[2] + (b[2] - a[2]) * k,
+      stage: this.stage,
+    };
+  }
+}
+
 // Je suis le spectre d'une rose que tu portais hier au bal.

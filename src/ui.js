@@ -268,12 +268,43 @@ export class UI {
     });
     document.addEventListener('fullscreenchange', syncFsLabel);
 
-    $('btn-main-screen').addEventListener('click', () => {
-      if (!confirm(t('confirmLeave'))) return;
-      location.reload();
+    // In-page confirm: window.confirm() is silently blocked in some embedded
+    // browsers, which left this button doing nothing.
+    $('btn-main-screen').addEventListener('click', async () => {
+      if (await this.confirmDialog(t('confirmLeave'))) location.href = `index.html?lang=${getLang()}`;
     });
 
     $('btn-finish').addEventListener('click', () => onFinish?.());
+  }
+
+  // Terminal-styled yes/no dialog. Resolves true on Yes/Enter, false on
+  // No/Escape/backdrop click.
+  confirmDialog(text) {
+    return new Promise(res => {
+      const wrap = document.createElement('div');
+      wrap.className = 'dialog';
+      wrap.innerHTML = `<div class="dialog-box" role="alertdialog" aria-modal="true">
+        <p class="dialog-bar">SYSTEM</p><p class="dialog-text"></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn-enter" data-v="1">${t('yes')}</button>
+          <button type="button" class="btn-enter dialog-no" data-v="0">${t('no')}</button>
+        </div></div>`;
+      wrap.querySelector('.dialog-text').textContent = text;
+      document.body.appendChild(wrap);
+      document.exitPointerLock?.();
+      const done = v => { removeEventListener('keydown', onKey, true); wrap.remove(); res(v); };
+      const onKey = e => {
+        if (e.code === 'Escape') { e.stopPropagation(); done(false); }
+        if (e.code === 'Enter') { e.stopPropagation(); done(true); }
+      };
+      addEventListener('keydown', onKey, true);
+      wrap.addEventListener('click', e => {
+        const b = e.target.closest('button');
+        if (b) done(b.dataset.v === '1');
+        else if (e.target === wrap) done(false);
+      });
+      wrap.querySelector('[data-v="1"]').focus({ preventScroll: true });
+    });
   }
 
   // Farewell screen: one existential-dread question drawn at random each

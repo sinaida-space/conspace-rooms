@@ -110,12 +110,32 @@ function pushQuad(pos, nrm, a, b, c, d, nx, ny, nz) {
   for (let i = 0; i < 6; i++) nrm.push(nx, ny, nz);
 }
 
-function buildGeometry(pos, nrm) {
+function buildGeometry(pos, nrm, lamp) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
   g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nrm), 3));
+  if (lamp) g.setAttribute('aLamp', new THREE.BufferAttribute(new Float32Array(lamp), 1));
   g.computeBoundingSphere();
   return g;
+}
+
+// ── ceiling fixtures ────────────────────────────────────────────────────────
+// A fixture hangs in the centre of a cell whose local row and column (mod the
+// 16-cell chunk) are both on LAMP_LINES. Rows 5 and 11 run down the corridor
+// lattice, so every corridor gets a lamp every 3–4 cells, and each fixture
+// is smaller than one cell, so a wall can never cut it. materials.js and
+// dust.js light from exactly these points.
+export const LAMP_LINES = [1, 5, 8, 11, 14];
+const LAMP_SET = new Set(LAMP_LINES);
+const mod16 = v => ((v % 16) + 16) % 16;
+export function isLampCell(gi, gj) { return LAMP_SET.has(mod16(gi)) && LAMP_SET.has(mod16(gj)); }
+// nearest lamp line (global cell index) to a cell coordinate, plus offset k
+export function lampLineNear(c, k = 0) {
+  const ext = [-5, -2, 1, 5, 8, 11, 14, 17, 21];
+  const base = Math.floor(c / 16) * 16, lc = c - base;
+  let best = 2, bd = Infinity;
+  for (let i = 1; i < 8; i++) { const d = Math.abs(ext[i] + 0.5 - lc); if (d < bd) { bd = d; best = i; } }
+  return base + ext[Math.max(0, Math.min(8, best + k))];
 }
 
 // ── World ───────────────────────────────────────────────────────────────────
@@ -160,7 +180,7 @@ export class World {
   }
 
   _buildChunk(cx, cz) {
-    const wp = [], wn = [], fp = [], fn = [], cp = [], cn = [];
+    const wp = [], wn = [], fp = [], fn = [], cp = [], cn = [], cl = [];
     const gi0 = cx * CHUNK, gj0 = cz * CHUNK;
     for (let j = 0; j < CHUNK; j++) {
       for (let i = 0; i < CHUNK; i++) {
@@ -171,6 +191,8 @@ export class World {
         // floor (y=0) + ceiling (y=CEIL_H)
         pushQuad(fp, fn, [x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1], 0, 1, 0);
         pushQuad(cp, cn, [x0, CEIL_H, z1], [x1, CEIL_H, z1], [x1, CEIL_H, z0], [x0, CEIL_H, z0], 0, -1, 0);
+        const ok = isLampCell(gi, gj) ? 1 : 0;
+        for (let v = 0; v < 6; v++) cl.push(ok);
         // walls where a neighbour is solid (queried globally → seamless)
         if (solidAtGlobal(gi + 1, gj)) // +X face
           pushQuad(wp, wn, [x1, 0, z0], [x1, 0, z1], [x1, CEIL_H, z1], [x1, CEIL_H, z0], -1, 0, 0);
@@ -185,7 +207,7 @@ export class World {
     const group = new THREE.Group();
     group.name = 'chunk_' + cx + '_' + cz;
     if (fp.length) group.add(new THREE.Mesh(buildGeometry(fp, fn), this.mat.floor));
-    if (cp.length) group.add(new THREE.Mesh(buildGeometry(cp, cn), this.mat.ceil));
+    if (cp.length) group.add(new THREE.Mesh(buildGeometry(cp, cn, cl), this.mat.ceil));
     if (wp.length) group.add(new THREE.Mesh(buildGeometry(wp, wn), this.mat.wall));
     this.scene.add(group);
     return group;

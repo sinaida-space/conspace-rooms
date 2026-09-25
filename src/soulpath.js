@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, mulberry32 } from './world.js';
-import { zoneWeights, ORIGIN } from './zones.js';
+import { zoneWeights, ORIGIN, ZONE } from './zones.js';
 import { t } from './i18n.js';
 import { EYE_HEIGHT } from './player.js';
 import { buildKitchen, buildCandleTrail, createKitchenRig } from './kitchen.js';
+import { baroqueFrame } from './frames.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
 // Everything that makes the labyrinth respond to the visitor on the way from
@@ -17,6 +18,9 @@ import { buildKitchen, buildCandleTrail, createKitchenRig } from './kitchen.js';
 //                   by the zone; turn around and some of them have changed
 //   presence doors  a few corridor crossings are shut; stand still in front of
 //                   one for a few seconds and it lifts
+//   portals         shimmering doorways further out; walking through one moves
+//                   the whole world to the next stage (fear → memory → light).
+//                   Nothing else changes the stage.
 //   secrets         walk backwards long enough and you shrink to a child's
 //                   height; grandmother's kitchen hides in the memory zone; in
 //                   acceptance, a minute of stillness hangs a nineteenth frame
@@ -41,6 +45,7 @@ const STILL_FOR_19 = 60;         // seconds of stillness in acceptance
 const SEED_WRITING = CONSPACE_SEED ^ 0x77a1;
 const SEED_DOOR = CONSPACE_SEED ^ 0x0d00;
 const SEED_KITCHEN = CONSPACE_SEED ^ 0x4b17;
+const SEED_PORTAL = CONSPACE_SEED ^ 0x9047;
 
 // ── small helpers ───────────────────────────────────────────────────────────
 const cellOf = v => Math.floor(v / CELL);
@@ -148,8 +153,10 @@ function scratchTexture() {
 
 // ── SoulPath ────────────────────────────────────────────────────────────────
 export class SoulPath {
-  constructor({ scene, world, player, camera, artworks, audio, post, quality, renderer }) {
-    Object.assign(this, { scene, world, player, camera, artworks, audio, post, quality });
+  constructor({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage }) {
+    Object.assign(this, { scene, world, player, camera, artworks, audio, post, quality, stage });
+    this._lastStage = stage.stage;
+    this._prevPos = { x: player.pos.x, z: player.pos.y };
     this.kitchenRig = createKitchenRig(scene, renderer, quality);
     this.seen = new Set();          // art ids seen this visit
     this.chunkStuff = new Map();    // chunk key -> { group, writings[], doors[], kitchen }
@@ -210,7 +217,7 @@ export class SoulPath {
     const group = new THREE.Group();
     group.name = 'soul_' + cx + '_' + cz;
     this.scene.add(group);
-    const stuff = { group, writings: [], doors: [], kitchen: null };
+    const stuff = { group, writings: [], doors: [], kitchen: null, portals: [] };
 
     // ── writings: about half the chunks get one, on a deterministic wall run
     const rw = mulberry32(hash2i(SEED_WRITING, cx, cz));
@@ -223,7 +230,7 @@ export class SoulPath {
           slot.position.x + slot.normal.x * 0.012 + (slot.normal.x === 0 ? along : 0),
           WRITING_Y,
           slot.position.z + slot.normal.z * 0.012 + (slot.normal.z === 0 ? along : 0));
-        const zone = zoneWeights(pos.x, pos.z);
+        const zone = this.stage.weights();
         const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.28),
           new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }));
         mesh.position.copy(pos);
@@ -235,13 +242,28 @@ export class SoulPath {
       }
     }
 
+    // ── portals: out past the fear zone, some crossings carry a doorway into
+    // the next stage. Deterministic per edge, so they are always where they were.
+    const usedEdges = new Set();
+    const rp = mulberry32(hash2i(SEED_PORTAL, cx, cz));
+    for (const edge of ['west', 'north']) {
+      const band = rp() < 0.5 ? 4 : 10, roll = rp();
+      const mx = edge === 'west' ? cx * CHUNK * CELL : (cx * CHUNK + band + 1) * CELL;
+      const mz = edge === 'west' ? (cz * CHUNK + band + 1) * CELL : cz * CHUNK * CELL;
+      const d = Math.hypot(mx - ORIGIN.x, mz - ORIGIN.z);
+      const target = d >= ZONE.ACC_A ? 2 : d >= ZONE.MEM_A ? 1 : 0;
+      if (!target || roll > 0.4) continue;
+      stuff.portals.push(this._makePortal(group, cx, cz, edge, band, target));
+      usedEdges.add(edge);
+    }
+
     // ── presence doors on this chunk's west and north edge crossings.
     // Never in the spawn chunk, so nobody starts boxed in.
     if (!(cx === 0 && cz === 0)) {
       const rd = mulberry32(hash2i(SEED_DOOR, cx, cz));
       for (const edge of ['west', 'north']) {
         const band = rd() < 0.5 ? 4 : 10;
-        if (rd() > 0.16) continue;              // about one crossing in six
+        if (rd() > 0.16 || usedEdges.has(edge)) continue; // about one crossing in six
         const key = `${cx}:${cz}:${edge}`;
         if (this.doorsOpen.has(key)) continue;
         stuff.doors.push(this._makeDoor(group, cx, cz, edge, band, key));
@@ -260,8 +282,11 @@ export class SoulPath {
           minX: (cx * CHUNK + room.x0) * CELL, maxX: (cx * CHUNK + room.x1 + 1) * CELL,
           minZ: (cz * CHUNK + room.y0) * CELL, maxZ: (cz * CHUNK + room.y1 + 1) * CELL,
         };
-        stuff.kitchen.room = buildKitchen(group, x, z);
-        stuff.kitchen.room.trail = buildCandleTrail(group, this._candleTrails(stuff.kitchen));
+        const kg = new THREE.Group();                 // only exists in the memory stage
+        group.add(kg);
+        stuff.kitchen.group = kg;
+        stuff.kitchen.room = buildKitchen(kg, x, z);
+        stuff.kitchen.room.trail = buildCandleTrail(kg, this._candleTrails(stuff.kitchen));
       }
     }
     return stuff;
@@ -287,7 +312,7 @@ export class SoulPath {
       x = (cx * CHUNK + band) * CELL + span / 2; z = cz * CHUNK * CELL; rotY = 0;
       seg = { a: { x: x - span / 2, z }, b: { x: x + span / 2, z }, nx: 0, nz: 1 };
     }
-    const zone = zoneWeights(x, z);
+    const zone = this.stage.weights();
     const tex = doorTexture(t('doorWait'), zone);
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(span, CEIL_H, 0.08),
       new THREE.MeshBasicMaterial({ map: tex, color: 0x9a9a9a }));
@@ -345,6 +370,61 @@ export class SoulPath {
       }
     }
     return points;
+  }
+
+  // A doorway of light across a 2.4 m corridor crossing: a baroque frame
+  // and a shimmering veil in the colours of the stage it leads to.
+  _makePortal(group, cx, cz, edge, band, target) {
+    const span = 2 * CELL;
+    const west = edge === 'west';
+    const x = west ? cx * CHUNK * CELL : (cx * CHUNK + band) * CELL + span / 2;
+    const z = west ? (cz * CHUNK + band) * CELL + span / 2 : cz * CHUNK * CELL;
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    g.rotation.y = west ? Math.PI / 2 : 0;
+    // a walk-through baroque picture frame, gilt scratched down to the bole
+    const openW = span - 0.6, openH = CEIL_H - 0.72;
+    g.add(baroqueFrame(openW, openH, 0.3));
+    const veil = new THREE.Mesh(new THREE.PlaneGeometry(openW, openH - 0.06), new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+      uniforms: {
+        uTime: { value: 0 }, uFade: { value: 1 },
+        uA: { value: new THREE.Color(target === 2 ? 0xfff6e0 : 0x9b0f14) },
+        uB: { value: new THREE.Color(target === 2 ? 0xbfd6c8 : 0x1f6b3a) },
+      },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform float uTime, uFade; uniform vec3 uA, uB; varying vec2 vUv;
+        float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+        void main(){
+          // two layers of slow noise flowing upward, bright at the core, fading to the frame
+          float a = n(vUv * vec2(4.0, 7.0) + vec2(0.0, -uTime * 0.35));
+          float b = n(vUv * vec2(9.0, 3.0) + vec2(uTime * 0.2, -uTime * 0.6));
+          float edge = smoothstep(0.0, 0.18, vUv.x) * smoothstep(1.0, 0.82, vUv.x) * smoothstep(0.0, 0.08, vUv.y) * smoothstep(1.0, 0.9, vUv.y);
+          vec3 c = mix(uB, uA, a) * (0.35 + 0.65 * b);
+          gl_FragColor = vec4(c * edge * uFade * 1.8, edge * 0.9 * uFade);
+        }`,
+    }));
+    veil.position.set(0, 0.06 + openH / 2, 0);
+    g.add(veil);
+    group.add(g);
+    return { x, z, west, span: openW, target, veil };
+  }
+
+  // Walking through a portal: the side of its plane the visitor is on flips
+  // while they are inside its span.
+  _checkPortals(prev, cur) {
+    for (const st of this.chunkStuff.values()) for (const p of st.portals) {
+      if (Math.abs(p.x - cur.x) > 3 || Math.abs(p.z - cur.z) > 3) continue;
+      const a0 = p.west ? prev.x - p.x : prev.z - p.z, a1 = p.west ? cur.x - p.x : cur.z - p.z;
+      const along = p.west ? cur.z - p.z : cur.x - p.x;
+      if (Math.sign(a0) !== Math.sign(a1) && Math.abs(along) < p.span / 2 && this.stage.go(p.target)) {
+        this.post?.burst(1.6);
+        this.audio?.chime();
+      }
+    }
   }
 
   _closedDoorsNear(x, z) {
@@ -450,6 +530,7 @@ export class SoulPath {
   update(dt, time, zone) {
     this._sync();
     const P = this.player, cam = this.camera;
+    const memoryStage = this.stage.stage === 1;   // grandmother's room only exists here
     const speed = P.vel.length();
     const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
 
@@ -513,7 +594,7 @@ export class SoulPath {
     let inKitchen = false;
     for (const s of this.chunkStuff.values()) {
       const k = s.kitchen;
-      if (k && P.pos.x > k.minX && P.pos.x < k.maxX && P.pos.y > k.minZ && P.pos.y < k.maxZ) inKitchen = true;
+      if (k && memoryStage && P.pos.x > k.minX && P.pos.x < k.maxX && P.pos.y > k.minZ && P.pos.y < k.maxZ) inKitchen = true;
     }
     if (inKitchen !== this._inKitchen) { this._inKitchen = inKitchen; this.audio?.hush(inKitchen); }
 
@@ -525,11 +606,27 @@ export class SoulPath {
       this.nineteenth.canvas.material.opacity = 0.55 + 0.25 * Math.sin(time * 0.8);
     }
 
+    // portals: cross-check, animate the veils, dim the ones already used
+    const cur = { x: P.pos.x, z: P.pos.y };
+    this._checkPortals(this._prevPos, cur);
+    this._prevPos = cur;
+    for (const st of this.chunkStuff.values()) for (const p of st.portals) {
+      p.veil.material.uniforms.uTime.value = time;
+      p.veil.material.uniforms.uFade.value = p.target > this.stage.stage ? 1 : 0.2;
+    }
+    if (this.stage.stage !== this._lastStage) { // the world changed: rewrite the walls in its hand
+      this._lastStage = this.stage.stage;
+      const target = { fear: +(this.stage.stage === 0), memory: +(this.stage.stage === 1), accept: +(this.stage.stage === 2) };
+      for (const st of this.chunkStuff.values()) for (const w of st.writings) { w.zone = target; this._writeOn(w); }
+    }
+
     // grandmother's room: light the nearest one, let candles and picture breathe
     let room = null, rd = 14;
     for (const st of this.chunkStuff.values()) {
       const k = st.kitchen;
       if (!k) continue;
+      k.group.visible = memoryStage;
+      if (!memoryStage) continue;
       const d = Math.hypot(k.x - P.pos.x, k.z - P.pos.y);
       if (d < rd) { rd = d; room = k.room; }
     }

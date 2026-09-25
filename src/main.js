@@ -3,7 +3,7 @@ import { Quality } from './quality.js';
 import { InputRouter } from './input.js';
 import { UI, detectCapabilities } from './ui.js';
 import { t, applyStatic } from './i18n.js';
-import { zoneWeights, mixZone } from './zones.js';
+import { mixZone, SoulStage } from './zones.js';
 
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 scrollTo(0, 0);
@@ -74,7 +74,8 @@ async function boot() {
   let player = null;
   let artworks = null;
 
-  window.__app = { scene, camera, renderer, quality };
+  const stage = new SoulStage(); // advanced only by walking through portals
+  window.__app = { scene, camera, renderer, quality, stage };
 
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight);
@@ -83,12 +84,12 @@ async function boot() {
   });
 
   const clock = new THREE.Clock();
-  let t = 0, atmo = null, post = null, audio = null;
+  let elapsed = 0, atmo = null, post = null, audio = null; // not `t`: that name is the translator
   let prevBobSin = 0, prevYaw = 0;
   const dustLight = new THREE.Color();
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
-    t += dt;
+    elapsed += dt;
     quality.govern(dt);
     audio = audio ?? window.__app.audio;
     let speed = 0;
@@ -97,7 +98,8 @@ async function boot() {
       world.update(player.pos.x, player.pos.y);
       atmo = atmo ?? window.__app.atmo;
       // "Путь души": fog and clear colour follow the zone the visitor stands in
-      const zone = zoneWeights(camera.position.x, camera.position.z);
+      stage.update(dt);
+      const zone = stage.weights();
       window.__app.zone = zone;
       if (scene.fog?.isFogExp2) {
         mixZone(scene.fog.color, zone, 0x0e1f14, 0x030905, 0xa9b0a2);
@@ -105,12 +107,12 @@ async function boot() {
         scene.fog.density = base * (0.03 * zone.fear + 0.045 * zone.memory + 0.038 * zone.accept);
         renderer.setClearColor(scene.fog.color);
       }
-      if (atmo) atmo.update(dt, t, camera.position, zone);
+      if (atmo) atmo.update(dt, elapsed, camera.position, zone);
       if (window.__app.dust) {
         mixZone(dustLight, zone, 0xd6e8da, 0xff5a48, 0xeeeee2);
-        window.__app.dust.update(t, camera.position, dustLight);
+        window.__app.dust.update(elapsed, camera.position, dustLight);
       }
-      if (window.__app.soul) window.__app.soul.update(dt, t, zone);
+      if (window.__app.soul) window.__app.soul.update(dt, elapsed, zone);
       if (artworks) { artworks.sync(); artworks.update(dt); }
       speed = player.vel.length();
       if (audio) {
@@ -125,7 +127,7 @@ async function boot() {
     }
     post = post ?? window.__app.post;
     if (audio) audio.motion(speed);
-    if (post) post.render(scene, camera, dt, t, speed);
+    if (post) post.render(scene, camera, dt, elapsed, speed);
     else renderer.render(scene, camera);
   });
 
@@ -255,6 +257,6 @@ async function boot() {
     const { createDust } = await import('./dust.js');
     window.__app.dust = createDust(scene, quality);
     const { SoulPath } = await import('./soulpath.js');
-    window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer });
+    window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage });
   }
 }

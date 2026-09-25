@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CEIL_H } from './world.js';
+import { CEIL_H, CELL, lampLineNear } from './world.js';
 import { ZONE, ORIGIN } from './zones.js';
 
 // ── conspace-rooms · materials.js ───────────────────────────────────────────
@@ -45,9 +45,21 @@ uniform int   uTier;
 uniform vec2  uFlickerTile;
 uniform float uFlickerAmt;
 uniform vec3  uTrail[4];   // xz of recent footsteps + strength (0..1)
+uniform vec3  uZone;      // stage weights (fear, memory, acceptance), set by the portal crossings
 
 varying vec3 vWorldPos;
 varying vec3 vNormal;
+
+// Lamp lines, in cells within a 16-cell chunk (world.js LAMP_LINES), padded
+// with the neighbours from the chunks on either side.
+const float LINES[9] = float[9](-5.0, -2.0, 1.0, 5.0, 8.0, 11.0, 14.0, 17.0, 21.0);
+// index into LINES of the lamp line nearest to cell coordinate c (1..7)
+int nearestLine(float c, out float base){
+  base = floor(c / 16.0) * 16.0;
+  float lc = c - base, bd = 1e9; int best = 2;
+  for (int i = 1; i < 8; i++) { float d = abs(LINES[i] + 0.5 - lc); if (d < bd) { bd = d; best = i; } }
+  return best;
+}
 
 float hash21(vec2 p){
   p = fract(p * vec2(123.34, 456.21));
@@ -73,14 +85,10 @@ float fbm(vec2 p, int oct){
 // thin band around y = c, width w (rails, paint lines)
 float band(float y, float c, float w){ return smoothstep(w, 0.0, abs(y - c)); }
 
-// Zone weights (fear, memory, acceptance), summing to 1. The boundary is
-// warped by low-frequency noise so a zone edge never reads as a circle.
-vec3 zoneWeights(vec2 xz){
-  float d = length(xz - ORIGIN) + (vnoise(xz * 0.025) - 0.5) * 24.0;
-  float m = smoothstep(MEM_A, MEM_B, d);
-  float a = smoothstep(ACC_A, ACC_B, d);
-  return vec3(1.0 - m, m * (1.0 - a), a);
-}
+// Zone weights (fear, memory, acceptance), summing to 1. The whole world shows
+// the stage the visitor has reached through the portals; xz is kept so a
+// spatial variation can come back later without touching the callers.
+vec3 zoneWeights(vec2 xz){ return uZone; }
 vec3 zoneLight(vec3 z){ return LIGHT_FEAR * z.x + LIGHT_MEM * z.y + LIGHT_ACC * z.z; }
 
 // Extra brightness a fixture gets from footsteps that passed under it.
@@ -93,22 +101,47 @@ float trailBoost(vec2 pc){
   return b;
 }
 
-// Summed illumination at P (normal N) from the 3×3 nearest fixtures.
+// The 3×3 nearest fixtures around P: centre of each lamp cell, in metres.
+// Summed diffuse illumination at P (normal N).
 vec3 fixtureLight(vec3 P, vec3 N, vec3 lightCol){
   vec3 acc = vec3(0.0);
-  vec2 base = floor(P.xz / SPACING);
+  float bx, bz;
+  int ix = nearestLine(P.x / ${CELL.toFixed(2)}, bx), iz = nearestLine(P.z / ${CELL.toFixed(2)}, bz);
   for (int dz = -1; dz <= 1; dz++) {
     for (int dx = -1; dx <= 1; dx++) {
-      vec2 tile = base + vec2(float(dx), float(dz));
-      vec2 pc = (tile + 0.5) * SPACING;                 // fixture centre (xz)
+      vec2 cellL = vec2(bx + LINES[ix + dx], bz + LINES[iz + dz]);
+      vec2 pc = (cellL + 0.5) * ${CELL.toFixed(2)};
       vec3 L = vec3(pc.x, PANEL_Y, pc.y) - P;
       float dist = length(L);
       float atten = 1.0 / (1.0 + 0.16 * dist + 0.10 * dist * dist);
       float ndl = max(dot(N, L / max(dist, 1e-3)), 0.0) * 0.7 + 0.3; // soft wrap
       float fl = 1.0;
-      if (abs(tile.x - uFlickerTile.x) < 0.5 && abs(tile.y - uFlickerTile.y) < 0.5) fl = uFlickerAmt;
+      if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl = uFlickerAmt;
       float boost = 1.0 + 0.6 * trailBoost(pc);
       acc += lightCol * atten * ndl * fl * boost;
+    }
+  }
+  return acc;
+}
+// Specular highlights from the same fixtures (Blinn-Phong). V points to the
+// eye; shin is the material's tightness, so glossy oil paint gets sharp
+// streaks of reflected tube and satin wallpaper a soft sheen.
+vec3 fixtureSpec(vec3 P, vec3 N, vec3 V, vec3 lightCol, float shin){
+  vec3 acc = vec3(0.0);
+  float bx, bz;
+  int ix = nearestLine(P.x / ${CELL.toFixed(2)}, bx), iz = nearestLine(P.z / ${CELL.toFixed(2)}, bz);
+  for (int dz = -1; dz <= 1; dz++) {
+    for (int dx = -1; dx <= 1; dx++) {
+      vec2 cellL = vec2(bx + LINES[ix + dx], bz + LINES[iz + dz]);
+      vec2 pc = (cellL + 0.5) * ${CELL.toFixed(2)};
+      vec3 L = vec3(pc.x, PANEL_Y - 0.05, pc.y) - P;
+      float dist = length(L);
+      L /= max(dist, 1e-3);
+      float atten = 1.0 / (1.0 + 0.16 * dist + 0.10 * dist * dist);
+      float fl = 1.0;
+      if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl = uFlickerAmt;
+      vec3 H = normalize(L + V);
+      acc += lightCol * atten * fl * pow(max(dot(N, H), 0.0), shin) * step(0.0, dot(N, L));
     }
   }
   return acc;
@@ -138,48 +171,101 @@ const FRAG_WALL = /* glsl */`
 #include <fog_pars_fragment>
 ${LIB}
 
-// FEAR: whitewash above, glossy hospital-green oil paint below 1.5 m with a
-// wobbly hand-painted edge, chips where paint flaked off, damp rising.
-vec3 fearWall(float h, float y, int oct){
+// ── FEAR: Soviet hospital wall ──────────────────────────────────────────────
+// Whitewash above, glossy green oil paint below a hand-painted line at 1.5 m,
+// brush strokes you can see in the gloss, chips, damp rising from the floor.
+float fearHeight(float h, float y){                     // brush ridges for the bump
+  return y < 1.5 ? 0.5 * vnoise(vec2(h * 1.5, y * 28.0)) : 0.15 * vnoise(vec2(h, y) * 9.0);
+}
+vec3 fearWall(float h, float y, int oct, out float gloss){
   float n = fbm(vec2(h, y) * 1.6, oct);
-  vec3 white = vec3(0.70, 0.73, 0.68) * (0.80 + 0.35 * n);
+  vec3 white = vec3(0.70, 0.73, 0.68) * (0.82 + 0.3 * n);
   float edge = 1.5 + (fbm(vec2(h * 3.0, 0.0), 3) - 0.5) * 0.06;
-  vec3 paint = vec3(0.15, 0.32, 0.25) * (0.85 + 0.2 * fbm(vec2(h, y) * 4.0, 2));
-  float gloss = 0.08 * smoothstep(0.6, 1.0, fbm(vec2(h * 0.7, y * 3.0), 2));  // streaky sheen
-  paint += gloss;
+  vec3 paint = vec3(0.13, 0.30, 0.23) * (0.88 + 0.16 * fbm(vec2(h, y) * 4.0, 2));
   float chip = smoothstep(0.70, 0.76, fbm(vec2(h, y) * 5.0 + 3.0, 3));
-  paint = mix(paint, white * 0.8, chip);
-  vec3 col = y < edge ? paint : white;
-  col *= 1.0 - 0.55 * band(y, edge, 0.012);           // dark painted border line
+  bool lower = y < edge;
+  vec3 col = lower ? mix(paint, white * 0.8, chip) : white;
+  col *= 1.0 - 0.55 * band(y, edge, 0.012);
   float damp = smoothstep(0.55, 0.85, fbm(vec2(h * 0.5, y * 0.8) + 7.0, 3)) * smoothstep(1.4, 0.0, y);
   col = mix(col, vec3(0.26, 0.24, 0.17), damp * 0.6);
-  col *= mix(0.55, 1.0, smoothstep(0.0, 0.4, y));      // grime pooling at the base
+  gloss = lower ? (1.0 - chip) * (1.0 - damp * 0.7) : 0.08;
   return col;
 }
 
-// MEMORY: dense dark-green foliage wallpaper, domain-warped noise cut into
-// leaf shapes, with oxblood roses on a jittered half-drop repeat.
-vec3 memoryWall(float h, float y, int oct){
-  vec2 p = vec2(h, y);
-  vec2 warp = vec2(fbm(p * 2.0, 3), fbm(p * 2.0 + 5.2, 3)) * 1.6;
-  float leaves = fbm(p * 3.4 + warp * 1.4, oct);
-  vec3 col = mix(vec3(0.015, 0.045, 0.025), vec3(0.07, 0.22, 0.11), smoothstep(0.38, 0.62, leaves));
-  col = mix(col, vec3(0.22, 0.46, 0.26), smoothstep(0.64, 0.78, leaves) * 0.5); // leaf edges catching light
-  vec2 cell = vec2(h / 0.5, y / 0.5);
-  cell.y += 0.5 * mod(floor(cell.x), 2.0);
-  vec2 id = floor(cell);
-  vec2 f = fract(cell) - 0.5 + (vec2(hash21(id), hash21(id + 7.1)) - 0.5) * 0.35;
-  float r = length(f);
-  float petals = 0.5 + 0.5 * sin(atan(f.y, f.x) * 5.0 + r * 30.0); // swirl of petals
-  float rose = smoothstep(0.19, 0.12, r) * (0.6 + 0.4 * petals) * step(0.3, hash21(id + 3.3));
-  col = mix(col, vec3(0.34, 0.03, 0.05) * (0.6 + 0.6 * petals), rose);
-  if (y < 0.12) col = vec3(0.06, 0.05, 0.04);           // dark skirting board
+// ── MEMORY: printed wallpaper ───────────────────────────────────────────────
+// A real repeat: 0.53 m strips, half-drop, each tile a cabbage rose with four
+// leaves and a sprig between. Ink sits slightly raised (embossed print), the
+// paper has fibre, strips meet in a seam that lifts a little, the red plate
+// is a hair out of register, and the whole sheet is sun-faded at the top.
+float leafSDF(vec2 p, float ang){
+  float c = cos(ang), s = sin(ang);
+  p = mat2(c, -s, s, c) * p;
+  p.x -= 0.075;
+  return length(p * vec2(1.0, 2.6)) - 0.07;             // an elongated oval
+}
+// returns x: rose mask, y: leaf mask, z: leaf vein, w: petal shading
+vec4 wallpaperMotif(vec2 q){
+  vec2 cell = vec2(q.x / 0.53, q.y / 0.6);
+  cell.y += 0.5 * mod(floor(cell.x), 2.0);              // half-drop repeat
+  vec2 f = (fract(cell) - 0.5) * vec2(0.53, 0.6);       // metres inside the tile
+  float r = length(f), a = atan(f.y, f.x);
+  // rose: petals as rings wobbling with angle, shaded darker toward the heart
+  float petals = sin(a * 5.0 + r * 55.0) * 0.5 + 0.5;
+  float rose = smoothstep(0.085, 0.078, r + 0.012 * sin(a * 7.0));
+  // four leaves on the diagonals, plus a small sprig in the tile corner
+  float leaf = 1e3; float vein = 0.0;
+  for (int k = 0; k < 4; k++) {
+    float ang = 0.785 + float(k) * 1.5708;
+    float d = leafSDF(f, ang);
+    leaf = min(leaf, d);
+    vec2 pr = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * f;
+    vein = max(vein, smoothstep(0.004, 0.0, abs(pr.y)) * step(0.02, pr.x) * step(pr.x, 0.14));
+  }
+  vec2 fc = f - vec2(0.265, 0.3) * sign(f);
+  leaf = min(leaf, length(fc * vec2(1.0, 1.8)) - 0.03);
+  float leafMask = smoothstep(0.004, -0.004, leaf) * (1.0 - rose);
+  return vec4(rose, leafMask, vein * leafMask, petals);
+}
+float memoryHeight(float h, float y){
+  vec4 m = wallpaperMotif(vec2(h, y));
+  return 0.6 * max(m.x, m.y) + 0.05 * vnoise(vec2(h, y) * 180.0); // raised ink + paper tooth
+}
+vec3 memoryWall(float h, float y, int oct, out float gloss){
+  vec2 q = vec2(h, y);
+  vec3 ground = vec3(0.045, 0.12, 0.07);
+  float fibre = vnoise(q * vec2(90.0, 260.0)) * 0.5 + vnoise(q * 400.0) * 0.5;
+  vec3 col = ground * (0.85 + 0.3 * fibre);
+  vec4 m = wallpaperMotif(q);
+  vec3 leafC = mix(vec3(0.10, 0.27, 0.14), vec3(0.20, 0.42, 0.24), fbm(q * 14.0, 2));
+  col = mix(col, leafC, m.y);
+  col = mix(col, vec3(0.06, 0.16, 0.08), m.z);           // leaf veins
+  vec4 mr = wallpaperMotif(q + vec2(0.0025, -0.002));    // red plate slightly out of register
+  vec3 roseC = mix(vec3(0.20, 0.02, 0.03), vec3(0.46, 0.05, 0.07), mr.w);
+  col = mix(col, roseC, mr.x);
+  // strip seams: a hairline shadow and a lifted edge catching light
+  float sx = fract(h / 0.53);
+  col *= 1.0 - 0.35 * smoothstep(0.004, 0.0, sx);
+  col += 0.03 * smoothstep(0.012, 0.004, sx);
+  col *= mix(0.9, 1.08, smoothstep(0.3, 2.6, y));        // sun-faded toward the top
+  col *= 0.85 + 0.2 * fbm(q * 0.7, oct);                 // uneven ageing
+  if (y < 0.12) col = vec3(0.06, 0.05, 0.04);            // dark skirting board
+  gloss = 0.35 + 0.4 * max(m.x, m.y);                    // satin paper, ink a touch shinier
   return col;
 }
 
-// ACCEPTANCE: pale, almost white plaster.
-vec3 acceptWall(float h, float y, int oct){
+// ── ACCEPTANCE: pale plaster ────────────────────────────────────────────────
+float acceptHeight(float h, float y){ return 0.3 * vnoise(vec2(h, y) * 6.0); }
+vec3 acceptWall(float h, float y, int oct, out float gloss){
+  gloss = 0.12;
   return vec3(0.74, 0.74, 0.70) * (0.85 + 0.2 * fbm(vec2(h, y) * 0.9, oct));
+}
+
+float wallHeight(float h, float y, vec3 z){
+  float v = 0.0;
+  if (z.x > 0.001) v += z.x * fearHeight(h, y);
+  if (z.y > 0.001) v += z.y * memoryHeight(h, y);
+  if (z.z > 0.001) v += z.z * acceptHeight(h, y);
+  return v;
 }
 
 void main(){
@@ -190,23 +276,41 @@ void main(){
   int oct = uTier > 0 ? 5 : 3;
   vec3 z = zoneWeights(vWorldPos.xz);
 
-  // ACCEPTANCE: the wall dissolves into lace. Holes open where a slow noise
-  // field drops under the zone weight; the light behind shows through.
+  // ACCEPTANCE: the wall dissolves into lace; holes open where a slow noise
+  // field drops under the zone weight and the light behind shows through.
   float lace = 0.0;
   if (z.z > 0.01) {
     float holes = fbm(vec2(h, y) * 0.9 + vec2(uTime * 0.015, 0.0), 3);
     float cut = z.z * 0.5 - 0.1;
     if (holes < cut) discard;
-    lace = smoothstep(cut + 0.06, cut, holes);          // glowing rim around each hole
+    lace = smoothstep(cut + 0.06, cut, holes);
   }
 
   vec3 col = vec3(0.0);
-  if (z.x > 0.001) col += z.x * fearWall(h, y, oct);
-  if (z.y > 0.001) col += z.y * memoryWall(h, y, oct);
-  if (z.z > 0.001) col += z.z * acceptWall(h, y, oct);
+  float gloss = 0.0, g;
+  if (z.x > 0.001) { col += z.x * fearWall(h, y, oct, g); gloss += z.x * g; }
+  if (z.y > 0.001) { col += z.y * memoryWall(h, y, oct, g); gloss += z.y * g; }
+  if (z.z > 0.001) { col += z.z * acceptWall(h, y, oct, g); gloss += z.z * g; }
+
+  // bump: tilt the normal along the height field (embossed print, brush
+  // ridges, plaster), so highlights break up the way they do on a real wall
+  vec3 T = alongZ ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+  vec3 Nb = N;
+  if (uTier > 0) {
+    float e = 0.004, h0 = wallHeight(h, y, z);
+    float du = (wallHeight(h + e, y, z) - h0) / e, dv = (wallHeight(h, y + e, z) - h0) / e;
+    Nb = normalize(N - (T * du + vec3(0.0, 1.0, 0.0) * dv) * 0.0035);
+  }
+
+  // corners where wall meets floor and ceiling collect shadow
+  float ao = mix(0.55, 1.0, smoothstep(0.0, 0.45, y)) * mix(0.7, 1.0, smoothstep(PANEL_Y, PANEL_Y - 0.4, y));
 
   vec3 L = zoneLight(z);
-  vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L + z.y * FILL_MEM * 1.6));
+  vec3 V = normalize(cameraPosition - vWorldPos);
+  vec3 diffuse = col * (fixtureLight(vWorldPos, Nb, L) + 0.04 * L + z.y * FILL_MEM * 1.6) * ao;
+  float shin = mix(18.0, 60.0, z.x) ;                   // oil paint is tight, paper broad
+  vec3 spec = fixtureSpec(vWorldPos, Nb, V, L, shin) * gloss * mix(0.25, 0.9, z.x) * ao;
+  vec3 lit = rolloff(diffuse + spec);
   lit += z.z * (0.06 + 0.7 * lace) * LIGHT_ACC * 0.5;  // acceptance walls glow from inside, brightest at the lace rims
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
@@ -276,45 +380,106 @@ void main(){
 `;
 
 // ── ceiling ─────────────────────────────────────────────────────────────────
+// Ceiling vertex shader: passes aLamp, 1 where this cell's lattice fixture fits
+// between walls (world.js lampFits), 0 where it would be cut by one.
+const VERT_CEIL = /* glsl */`
+#include <common>
+#include <fog_pars_vertex>
+attribute float aLamp;
+varying vec3 vWorldPos;
+varying vec3 vNormal;
+varying float vLamp;
+void main(){
+  vLamp = aLamp;
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWorldPos = wp.xyz;
+  vNormal = normalize(mat3(modelMatrix) * normal);
+  vec4 mvPosition = viewMatrix * wp;
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}
+`;
+
 const FRAG_CEIL = /* glsl */`
 #include <common>
 #include <fog_pars_fragment>
 ${LIB}
+varying float vLamp;
+
+// FEAR: a recessed fluorescent troffer. Grey metal housing, a darker inner
+// lip, two tubes with hot cores, faint louvre slats across them.
+vec4 troffer(vec2 m){
+  vec2 a = abs(m);
+  float housing = step(a.x, 0.52) * step(a.y, 0.26);
+  if (housing < 0.5) return vec4(0.0);
+  float inner = step(a.x, 0.47) * step(a.y, 0.21);
+  vec3 metal = vec3(0.42, 0.44, 0.42) * (0.8 + 0.2 * smoothstep(0.52, 0.4, a.x));
+  float tubes = 0.0;
+  for (int k = -1; k <= 1; k += 2) {
+    float d = abs(m.y - float(k) * 0.09);
+    tubes += smoothstep(0.04, 0.0, d) * step(a.x, 0.45);   // tube body
+  }
+  float louvre = 0.85 + 0.15 * step(0.5, fract(m.x * 6.0));   // slats
+  float glow = inner * (0.35 + 0.65 * clamp(tubes, 0.0, 1.0)) * louvre;
+  return vec4(mix(metal * 0.5, metal, 1.0 - inner), glow);
+}
+
+// MEMORY: a fabric pendant shade seen from below: dark rim, glowing inside,
+// a small hot bulb at the centre.
+vec4 pendant(vec2 m){
+  float r = length(m);
+  if (r > 0.3) return vec4(0.0);
+  float rim = smoothstep(0.26, 0.28, r);
+  float inside = smoothstep(0.26, 0.04, r);
+  float bulb = smoothstep(0.075, 0.03, r);
+  return vec4(vec3(0.05, 0.02, 0.02), mix(0.25 + 0.5 * inside, 0.05, rim) + bulb);
+}
+
+// ACCEPTANCE: a square frosted panel flush with the ceiling, soft edges.
+vec4 frosted(vec2 m){
+  vec2 a = abs(m);
+  float e = max(a.x, a.y);
+  if (e > 0.5) return vec4(0.0);
+  return vec4(vec3(0.8), 0.55 + 0.45 * smoothstep(0.48, 0.15, e));
+}
+
 void main(){
   vec2 p = vWorldPos.xz;
   int oct = uTier > 0 ? 3 : 2;
   vec3 z = zoneWeights(p);
 
-  vec2 tile = floor(p / SPACING);
-  vec2 f = fract(p / SPACING) - 0.5;                    // -0.5..0.5 within a tile
+  vec2 cellC = floor(p / ${CELL.toFixed(2)});
+  vec2 m = (fract(p / ${CELL.toFixed(2)}) - 0.5) * ${CELL.toFixed(2)}; // metres from this cell's centre
   float fl = 1.0;
-  if (abs(tile.x - uFlickerTile.x) < 0.5 && abs(tile.y - uFlickerTile.y) < 0.5) fl = uFlickerAmt;
-  float boost = 1.0 + 0.6 * trailBoost((tile + 0.5) * SPACING);
-
-  // FEAR fixture: long fluorescent tube panel with diffuser striping
-  vec2 panelHalf = 0.5 * vec2(1.6, 0.45) / SPACING;
-  float tube = step(abs(f.x), panelHalf.x) * step(abs(f.y), panelHalf.y);
-  tube *= 0.6 + 0.4 * smoothstep(panelHalf.y, 0.0, abs(f.y));
-  // MEMORY fixture: a small shade glowing red, like the lamp by grandmother's bed
-  float r = length(f * SPACING);
-  float shade = smoothstep(0.24, 0.22, r) * (0.45 + 0.55 * smoothstep(0.22, 0.03, r));
-  shade += 0.3 * band(r, 0.23, 0.015);
-  // ACCEPTANCE: a wide soft skylight
-  float sky = smoothstep(0.45, 0.15, max(abs(f.x), abs(f.y)));
-  float fixture = z.x * tube + z.y * shade + z.z * sky;
+  if (abs(cellC.x - uFlickerTile.x) < 0.5 && abs(cellC.y - uFlickerTile.y) < 0.5) fl = uFlickerAmt;
+  float boost = 1.0 + 0.6 * trailBoost((cellC + 0.5) * ${CELL.toFixed(2)});
+  float on = step(0.5, vLamp);                          // this cell holds a fixture
 
   vec3 matteFear = vec3(0.66, 0.68, 0.64);
   vec3 matteMem  = vec3(0.07, 0.07, 0.06);              // smoke-darkened ceiling
   vec3 matteAcc  = vec3(0.92, 0.92, 0.89);
   vec3 matte = (matteFear * z.x + matteMem * z.y + matteAcc * z.z) * (0.85 + 0.15 * fbm(p * 3.0, oct));
-  float rosette = z.y * band(r, 0.75, 0.03) * 0.25;     // plaster ceiling rose around each lamp
-  matte *= 1.0 - rosette;
 
   vec3 L = zoneLight(z);
   vec3 lit = rolloff(matte * (0.12 * L + fixtureLight(vWorldPos, vec3(0.0, -1.0, 0.0), L) * 0.5));
   lit += z.z * 0.08 * LIGHT_ACC;
-  vec3 emis = L * 2.4 * fl * boost;
-  vec3 col = mix(lit, emis, clamp(fixture, 0.0, 1.0));
+  // the ceiling around the nearest fixture catches its light (measured to
+  // that fixture, not to this cell, so the glow is round, never a square)
+  float bx, bz;
+  int ix = nearestLine(p.x / ${CELL.toFixed(2)}, bx), iz = nearestLine(p.y / ${CELL.toFixed(2)}, bz);
+  vec2 lampC = (vec2(bx + LINES[ix], bz + LINES[iz]) + 0.5) * ${CELL.toFixed(2)};
+  vec2 dl = p - lampC;
+  lit += L * exp(-dot(dl, dl) * 1.6) * 0.18 * fl * boost;
+
+  vec4 fx = vec4(0.0);
+  if (on > 0.5) {
+    if (z.x > 0.001) fx += z.x * troffer(m);
+    if (z.y > 0.001) fx += z.y * pendant(m);
+    if (z.z > 0.001) fx += z.z * frosted(m);
+  }
+  float body = step(0.001, fx.r + fx.g + fx.b + fx.a);
+  vec3 col = mix(lit, fx.rgb * (0.3 + 0.7 * L), body * 0.9);  // housing / shade
+  col += L * 2.4 * fx.a * fl * boost;                          // emitted light
   gl_FragColor = vec4(col, 1.0);
   #include <fog_fragment>
 }
@@ -335,6 +500,7 @@ export function createMaterials(quality) {
     uFlickerTile: { value: new THREE.Vector2(1e5, 1e5) }, // off-grid = nothing flickering
     uFlickerAmt: { value: 1 },
     uTrail: { value: Array.from({ length: TRAIL_N }, () => new THREE.Vector3(1e5, 1e5, 0)) },
+    uZone: { value: new THREE.Vector3(1, 0, 0) },
   };
 
   const mk = (fragmentShader) => new THREE.ShaderMaterial({
@@ -346,6 +512,7 @@ export function createMaterials(quality) {
   });
 
   const materials = { wall: mk(FRAG_WALL), floor: mk(FRAG_FLOOR), ceil: mk(FRAG_CEIL) };
+  materials.ceil.vertexShader = VERT_CEIL;
 
   // Flicker: a fixture near the visitor stutters now and then. How often
   // depends on the zone: constant unease in FEAR, rare in MEMORY, never in
@@ -362,6 +529,7 @@ export function createMaterials(quality) {
     update(dt, t, camPos, zone) {
       shared.uTime.value = t;
       shared.uTier.value = quality.tier;
+      if (zone) shared.uZone.value.set(zone.fear, zone.memory, zone.accept);
 
       // footsteps light the lamps above them, then fade
       const moved = lastPos.x > 1e4 ? 0 : Math.hypot(camPos.x - lastPos.x, camPos.z - lastPos.y);
@@ -388,8 +556,8 @@ export function createMaterials(quality) {
       } else {
         idle -= dt;
         if (idle <= 0 && (zone ? zone.accept < 0.5 : true)) {
-          const tx = Math.floor(camPos.x / SPACING) + Math.round(rand(-1.4, 1.4));
-          const tz = Math.floor(camPos.z / SPACING) + Math.round(rand(-1.4, 1.4));
+          const tx = lampLineNear(camPos.x / CELL, Math.round(rand(-1.4, 1.4)));
+          const tz = lampLineNear(camPos.z / CELL, Math.round(rand(-1.4, 1.4)));
           shared.uFlickerTile.value.set(tx, tz);
           active = rand(0.4, 1.1) * (0.6 + fear);
         } else if (idle <= 0) {
