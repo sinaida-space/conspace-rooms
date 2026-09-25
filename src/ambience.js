@@ -27,7 +27,7 @@ function noise(ctx) {
 export function startAmbience(ctx, dest, index) {
   const out = ctx.createGain();
   out.gain.value = 0;
-  out.gain.setTargetAtTime(1, ctx.currentTime, 0.6);
+  out.gain.setTargetAtTime(2.4, ctx.currentTime, 0.6); // it replaces the whole corridor, so it can be present
   out.connect(dest);
   const nodes = [], timers = [];
   const keep = n => { nodes.push(n); return n; };

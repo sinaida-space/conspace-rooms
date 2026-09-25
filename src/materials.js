@@ -46,6 +46,8 @@ uniform vec2  uFlickerTile;
 uniform float uFlickerAmt;
 uniform vec3  uTrail[4];   // xz of recent footsteps + strength (0..1)
 uniform vec3  uZone;      // stage weights (fear, memory, acceptance), set by the portal crossings
+uniform vec4  uCandle[8];     // the 8 candles nearest the visitor: xyz, w = flickering intensity
+uniform vec3  uCandleCol[8];  // their flame colours
 
 varying vec3 vWorldPos;
 varying vec3 vNormal;
@@ -145,6 +147,22 @@ vec3 fixtureSpec(vec3 P, vec3 N, vec3 V, vec3 lightCol, float shin){
   }
   return acc;
 }
+// Warm, trembling light of the nearest candles on whatever surface is near
+// them: short reach, soft wrap, so a wall glows beside a candle and the
+// glow dies within a metre or two.
+vec3 candleLight(vec3 P, vec3 N){
+  vec3 acc = vec3(0.0);
+  for (int i = 0; i < 8; i++) {
+    float w = uCandle[i].w;
+    if (w <= 0.0) continue;
+    vec3 L = uCandle[i].xyz - P;
+    float d2 = dot(L, L);
+    float ndl = max(dot(N, L * inversesqrt(d2 + 1e-4)), 0.0) * 0.8 + 0.2;
+    acc += uCandleCol[i] * w * ndl / (1.0 + d2 * 2.5);
+  }
+  return acc;
+}
+
 // Diffuse and specular from the same 3×3 fixtures in one pass (walls need
 // both; sharing the lamp search and attenuation halves the cost).
 void fixtureLightSpec(vec3 P, vec3 N, vec3 V, vec3 lightCol, float shin, out vec3 diff, out vec3 spec){
@@ -343,9 +361,10 @@ void main(){
   float shin = mix(18.0, 60.0, z.x);                    // oil paint is tight, paper broad
   vec3 dSum, sSum;
   fixtureLightSpec(vWorldPos, Nb, V, L, shin, dSum, sSum);
-  vec3 diffuse = col * (dSum + 0.04 * L + z.y * FILL_MEM * 1.6) * ao;
+  vec3 cl = candleLight(vWorldPos, Nb);
+  vec3 diffuse = col * (dSum + 0.04 * L + z.y * FILL_MEM * 1.6 + cl) * ao;
   vec3 spec = sSum * gloss * mix(0.25, 0.9, z.x) * ao;
-  vec3 lit = rolloff(diffuse + spec);
+  vec3 lit = rolloff(diffuse + spec + cl * 0.05 * ao); // a little warm haze on the plaster right by a flame
   lit += z.z * (0.06 + 0.7 * lace) * LIGHT_ACC * 0.5;  // acceptance walls glow from inside, brightest at the lace rims
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
@@ -428,7 +447,8 @@ void main(){
 
   vec3 L = zoneLight(z);
   col *= pow(vAO, 1.6);                                 // shadow and dust gathered at the walls
-  vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L + z.y * FILL_MEM * 1.2));
+  vec3 clf = candleLight(vWorldPos, N);
+  vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L + z.y * FILL_MEM * 1.2 + clf) + clf * 0.04);
   lit += z.z * 0.05 * LIGHT_ACC;
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
@@ -574,6 +594,8 @@ export function createMaterials(quality) {
     uFlickerAmt: { value: 1 },
     uTrail: { value: Array.from({ length: TRAIL_N }, () => new THREE.Vector3(1e5, 1e5, 0)) },
     uZone: { value: new THREE.Vector3(1, 0, 0) },
+    uCandle: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, -100, 0, 0)) },
+    uCandleCol: { value: Array.from({ length: 8 }, () => new THREE.Color(0, 0, 0)) },
   };
 
   const mk = (fragmentShader) => new THREE.ShaderMaterial({
@@ -637,6 +659,16 @@ export function createMaterials(quality) {
         } else if (idle <= 0) {
           idle = rand(20, 40);
         }
+      }
+    },
+    // lights: [{ x, y, z, col }] nearest first; each gets its own flicker
+    setCandles(lights, t) {
+      for (let i = 0; i < 8; i++) {
+        const c = lights[i];
+        if (!c) { shared.uCandle.value[i].w = 0; continue; }
+        const fl = 0.8 + 0.12 * Math.sin(t * 11 + i * 1.7) + 0.08 * Math.sin(t * 29 + i * 5.3);
+        shared.uCandle.value[i].set(c.x, c.y, c.z, 3.2 * fl);
+        shared.uCandleCol.value[i].copy(c.col);
       }
     },
     dispose() {

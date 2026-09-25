@@ -3,7 +3,7 @@ import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, 
 import { zoneWeights, ORIGIN, ZONE } from './zones.js';
 import { t } from './i18n.js';
 import { EYE_HEIGHT } from './player.js';
-import { buildKitchen, createKitchenRig, buildScatter } from './kitchen.js';
+import { buildKitchen, createKitchenRig, buildScatter, tickCandles } from './kitchen.js';
 import { baroqueFrame } from './frames.js';
 import { buildDoorway } from './doorway.js';
 
@@ -78,10 +78,10 @@ function portalPlan(cx, cz) {
 // room, one chunk in seven, deep in the memory ring.
 function kitchenPlan(cx, cz) {
   const room = chunkRooms(cx, cz).find(r => r.x1 - r.x0 >= 4 && r.y1 - r.y0 >= 4);
-  if (!room || hash2i(SEED_KITCHEN, cx, cz) % 7 !== 0) return null;
+  if (!room || hash2i(SEED_KITCHEN, cx, cz) % 5 !== 0) return null;
   const x = (cx * CHUNK + (room.x0 + room.x1 + 1) / 2) * CELL;
   const z = (cz * CHUNK + (room.y0 + room.y1 + 1) / 2) * CELL;
-  if (zoneWeights(x, z).memory <= 0.8) return null;
+  if (zoneWeights(x, z).memory <= 0.3) return null;   // from ~55 m out, just past the first portals
   return {
     x, z,
     minX: (cx * CHUNK + room.x0) * CELL, maxX: (cx * CHUNK + room.x1 + 1) * CELL,
@@ -514,7 +514,7 @@ export class SoulPath {
     veil.position.set(0, 0.06 + openH / 2, 0);
     g.add(veil);
     group.add(g);
-    return { x, z, west, span: openW, target, veil };
+    return { x, z, west, span: openW, target, veil, group: g };
   }
 
   // Walking through a portal: the side of its plane the visitor is on flips
@@ -524,6 +524,7 @@ export class SoulPath {
       if (Math.abs(p.x - cur.x) > 3 || Math.abs(p.z - cur.z) > 3) continue;
       const a0 = p.west ? prev.x - p.x : prev.z - p.z, a1 = p.west ? cur.x - p.x : cur.z - p.z;
       const along = p.west ? cur.z - p.z : cur.x - p.x;
+      if (!p.group.visible) continue;
       if (Math.sign(a0) !== Math.sign(a1) && Math.abs(along) < p.span / 2 && this.stage.go(p.target)) {
         this.post?.burst(1.6);
         this.audio?.chime();
@@ -551,7 +552,8 @@ export class SoulPath {
     const rnd = mulberry32(hash2i(SEED_SCATTER ^ (st * 7919), cx, cz));
     const portals = this._nextPortals(cx, cz);
     const kitchens = [];
-    if (st === 1) for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) { const k = kitchenPlan(cx + dx, cz + dz); if (k) kitchens.push(k); }
+    if (st === 1) for (let dz = -5; dz <= 5; dz++) for (let dx = -5; dx <= 5; dx++) { const k = kitchenPlan(cx + dx, cz + dz); if (k) kitchens.push(k); }
+    const seekRoom = st === 1 && !this.visitedRoom;   // red rooms: first the room, then the way on
     const near = (list, x, z) => { let d = Infinity; for (const p of list) d = Math.min(d, Math.hypot(p.x - x, p.z - z)); return d; };
     const prox = d => { const k = Math.max(0, Math.min(1, 1 - d / 45)); return k * k * (3 - 2 * k); };
     const YELLOW = new THREE.Color(0xffd27a), RED = new THREE.Color(0xff2a14), PALE_WAX = new THREE.Color(0xe6dac0), RED_WAX = new THREE.Color(0x8e1216);
@@ -564,11 +566,13 @@ export class SoulPath {
       if (!side) continue;                              // only along walls, so paths stay clear
       const x = centreOf(gi) + side[0] * 0.36 + (rnd() - 0.5) * 0.3;
       const z = centreOf(gj) + side[1] * 0.36 + (rnd() - 0.5) * 0.3;
-      const pp = prox(near(portals, x, z)), pk = st === 1 ? prox(near(kitchens, x, z)) : 0;
+      const pp = seekRoom ? 0 : prox(near(portals, x, z));
+      const pk = st === 1 ? Math.max(0, Math.min(1, 1 - near(kitchens, x, z) / 70)) : 0;
       if (r > 0.035 + 0.05 * Math.max(pp, pk)) continue;
       const flame = st === 0 ? YELLOW.clone().lerp(RED, pp)
-        : st === 1 ? RED.clone().lerp(YELLOW, pp)
-          : new THREE.Color(0xfff4dc);
+        : seekRoom ? YELLOW.clone().lerp(RED, pk)        // before the room: everything reddens toward it
+          : st === 1 ? RED.clone().lerp(YELLOW, pp)      // after: the flame yellows toward the way into the light
+            : new THREE.Color(0xfff4dc);
       const wax = st === 1 ? PALE_WAX.clone().lerp(RED_WAX, pk) : PALE_WAX.clone();
       items.push({ type: 'candle', x, z, rot: rnd() * 6.28, flame, wax });
     }
@@ -755,7 +759,11 @@ export class SoulPath {
     if (inKitchen !== this._inKitchen) {
       this._inKitchen = inKitchen;
       this.audio?.hush(inKitchen);
-      if (inKitchen && !this._roomHinted) { this._roomHinted = true; this._say(t('roomLabel'), t('roomHint')); }
+      if (inKitchen && !this._roomHinted) {
+        this._roomHinted = true; this.visitedRoom = true;
+        this._say(t('roomLabel'), t('roomHint'));
+        this._rebuildScatter();                       // candles now point to the way out into the light
+      }
     }
 
     // secret: a minute of stillness in acceptance hangs a nineteenth frame
@@ -771,8 +779,11 @@ export class SoulPath {
     this._checkPortals(this._prevPos, cur);
     this._prevPos = cur;
     for (const st of this.chunkStuff.values()) for (const p of st.portals) {
+      // only the portal into the very next stage exists; the way into the
+      // light opens only after grandmother's room has been found
+      const live = p.target === this.stage.stage + 1 && (p.target !== 2 || this.visitedRoom);
+      p.group.visible = live;
       p.veil.material.uniforms.uTime.value = time;
-      p.veil.material.uniforms.uFade.value = p.target > this.stage.stage ? 1 : 0.2;
     }
     if (this.stage.stage !== this._lastStage) { // the world changed: rewrite the walls in its hand
       this._lastStage = this.stage.stage;
@@ -833,6 +844,21 @@ export class SoulPath {
       }
       for (const sc of room.screens) sc.material.color.setScalar(0.8 + 0.2 * Math.random());
     }
+
+    // candles: flames breathe; the 8 nearest light the walls
+    tickCandles(time);
+    this._candleT = (this._candleT || 0) - dt;
+    if (this._candleT <= 0) {
+      this._candleT = 0.25;
+      const all = [];
+      for (const st2 of this.chunkStuff.values()) for (const c of st2.scatter?.lights || []) {
+        const d = Math.hypot(c.x - P.pos.x, c.z - P.pos.y);
+        if (d < 14) all.push([d, c]);
+      }
+      all.sort((a, b) => a[0] - b[0]);
+      this._nearCandles = all.slice(0, 8).map(e => e[1]);
+    }
+    window.__app?.atmo?.setCandles(this._nearCandles || [], time);
 
     // voices of the works nearby
     this._updateVoices(zone);
@@ -899,6 +925,16 @@ export class SoulPath {
         occluded: !this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3),
       }));
     this.audio.setArtVoices({ x: P.pos.x, z: P.pos.y, yaw: P.yaw }, near);
+    // at a work (within 3.5 m, in sight, or inspecting it): its own sound world
+    let at = this.artworks.inspecting;
+    if (!at) {
+      let bd = 3.5;
+      for (const a of this.artworks.active) {
+        const d = Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y);
+        if (d < bd && this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3)) { bd = d; at = a; }
+      }
+    }
+    this.audio.nearWork?.(at ? parseInt(at.art.id, 10) - 1 : null);
     this.audio.setZone?.(zone);
   }
 

@@ -420,7 +420,6 @@ export class Artworks {
     this._overlayRu.textContent = a.art.title_ru;
     this._overlayEn.textContent = a.art.title_en;
     this._overlay.classList.add('visible');
-    window.__app?.audio?.inspect(parseInt(a.art.id, 10) - 1);
     document.body.classList.add('inspecting'); // hide the key legend under the caption
   }
 
@@ -433,7 +432,6 @@ export class Artworks {
 
   _closeInspect() {
     this.inspecting = null;
-    window.__app?.audio?.endInspect();
     document.body.classList.remove('inspecting');
     this.player.locked = false;
     this._overlay.classList.remove('visible');

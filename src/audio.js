@@ -10,6 +10,11 @@ export class AudioEngine {
     const ctx = this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     this.master = ctx.createGain(); this.master.gain.value = 0.9;
     this.master.connect(ctx.destination);
+    // everything that is "the corridor" (drone, crackle, whisper, footsteps,
+    // turns, the works' notes) goes through bed; a work's own sound world
+    // goes straight to master, so standing at a work silences the corridor
+    this.bed = ctx.createGain(); this.bed.gain.value = 1;
+    this.bed.connect(this.master);
 
     // drone: detuned saws (a narrow, slightly dissonant cluster instead of a
     // clean fifth) through a slow-breathing lowpass — a beating, haunted bed
@@ -21,7 +26,7 @@ export class AudioEngine {
       const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
       o.connect(this.filter); o.start();
     }
-    this.filter.connect(droneGain); droneGain.connect(this.master);
+    this.filter.connect(droneGain); droneGain.connect(this.bed);
     const lfo = ctx.createOscillator(); lfo.frequency.value = 0.045;
     const lfoGain = ctx.createGain(); lfoGain.gain.value = 80;
     lfo.connect(lfoGain); lfoGain.connect(this.filter.frequency); lfo.start();
@@ -34,7 +39,7 @@ export class AudioEngine {
     const whisperLfoGain = ctx.createGain(); whisperLfoGain.gain.value = 0.006;
     whisperLfo.connect(whisperLfoGain); whisperLfoGain.connect(whisperGain.gain);
     whisperGain.gain.value = 0.006;
-    whisper.connect(whisperGain); whisperGain.connect(this.master);
+    whisper.connect(whisperGain); whisperGain.connect(this.bed);
     whisper.start(); whisperLfo.start();
 
     // crackle bed: looping filtered noise + random pops
@@ -45,7 +50,7 @@ export class AudioEngine {
     const noise = ctx.createBufferSource(); noise.buffer = buf; noise.loop = true;
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 0.7;
     this.crackleGain = ctx.createGain(); this.crackleGain.gain.value = 0.011;
-    noise.connect(bp); bp.connect(this.crackleGain); this.crackleGain.connect(this.master);
+    noise.connect(bp); bp.connect(this.crackleGain); this.crackleGain.connect(this.bed);
     noise.start();
     this._popTimer = setInterval(() => this._pop(), 400);
 
@@ -53,7 +58,7 @@ export class AudioEngine {
     const turnNoise = ctx.createBufferSource(); turnNoise.buffer = buf; turnNoise.loop = true;
     this.turnFilter = ctx.createBiquadFilter(); this.turnFilter.type = 'bandpass'; this.turnFilter.frequency.value = 700; this.turnFilter.Q.value = 1.4;
     this.turnGain = ctx.createGain(); this.turnGain.gain.value = 0;
-    turnNoise.connect(this.turnFilter); this.turnFilter.connect(this.turnGain); this.turnGain.connect(this.master);
+    turnNoise.connect(this.turnFilter); this.turnFilter.connect(this.turnGain); this.turnGain.connect(this.bed);
     turnNoise.start();
   }
 
@@ -65,7 +70,7 @@ export class AudioEngine {
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.02 + Math.random() * 0.025, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.02 + Math.random() * 0.05);
-    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.09);
+    o.connect(g); g.connect(this.bed); o.start(t); o.stop(t + 0.09);
   }
 
   // motion speed 0..~8 → drone opens up, crackle rises slightly
@@ -88,7 +93,7 @@ export class AudioEngine {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(0.05, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-    o.connect(bp); bp.connect(g); g.connect(this.master);
+    o.connect(bp); bp.connect(g); g.connect(this.bed);
     o.start(t); o.stop(t + 0.18);
   }
 
@@ -174,7 +179,7 @@ export class AudioEngine {
     const body = ctx.createGain(); body.gain.value = 0.65;
     trem.connect(tremG); tremG.connect(body.gain);
     o1.connect(body); o2.connect(o2g); o2g.connect(body);
-    if (!this.voiceBus) { this.voiceBus = ctx.createGain(); this.voiceBus.connect(this.master); }
+    if (!this.voiceBus) { this.voiceBus = ctx.createGain(); this.voiceBus.connect(this.bed); }
     body.connect(gain); gain.connect(lp); lp.connect(panner); panner.connect(this.voiceBus);
     [o1, o2, trem].forEach(o => o.start());
     return { oscs: [o1, o2, trem], gain, lp, panner, out: panner };
@@ -194,29 +199,25 @@ export class AudioEngine {
     this.chime();
   }
 
-  // Looking closely at a work: its own sound world rises, the corridor's
-  // drone and the other works' notes sink under it.
-  inspect(index) {
-    if (!this.ctx) return;
-    this.endInspect();
+  // Standing at a work (or looking closely at it): its own sound world rises
+  // and the corridor falls silent. index: artwork index, or null to leave.
+  nearWork(index) {
+    if (!this.ctx || index === this._workIndex) return;
+    this._workIndex = index;
     const now = this.ctx.currentTime;
-    this.droneGain?.gain.setTargetAtTime(0.004, now, 0.5);
-    this.voiceBus?.gain.setTargetAtTime(0.15, now, 0.5);
+    if (this._stopAmbience) { this._stopAmbience(); this._stopAmbience = null; }
+    if (index === null || index === undefined) {
+      this.bed.gain.setTargetAtTime(1, now, 0.8);
+      return;
+    }
+    this.bed.gain.setTargetAtTime(0, now, 0.4);
     this._stopAmbience = startAmbience(this.ctx, this.master, index);
-  }
-  endInspect() {
-    if (!this._stopAmbience) return;
-    this._stopAmbience();
-    this._stopAmbience = null;
-    const now = this.ctx.currentTime;
-    this.droneGain?.gain.setTargetAtTime(this._hushed ? 0 : (this._zoneLevel ?? 0.05), now, 0.8);
-    this.voiceBus?.gain.setTargetAtTime(1, now, 0.8);
   }
 
   // The bed follows the zone: harsh in fear, softer in memory, almost gone in
   // acceptance. hush() silences it entirely (grandmother's kitchen).
   setZone(zone) {
-    if (!this.ctx || !this.droneGain || this._stopAmbience) return; // inspect owns the bed meanwhile
+    if (!this.ctx || !this.droneGain) return;
     this._zoneLevel = 0.05 * (zone.fear + 0.55 * zone.memory + 0.18 * zone.accept);
     const target = this._hushed ? 0 : this._zoneLevel;
     this.droneGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.6);

@@ -256,30 +256,98 @@ export function buildKitchen(group, x, z) {
 // items: [{ type: 'candle' | 'teapot' | 'cup', x, z, rot }]. One InstancedMesh
 // per part per chunk, so a hundred things cost a handful of draw calls.
 let SHARED = null;
+const CANDLE_TIME = { value: 0 };   // shared clock for every flame and pool
+
+// A flame drawn on a quad that always faces the camera: a white-hot core, a
+// teardrop body in the candle's colour, a soft halo; it breathes and gutters
+// on its own rhythm (seeded by gl_InstanceID).
+const FLAME_VERT = /* glsl */`
+uniform float uTime;
+varying vec2 vUv; varying vec3 vCol; varying float vFl;
+void main(){
+  float id = float(gl_InstanceID);
+  vFl = 0.82 + 0.12 * sin(uTime * 11.0 + id * 1.7) + 0.06 * sin(uTime * 29.0 + id * 5.3);
+  vec4 centre = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+  vec2 sway = vec2(0.012 * sin(uTime * 3.1 + id), 0.0);
+  centre.xy += (position.xy + sway * (position.y + 0.5)) * vec2(1.0, vFl);   // billboard in view space
+  gl_Position = projectionMatrix * centre;
+  vUv = uv;
+  #ifdef USE_INSTANCING_COLOR
+    vCol = instanceColor;
+  #else
+    vCol = vec3(1.0, 0.8, 0.45);
+  #endif
+}`;
+const FLAME_FRAG = /* glsl */`
+varying vec2 vUv; varying vec3 vCol; varying float vFl;
+void main(){
+  vec2 p = vUv - vec2(0.5, 0.32);
+  float teardrop = length(vec2(p.x * 3.2, p.y * (p.y > 0.0 ? 1.4 : 2.6)));   // pointed top, round bottom
+  float body = smoothstep(0.34, 0.1, teardrop);
+  float core = smoothstep(0.16, 0.0, teardrop + 0.05);
+  float halo = smoothstep(0.5, 0.0, length(p * vec2(1.0, 0.8))) * 0.35;
+  vec3 col = vCol * (body * 1.4 + halo) + vec3(1.0, 0.97, 0.85) * core;
+  float a = clamp(body + halo + core, 0.0, 1.0) * vFl;
+  gl_FragColor = vec4(col * vFl, a);
+}`;
+// The warm pool on the floor, breathing with its flame.
+const POOL_VERT = /* glsl */`
+uniform float uTime;
+varying vec2 vUv; varying vec3 vCol; varying float vFl;
+#include <fog_pars_vertex>
+void main(){
+  float id = float(gl_InstanceID);
+  vFl = 0.8 + 0.12 * sin(uTime * 11.0 + id * 1.7) + 0.08 * sin(uTime * 29.0 + id * 5.3);
+  vUv = uv;
+  #ifdef USE_INSTANCING_COLOR
+    vCol = instanceColor;
+  #else
+    vCol = vec3(1.0, 0.8, 0.45);
+  #endif
+  vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}`;
+const POOL_FRAG = /* glsl */`
+varying vec2 vUv; varying vec3 vCol; varying float vFl;
+#include <fog_pars_fragment>
+void main(){
+  float r = length(vUv - 0.5) * 2.0;
+  float a = smoothstep(1.0, 0.0, r) * smoothstep(1.0, 0.2, r) * 0.45 * vFl;
+  gl_FragColor = vec4(vCol * a, a);
+  #include <fog_fragment>
+}`;
+
 function shared() {
   if (SHARED) return SHARED;
-  const T = textures();
   const enamel = new THREE.MeshBasicMaterial({ color: 0xcfc8b6, fog: true });
+  // wax: a slightly tapered stick, lit from the flame at the top and in
+  // shadow at the foot (vertex colours, tinted per candle by instance colour)
+  const waxGeo = new THREE.CylinderGeometry(0.022, 0.024, 0.16, 12, 4);
+  const wc = [], pos = waxGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) { const k = 0.35 + 0.65 * ((pos.getY(i) + 0.08) / 0.16) ** 1.5; wc.push(k, k, k); }
+  waxGeo.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
+  const uniforms = { uTime: CANDLE_TIME };
+  const poolUniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog]);
+  poolUniforms.uTime = CANDLE_TIME;
   SHARED = {
     saucer: [lathe([[0, 0], [0.06, 0.002], [0.065, 0.012], [0, 0.008]], 16), enamel],
-    wax: [new THREE.CylinderGeometry(0.018, 0.02, 0.2, 10), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true })],
-    flame: [new THREE.SphereGeometry(0.016, 8, 6).scale(1, 2.2, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false })],
-    pool: [new THREE.PlaneGeometry(1.3, 1.3).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({
-      map: T.warm, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.4, fog: true })],
-    pot: [lathe([[0, 0], [0.055, 0], [0.085, 0.015], [0.1, 0.05], [0.098, 0.085], [0.08, 0.115], [0.05, 0.13], [0.042, 0.135], [0, 0.135]]), enamel],
-    potLid: [lathe([[0, 0], [0.042, 0], [0.03, 0.02], [0.012, 0.025], [0.014, 0.04], [0, 0.045]], 20), enamel],
-    spout: [new THREE.CylinderGeometry(0.01, 0.018, 0.12, 8).rotateZ(-0.9).translate(0.12, 0.08, 0), enamel],
-    rim: [new THREE.TorusGeometry(0.043, 0.004, 6, 24).rotateX(Math.PI / 2).translate(0, 0.135, 0), new THREE.MeshBasicMaterial({ color: 0x8a1a1a, fog: true })],
-    cup: [lathe([[0, 0.006], [0.028, 0.006], [0.042, 0.03], [0.046, 0.075], [0.043, 0.075], [0.04, 0.035], [0, 0.03]]), enamel],
+    wax: [waxGeo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: true })],
+    flame: [new THREE.PlaneGeometry(0.22, 0.32).translate(0, 0.09, 0), new THREE.ShaderMaterial({
+      uniforms, vertexShader: FLAME_VERT, fragmentShader: FLAME_FRAG,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })],
+    pool: [new THREE.PlaneGeometry(1.5, 1.5).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+      uniforms: poolUniforms, vertexShader: POOL_VERT, fragmentShader: POOL_FRAG, fog: true,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })],
   };
   return SHARED;
 }
+export function tickCandles(time) { CANDLE_TIME.value = time; }
+
 export function buildScatter(group, items) {
   const S = shared();
   const parts = {
-    candle: [['saucer', 0.01], ['wax', 0.118], ['flame', 0.24], ['pool', 0.016]],
-    teapot: [['pot', 0], ['potLid', 0.132], ['spout', 0], ['rim', 0]],
-    cup: [['saucer', 0.0], ['cup', 0.0]],
+    candle: [['saucer', 0.01], ['wax', 0.09], ['flame', 0.18], ['pool', 0.016]],
   };
   const counts = {};
   for (const it of items) for (const [name] of parts[it.type]) counts[name] = (counts[name] || 0) + 1;
@@ -308,6 +376,7 @@ export function buildScatter(group, items) {
   }
   return {
     count: items.length,
+    lights: items.map(it => ({ x: it.x, y: 0.28, z: it.z, col: it.flame })), // for the walls to catch
     dispose() { for (const name in meshes) { group.remove(meshes[name]); meshes[name].dispose(); } }, // frees instance buffers only
   };
 }

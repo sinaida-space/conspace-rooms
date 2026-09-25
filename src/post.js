@@ -84,7 +84,7 @@ export function createPost(renderer, quality) {
       glitch = Math.max(0, glitch - dt * 2.2);
       uniforms.uTime.value = t;
       uniforms.uGlitch.value = glitch;
-      uniforms.uShift.value = 0.0006 + Math.min(0.005, Math.abs(speed) * 0.0006) + glitch * 0.002;
+      uniforms.uShift.value = Math.min(0.0018, Math.abs(speed) * 0.0003) + glitch * 0.002; // no resting RGB split: small lights stay whole
       renderer.setRenderTarget(rt);
       renderer.render(mainScene, mainCam);
       renderer.setRenderTarget(null);
