@@ -467,10 +467,10 @@ export class SoulPath {
       let d = Infinity;
       for (const pp of portals) d = Math.min(d, Math.hypot(pp.x - x, pp.z - z));
       // a few far away, thick within ~10 m of the portal
-      const p = d === Infinity ? 0.012 : Math.max(0.012, Math.min(0.55, 0.55 * (1 - d / 40) ** 2));
+      const p = d === Infinity ? 0.006 : Math.max(0.006, Math.min(0.2, 0.2 * (1 - d / 40) ** 2));
       if (r > p) continue;
       const k = rnd();
-      items.push({ type: k < 0.55 ? 'candle' : k < 0.8 ? 'teapot' : 'cup', x, z, rot: rnd() * 6.28 });
+      items.push({ type: k < 0.4 ? 'candle' : k < 0.75 ? 'teapot' : 'cup', x, z, rot: rnd() * 6.28 });
     }
     return buildScatter(group, items);
   }
