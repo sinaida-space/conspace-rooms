@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONSPACE_SEED, chunkRooms } from './world.js';
+import { t, getLang } from './i18n.js';
 
 // ── conspace-rooms · artworks.js ────────────────────────────────────────────
 // The 18 SOULS pieces by UVALISS, hung framed on labyrinth walls with English
@@ -133,12 +134,12 @@ function buildPlacardTexture(art) {
   ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#171512';
-  ctx.font = '700 24px ui-monospace, "SF Mono", monospace';
+  ctx.font = '700 24px "Departure Mono", ui-monospace, monospace';
   ctx.fillText('UVALISS', c.width / 2, 54);
-  ctx.font = '400 21px ui-monospace, "SF Mono", monospace';
-  wrapText(ctx, art.title_en, c.width / 2, 108, c.width - 40, 26);
+  ctx.font = '400 21px "Departure Mono", ui-monospace, monospace';
+  wrapText(ctx, getLang() === 'ru' ? art.title_ru : art.title_en, c.width / 2, 108, c.width - 40, 26);
   ctx.fillStyle = '#8a8171';
-  ctx.font = '400 17px ui-monospace, "SF Mono", monospace';
+  ctx.font = '400 17px "Departure Mono", ui-monospace, monospace';
   ctx.fillText('SOULS', c.width / 2, c.height - 28);
   const tex = new THREE.CanvasTexture(c);
   tex.anisotropy = 4;
@@ -151,8 +152,8 @@ function ensureDom() {
   const style = document.createElement('style');
   style.textContent = `
 #artwork-prompt {
-  position: fixed; left: 50%; bottom: 8vh; transform: translateX(-50%) translateY(6px);
-  z-index: 5; font-family: ui-monospace, 'SF Mono', monospace; font-size: 0.85em;
+  position: fixed; left: 50%; bottom: calc(2vh + 5.5em); transform: translateX(-50%) translateY(6px);
+  z-index: 5; font-family: 'Departure Mono', ui-monospace, monospace; font-size: 0.85em;
   color: #f2f2f2; background: rgba(10,10,10,0.55); border: 1px solid rgba(242,242,242,0.35);
   padding: 0.5em 1em; letter-spacing: 0.04em; opacity: 0; pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -165,7 +166,7 @@ function ensureDom() {
 }
 #inspect-overlay.visible { opacity: 1; }
 #inspect-overlay .inspect-card {
-  margin-bottom: 9vh; text-align: center; font-family: ui-monospace, 'SF Mono', monospace;
+  margin-bottom: 9vh; text-align: center; font-family: 'Departure Mono', ui-monospace, monospace;
   color: #f2f2f2; opacity: 0; transform: translateY(8px); transition: opacity 0.5s ease 0.2s, transform 0.5s ease 0.2s;
 }
 #inspect-overlay.visible .inspect-card { opacity: 1; transform: translateY(0); }
@@ -397,9 +398,7 @@ export class Artworks {
   _setPrompt(candidate) {
     if (!candidate) { this._prompt.classList.remove('visible'); return; }
     const mode = this.player.mode;
-    const hint = mode === 'hands' ? 'pinch to look closer'
-      : mode === 'light' ? 'tap to look closer'
-      : 'press E to look closer';
+    const hint = t(mode === 'hands' ? 'promptHands' : mode === 'light' ? 'promptTouch' : 'promptKeys');
     this._prompt.textContent = hint;
     this._prompt.classList.add('visible');
   }

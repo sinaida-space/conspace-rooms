@@ -1,5 +1,6 @@
 // Welcome screen: collab statement, links, machine capability check, mode select.
 import { detectDevice } from './device.js';
+import { t, setLang, langFromUrl, applyStatic } from './i18n.js';
 
 const $ = id => document.getElementById(id);
 const wait = ms => new Promise(res => setTimeout(res, ms));
@@ -38,6 +39,30 @@ export class UI {
     this.selectedMode = null;
   }
 
+  // Language gate: the very first screen. A ?lang= link (or a reload after
+  // choosing) skips it. Nothing is stored; the choice lives in the URL.
+  async gateLanguage() {
+    const gate = $('lang-gate');
+    const preset = langFromUrl();
+    if (preset) {
+      setLang(preset);
+      gate?.classList.add('hidden');
+      applyStatic();
+      return;
+    }
+    const el = $('lang-boot');
+    if (el) await this._typeLine(el, 'C:\\CONSPACE>ВЫБЕРИТЕ ЯЗЫК / SELECT LANGUAGE_');
+    const byBrowser = (navigator.language || '').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+    gate?.querySelector(`[data-lang="${byBrowser}"]`)?.focus();
+    const chosen = await new Promise(res => {
+      gate?.querySelectorAll('[data-lang]').forEach(b =>
+        b.addEventListener('click', () => res(b.dataset.lang), { once: true }));
+    });
+    setLang(chosen);
+    applyStatic();
+    gate?.classList.add('hidden');
+  }
+
   // Cookie/consent gate: shown once (persisted in localStorage) before the
   // welcome screen. Resolves immediately if consent was already given.
   async gateConsent() {
@@ -47,6 +72,7 @@ export class UI {
       $('cookie-gate')?.classList.add('hidden');
       return;
     }
+    $('cookie-gate')?.classList.remove('hidden');
     await this._typeCookieBoot();
     await new Promise(res => {
       $('btn-consent')?.addEventListener('click', () => {
@@ -60,12 +86,7 @@ export class UI {
   async _typeCookieBoot() {
     const el = $('cookie-boot');
     if (!el) return;
-    const lines = [
-      'C:\\CONSPACE>SCANNING VISITOR...',
-      'C:\\CONSPACE>GETTING INSIDE YOUR MIND...',
-      'C:\\CONSPACE>LOCATING CONSENT.SYS...',
-      'C:\\CONSPACE>AWAITING PERMISSION_',
-    ];
+    const lines = t('cookieBoot');
     for (const line of lines) {
       await this._typeLine(el, line);
       await wait(120);
@@ -77,11 +98,10 @@ export class UI {
     if (!el) return;
     el.classList.remove('hidden');
     if (!caps.webgl2) {
-      el.textContent = 'WebGL2 is not available on this device or browser. This experience needs it to run.';
+      el.textContent = t('noWebgl');
       return;
     }
-    el.textContent = `capability check — GPU: ${caps.gpuClass} · pixel ratio: ${caps.dpr} · `
-      + `${caps.touch ? 'touch detected' : 'no touch'}`;
+    el.textContent = t('capability', { gpu: caps.gpuClass, dpr: caps.dpr, touch: t(caps.touch ? 'touchYes' : 'touchNo') });
   }
 
   // DOS-style typed boot sequence, run once on load before the capability
@@ -90,12 +110,8 @@ export class UI {
   async runBootSequence(caps) {
     const el = $('boot-sequence');
     if (!el) return;
-    const lines = [
-      'C:\\CONSPACE>LOADING KERNEL.SYS...',
-      'C:\\CONSPACE>MOUNTING SOULS.DAT...',
-      `C:\\CONSPACE>GPU: ${(caps.gpuClass || 'unknown').toUpperCase()} — OK`,
-      'C:\\CONSPACE>ROOMS.EXE READY_',
-    ];
+    this._armSoulsEgg();
+    const lines = t('boot', { gpu: (caps.gpuClass || 'unknown').toUpperCase() });
     for (const line of lines) {
       await this._typeLine(el, line);
       await wait(120);
@@ -129,15 +145,13 @@ export class UI {
       if (isRecommended) {
         const tag = document.createElement('span');
         tag.className = 'mode-legend';
-        tag.textContent = 'recommended for this device';
+        tag.textContent = t('recommended');
         btn.appendChild(tag);
       }
       if (isHands && !hasWebcam) {
         const tag = document.createElement('span');
         tag.className = 'mode-legend';
-        tag.textContent = isTouch
-          ? 'no camera detected — this option will fall back to touch controls'
-          : 'no camera detected — this option will fall back to keyboard';
+        tag.textContent = t(isTouch ? 'noCamTouch' : 'noCamKeys');
         btn.appendChild(tag);
       }
       btn.addEventListener('click', () => {
@@ -146,6 +160,57 @@ export class UI {
         this.selectedMode = btn.dataset.mode;
       });
     });
+  }
+
+  // Easter egg: type "souls" (or tap the wordmark five times) during the
+  // welcome screen and one SOULS piece is redrawn as an ASCII portrait,
+  // sampled locally from its own pixels.
+  _armSoulsEgg() {
+    if (this._eggArmed) return;
+    this._eggArmed = true;
+    let typed = '', taps = 0, tapTimer = 0;
+    const fire = () => { this._drawSoulsAscii(); typed = ''; taps = 0; };
+    addEventListener('keydown', e => {
+      if ($('welcome')?.classList.contains('hidden')) return;
+      const k = e.key.toLowerCase();
+      // "ыщгды" is what "souls" types on a Russian layout
+      const map = { ы: 's', щ: 'o', г: 'u', д: 'l' };
+      typed = (typed + (map[k] || k)).slice(-5);
+      if (typed === 'souls') fire();
+    });
+    $('wordmark')?.addEventListener('click', () => {
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => { taps = 0; }, 1200);
+      if (++taps >= 5) fire();
+    });
+  }
+
+  async _drawSoulsAscii() {
+    const pre = $('souls-ascii');
+    if (!pre) return;
+    const n = 1 + Math.floor(Math.random() * 18);
+    const img = new Image();
+    img.src = `assets/artworks/${String(n).padStart(2, '0')}.jpg`;
+    try { await img.decode(); } catch (e) { return; }
+    const cols = 96;
+    const rows = Math.round(cols * (img.height / img.width) * 0.5); // glyph cells are ~2× taller than wide
+    const c = document.createElement('canvas');
+    c.width = cols; c.height = rows;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, cols, rows);
+    const px = ctx.getImageData(0, 0, cols, rows).data;
+    const ramp = ' .:-=+*#%@';
+    let out = '';
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const i = (y * cols + x) * 4;
+        const l = (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / 255;
+        out += ramp[Math.min(ramp.length - 1, Math.floor(l * ramp.length))];
+      }
+      out += '\n';
+    }
+    pre.textContent = out;
+    pre.classList.remove('hidden');
   }
 
   showWebglError() {
@@ -181,7 +246,7 @@ export class UI {
     if ($('touch-hint')) return;
     const el = document.createElement('div');
     el.id = 'touch-hint';
-    el.textContent = 'hold top half to walk · drag to turn · tap artwork to inspect';
+    el.textContent = t('touchHint');
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('visible'));
     const hide = () => { el.classList.remove('visible'); setTimeout(() => el.remove(), 600); };
@@ -196,8 +261,7 @@ export class UI {
     if ($('control-hud')) return;
     const el = document.createElement('div');
     el.id = 'control-hud';
-    el.innerHTML = '<span>&uarr;/W walk</span><span>&darr;/S back</span>'
-      + '<span>&larr;/&rarr; turn</span><span>A/D strafe</span><span>E inspect</span>';
+    el.innerHTML = t('hud').map(s => `<span>${s}</span>`).join('');
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('visible'));
   }
@@ -207,9 +271,7 @@ export class UI {
     if ($('hand-legend')) return;
     const el = document.createElement('div');
     el.id = 'hand-legend';
-    el.innerHTML = '<span>both fists = walk</span><span>point right hand = turn right</span>'
-      + '<span>point left hand = turn left</span><span>both palms = stop</span>'
-      + '<span>spread/pinch palms = zoom</span><span>finger pinch = inspect</span>';
+    el.innerHTML = t('handLegend').map(s => `<span>${s}</span>`).join('');
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('visible'));
   }
@@ -223,7 +285,7 @@ export class UI {
     const fsBtn = $('btn-fullscreen');
     const syncFsLabel = () => {
       const active = !!document.fullscreenElement;
-      fsBtn.innerHTML = active ? '⛶ <span>Exit fullscreen</span>' : '⛶ <span>Fullscreen</span>';
+      fsBtn.querySelector('span').textContent = t(active ? 'exitFullscreen' : 'fullscreen');
     };
     fsBtn.addEventListener('click', () => {
       if (document.fullscreenElement) document.exitFullscreen?.();
@@ -232,7 +294,7 @@ export class UI {
     document.addEventListener('fullscreenchange', syncFsLabel);
 
     $('btn-main-screen').addEventListener('click', () => {
-      if (!confirm('Leave the labyrinth and return to the main screen?')) return;
+      if (!confirm(t('confirmLeave'))) return;
       location.reload();
     });
 
@@ -243,15 +305,7 @@ export class UI {
   // time, plus credits/links. Purely a DOM overlay — caller is responsible
   // for pausing movement/audio before calling this.
   showFarewell() {
-    const questions = [
-      'If the room forgot you the moment you left it, would you have been here at all?',
-      "Name the version of yourself you buried to become who is reading this. Does it know it's dead?",
-      'When you finally stop moving, what will you have been walking toward?',
-      'Which of your memories would you erase first, if erasing it meant losing the person who gave it to you?',
-      "If your soul were hung on this wall tonight, framed and lit — would you recognize it, or is it a stranger you're required to love?",
-      'What part of you only exists because someone else is watching?',
-      "You will forget this labyrinth. What makes you so sure you won't forget yourself the same way?",
-    ];
+    const questions = t('questions');
     const q = questions[Math.floor(Math.random() * questions.length)];
     const qEl = $('farewell-question');
     if (qEl) qEl.textContent = q;
@@ -277,3 +331,5 @@ export class UI {
     }, 3500);
   }
 }
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

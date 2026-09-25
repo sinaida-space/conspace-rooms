@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>CONSPACE ROOMS — a collaboration between Sinaida and UVALISS</title>
-<meta name="description" content="CONSPACE ROOMS — an interactive web installation, a collaboration between Sinaida and UVALISS. Walk an infinite procedural labyrinth housing UVALISS's SOULS series.">
+<title>CONSPACE ROOMS · Sinaida × UVALISS</title>
+<meta name="description" content="CONSPACE ROOMS. An interactive web installation, a collaboration between Sinaida and UVALISS. Walk an infinite procedural labyrinth housing UVALISS's SOULS series.">
 <meta name="theme-color" content="#010805">
 <link rel="canonical" href="https://sinaida-space.github.io/conspace-rooms/">
 
@@ -15,60 +15,64 @@
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="CONSPACE ROOMS">
-<meta property="og:description" content="An interactive web installation — a collaboration between Sinaida and UVALISS. Walk an infinite procedural labyrinth housing UVALISS's SOULS series.">
+<meta property="og:description" content="An interactive web installation, a collaboration between Sinaida and UVALISS. Walk an infinite procedural labyrinth housing UVALISS's SOULS series.">
 <meta property="og:url" content="https://sinaida-space.github.io/conspace-rooms/">
 <meta property="og:image" content="https://sinaida-space.github.io/conspace-rooms/assets/icons/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="CONSPACE ROOMS">
-<meta name="twitter:description" content="An interactive web installation — a collaboration between Sinaida and UVALISS.">
+<meta name="twitter:description" content="An interactive web installation, a collaboration between Sinaida and UVALISS.">
 <meta name="twitter:image" content="https://sinaida-space.github.io/conspace-rooms/assets/icons/og-image.png">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<link rel="preload" href="assets/fonts/DepartureMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
 </head>
 <body>
 <canvas id="gl"></canvas>
 
-<div id="cookie-gate">
+<div id="lang-gate">
+  <div class="consent-panel">
+    <div id="lang-boot" aria-live="polite"></div>
+    <div class="lang-actions">
+      <button type="button" class="btn-enter" data-lang="ru" lang="ru">Русский</button>
+      <button type="button" class="btn-enter" data-lang="en" lang="en">English</button>
+    </div>
+  </div>
+</div>
+
+<div id="cookie-gate" class="hidden">
   <div class="consent-panel">
     <div id="cookie-boot" aria-live="polite"></div>
-    <p class="consent-copy">This experience keeps exactly one small file on your machine — your graphics-quality
-      preference. Nothing else. No trackers, no ad networks, no cookies sold to a stranger. If you choose gesture
-      mode later, your webcam feed is read locally by your browser and is never recorded or sent anywhere.</p>
+    <p class="consent-copy" data-i18n="consentCopy"></p>
     <div class="consent-actions">
-      <button type="button" id="btn-consent" class="btn-enter">Accept necessary only</button>
-      <a href="privacy.html" target="_blank" rel="noopener" class="privacy-link">Privacy policy →</a>
+      <button type="button" id="btn-consent" class="btn-enter" data-i18n="consentBtn"></button>
+      <a href="privacy.html" data-i18n-href="privacy.html" target="_blank" rel="noopener" class="privacy-link" data-i18n="privacyLink"></a>
     </div>
   </div>
 </div>
 
 <div id="welcome" class="hidden">
-  <h1>CONSPACE ROOMS</h1>
-  <p class="statement">A collaboration between Sinaida and UVALISS.</p>
+ <div class="welcome-col">
+  <h1 id="wordmark">CONSPACE ROOMS</h1>
+  <p class="statement" data-i18n="statement"></p>
 
   <div class="credits-panel">
-    <h2>Credits</h2>
+    <h2 data-i18n="credits"></h2>
     <div class="artist">
-      <p class="role">Concept &amp; experience design</p>
+      <p class="role" data-i18n="role1"></p>
       <p class="name">Sinaida</p>
-      <p>Visual artist and digital strategist working across interactive projection, generative
-        systems, and code. This piece is built as a space to walk through, not a level to solve.</p>
+      <p data-i18n="bio1"></p>
       <div class="links">
         <a href="https://sinaida.eu/" target="_blank" rel="noopener">sinaida.eu</a>
         <a href="https://www.instagram.com/sin.ai.da" target="_blank" rel="noopener">@sin.ai.da</a>
       </div>
     </div>
     <div class="artist">
-      <p class="role">Artworks — SOULS series</p>
-      <p class="name">UVALISS (Alisa Feer)</p>
-      <p>Visual artist from Saint Petersburg exploring themes of light and darkness, childhood and
-        dreams. Her works are a way of looking into one's own inner world and accepting it as it
-        is.</p>
+      <p class="role" data-i18n="role2"></p>
+      <p class="name" data-i18n="name2"></p>
+      <p data-i18n="bio2"></p>
       <div class="links">
         <a href="https://uvaliss.ru/" target="_blank" rel="noopener">uvaliss.ru</a>
         <a href="https://www.instagram.com/uvaliss/" target="_blank" rel="noopener">@uvaliss</a>
@@ -77,51 +81,56 @@
   </div>
 
   <div id="boot-sequence" aria-live="polite"></div>
-  <p id="capability-result" class="capability hidden">checking your machine…</p>
+  <pre id="souls-ascii" class="hidden" aria-hidden="true"></pre>
+  <p id="capability-result" class="capability hidden"></p>
 
   <div id="mode-select" class="hidden">
-    <button type="button" data-mode="light">Touch controls<span class="mode-legend">hold top half = walk · drag = turn · tap = inspect</span></button>
-    <button type="button" data-mode="keys">Keyboard + mouse<span class="mode-legend">WASD/arrows = walk · turn/look = ←/→ or mouse · E = inspect</span></button>
-    <button type="button" data-mode="hands" class="mode-secondary">Gestures (webcam)<span class="mode-legend">both fists = walk · point right/left hand = turn that way · both palms = stop · spread/pinch palms = zoom · finger pinch = inspect</span></button>
+    <button type="button" data-mode="light"><span data-i18n="modeLight"></span><span class="mode-legend" data-i18n="legendLight"></span></button>
+    <button type="button" data-mode="keys"><span data-i18n="modeKeys"></span><span class="mode-legend" data-i18n="legendKeys"></span></button>
+    <button type="button" data-mode="hands" class="mode-secondary"><span data-i18n="modeHands"></span><span class="mode-legend" data-i18n="legendHands"></span></button>
   </div>
-  <p id="gesture-note" class="gesture-note">If you do want to try the camera hand gestures, here is what they need: a&nbsp;front camera you can stand back from, both hands free inside the frame, and enough light on&nbsp;them. It works best on&nbsp;a laptop or&nbsp;a desktop with a&nbsp;webcam. On&nbsp;a phone or&nbsp;a tablet, prop the device up at arm’s length so both hands fit in&nbsp;view. Allow camera access when the browser asks. Nothing is recorded and nothing leaves your&nbsp;machine.</p>
+  <p id="gesture-note" class="gesture-note" data-i18n="gestureNote"></p>
 
-  <button type="button" id="btn-enter" class="btn-enter hidden">Enter</button>
+  <div class="welcome-actions">
+    <button type="button" id="btn-enter" class="btn-enter hidden" data-i18n="enter"></button>
+    <a href="tech.html" data-i18n-href="tech.html" class="privacy-link" data-i18n="techLink"></a>
+  </div>
+ </div>
 </div>
 
-<button type="button" id="btn-mute" class="btn-mute hidden" aria-label="Mute ambient audio">♪</button>
+<button type="button" id="btn-mute" class="btn-mute hidden" data-i18n-aria="mute">♪</button>
 
 <div id="hud-toolbar" class="hidden">
-  <button type="button" id="btn-fullscreen" aria-label="Toggle fullscreen">⛶ <span>Fullscreen</span></button>
-  <button type="button" id="btn-main-screen" aria-label="Back to main screen">⌂ <span>Main screen</span></button>
-  <button type="button" id="btn-finish" aria-label="Finish the experience">✕ <span>Finish</span></button>
+  <button type="button" id="btn-fullscreen">□ <span data-i18n="fullscreen"></span></button>
+  <button type="button" id="btn-main-screen">◄ <span data-i18n="mainScreen"></span></button>
+  <button type="button" id="btn-finish">× <span data-i18n="finish"></span></button>
 </div>
 
 <div id="webgl-error" class="hidden">
-  <p>Your browser or device doesn't support WebGL2, which this piece needs to run. Try a recent
-  version of Chrome, Firefox, Safari, or Edge on a desktop or modern mobile device.</p>
+  <p data-i18n="webglError"></p>
 </div>
 
 <div id="farewell" class="hidden">
   <div class="farewell-inner">
     <p class="farewell-q" id="farewell-question"></p>
     <div class="farewell-credits">
-      <p class="role">CONSPACE ROOMS — a collaboration between Sinaida and UVALISS</p>
+      <p class="role" data-i18n="farewellRole"></p>
       <div class="links">
         <a href="https://sinaida.eu/" target="_blank" rel="noopener">sinaida.eu</a>
         <a href="https://www.instagram.com/sin.ai.da" target="_blank" rel="noopener">@sin.ai.da</a>
         <a href="https://uvaliss.ru/" target="_blank" rel="noopener">uvaliss.ru</a>
         <a href="https://www.instagram.com/uvaliss/" target="_blank" rel="noopener">@uvaliss</a>
       </div>
-      <p class="role playlist-label">A companion soundtrack for sitting with it</p>
+      <p class="role playlist-label" data-i18n="playlistLabel"></p>
       <div class="links">
-        <a href="https://open.spotify.com/playlist/0145rQE2XluEkz3YWbEQLp?si=6c33fb59e0ad4ff4" target="_blank" rel="noopener">Spotify playlist ↗</a>
+        <a href="https://open.spotify.com/playlist/0145rQE2XluEkz3YWbEQLp?si=6c33fb59e0ad4ff4" target="_blank" rel="noopener" data-i18n="playlistLink"></a>
       </div>
     </div>
-    <button type="button" id="btn-walk-again" class="btn-enter">Walk again</button>
+    <button type="button" id="btn-walk-again" class="btn-enter" data-i18n="walkAgain"></button>
   </div>
 </div>
 
 <script type="module" src="src/main.js"></script>
+<!-- Je suis le spectre d'une rose que tu portais hier au bal. -->
 </body>
 </html>

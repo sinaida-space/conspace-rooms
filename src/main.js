@@ -2,15 +2,17 @@ import * as THREE from 'three';
 import { Quality } from './quality.js';
 import { InputRouter } from './input.js';
 import { UI, detectCapabilities } from './ui.js';
+import { t, applyStatic } from './i18n.js';
 
 const canvas = document.getElementById('gl');
 const caps = detectCapabilities();
 const ui = new UI();
 
 if (!caps.webgl2) {
+  applyStatic();
   ui.showWebglError();
 } else {
-  ui.gateConsent().then(() => {
+  ui.gateLanguage().then(() => ui.gateConsent()).then(() => {
     document.getElementById('welcome')?.classList.remove('hidden');
     boot();
   });
@@ -164,12 +166,12 @@ async function boot() {
       }
       ui.showTouchHint();
       document.getElementById('hand-legend')?.remove();
-      ui.showToast('Camera unavailable. Switched to touch controls.');
+      ui.showToast(t('camTouch'));
     } else {
       activeMode = 'keys';
       if (player) player.mode = 'keys';
       ui.showControlHud();
-      ui.showToast('Camera unavailable. Switched to keyboard controls.');
+      ui.showToast(t('camKeys'));
     }
   }
 
