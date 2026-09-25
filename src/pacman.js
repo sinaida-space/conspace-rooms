@@ -40,8 +40,15 @@ export function openPacman() {
     <canvas></canvas>
     <p class="pac-hint">${t('pacHint')}</p>`;
   document.body.appendChild(root);
+  // The game draws into an offscreen buffer; crt() then puts it on the
+  // visible canvas the way an old tube would: colour fringes, scanlines, a
+  // rolling refresh band, flicker, now and then a torn line.
   const canvas = root.querySelector('canvas');
-  const ctx = canvas.getContext('2d');
+  const out = canvas.getContext('2d');
+  const buf = document.createElement('canvas');
+  const ctx = buf.getContext('2d');
+  const chan = { r: document.createElement('canvas'), b: document.createElement('canvas') };
+  let scan = null, glitchT = 0, nextGlitch = 2;
   const scoreEl = root.querySelector('.pac-score');
 
   // ── state ──
@@ -146,8 +153,15 @@ export function openPacman() {
     const avail = Math.min(innerWidth - 32, (innerHeight - 140) * (W / H));
     s = Math.max(8, Math.floor(avail / W));
     canvas.style.width = `${s * W}px`; canvas.style.height = `${s * H}px`;
-    canvas.width = s * W * dpr; canvas.height = s * H * dpr;
+    for (const c of [canvas, buf, chan.r, chan.b]) { c.width = s * W * dpr; c.height = s * H * dpr; }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // scanline pattern: a dark line every 3 CSS pixels, thick enough to read
+    const per = Math.max(3, Math.round(3 * dpr));
+    scan = document.createElement('canvas');
+    scan.width = 1; scan.height = per;
+    const sc = scan.getContext('2d');
+    sc.fillStyle = 'rgba(0,0,0,0.55)'; sc.fillRect(0, per - Math.round(1.2 * dpr), 1, Math.round(1.2 * dpr));
+    scan = out.createPattern(scan, 'repeat');
     ox = 0; oy = 0;
   }
   function draw(time) {
@@ -208,12 +222,64 @@ export function openPacman() {
     ctx.shadowBlur = 0;
     scoreEl.textContent = `${t('pacScore')} ${score} · ${'♥'.repeat(Math.max(0, lives))}`;
     if (message) {
-      ctx.fillStyle = 'rgba(1,8,5,0.8)'; ctx.fillRect(0, s * (H / 2 - 2), s * W, s * 4);
-      ctx.fillStyle = COL.pac; ctx.font = `${Math.max(12, s * 0.9)}px "Departure Mono", monospace`;
-      ctx.textAlign = 'center'; ctx.fillText(message, (s * W) / 2, s * (H / 2 - 0.1));
-      ctx.fillStyle = COL.dot; ctx.font = `${Math.max(10, s * 0.6)}px "Departure Mono", monospace`;
-      ctx.fillText(t('pacAgain'), (s * W) / 2, s * (H / 2 + 1.1));
+      // a terminal panel: sized to its text, never wider than the maze
+      const maxW = s * W * 0.84;
+      const fit = (text, size) => {
+        ctx.font = `${size}px "Departure Mono", monospace`;
+        const w = ctx.measureText(text).width;
+        return w > maxW ? size * maxW / w : size;
+      };
+      const big = fit(message, s * 0.85), small = fit(t('pacAgain'), s * 0.42);
+      const cy = (s * H) / 2, ph = big * 1.3 + small * 1.2 + s * 1.2;
+      ctx.fillStyle = 'rgba(1,8,5,0.92)'; ctx.fillRect(s * W * 0.06, cy - ph / 2, s * W * 0.88, ph);
+      ctx.strokeStyle = COL.wall; ctx.lineWidth = 1.5; ctx.strokeRect(s * W * 0.06, cy - ph / 2, s * W * 0.88, ph);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = COL.pac; ctx.shadowBlur = s * 0.4;
+      ctx.fillStyle = COL.pac; ctx.font = `${big}px "Departure Mono", monospace`;
+      ctx.fillText(message, (s * W) / 2, cy - small * 0.7);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = COL.scared; ctx.font = `${small}px "Departure Mono", monospace`;
+      ctx.fillText(t('pacAgain') + (Math.floor(time * 2) % 2 ? ' _' : '  '), (s * W) / 2, cy + big * 0.55);
+      ctx.textBaseline = 'alphabetic';
     }
+  }
+
+  function crt(time, dt) {
+    const w = canvas.width, h = canvas.height;
+    out.setTransform(1, 0, 0, 1, 0, 0);
+    out.globalCompositeOperation = 'source-over'; out.globalAlpha = 1;
+    out.fillStyle = COL.bg; out.fillRect(0, 0, w, h);
+    out.drawImage(buf, 0, 0);
+    // colour fringes: the red and blue guns slightly out of convergence
+    const off = Math.max(2, w / 320);
+    for (const [key, colr, dx] of [['r', '#ff0000', off], ['b', '#0000ff', -off]]) {
+      const c = chan[key].getContext('2d');
+      c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, w, h); c.drawImage(buf, 0, 0);
+      c.globalCompositeOperation = 'multiply'; c.fillStyle = colr; c.fillRect(0, 0, w, h);
+      out.globalCompositeOperation = 'lighter'; out.globalAlpha = 0.16; // just a fringe, keeps the phosphor green
+      out.drawImage(chan[key], dx, 0);
+    }
+    out.globalCompositeOperation = 'source-over'; out.globalAlpha = 1;
+    // torn lines: now and then a few bands slide sideways for a moment
+    nextGlitch -= dt;
+    if (nextGlitch <= 0) { glitchT = 0.12 + Math.random() * 0.15; nextGlitch = 2 + Math.random() * 4; }
+    if (glitchT > 0) {
+      glitchT -= dt;
+      for (let k = 0; k < 4; k++) {
+        const y = Math.random() * h, bh = 2 + Math.random() * h * 0.04, dx = (Math.random() - 0.5) * w * 0.04;
+        out.drawImage(canvas, 0, y, w, bh, dx, y, w, bh);
+      }
+    }
+    // scanlines, a slow rolling refresh band, flicker, vignette
+    out.fillStyle = scan; out.fillRect(0, 0, w, h);
+    const band = ((time * 0.18) % 1.4 - 0.2) * h;
+    const g = out.createLinearGradient(0, band - h * 0.08, 0, band + h * 0.08);
+    g.addColorStop(0, 'rgba(186,255,201,0)'); g.addColorStop(0.5, 'rgba(186,255,201,0.05)'); g.addColorStop(1, 'rgba(186,255,201,0)');
+    out.fillStyle = g; out.fillRect(0, band - h * 0.08, w, h * 0.16);
+    out.fillStyle = `rgba(0,0,0,${Math.random() * 0.06})`; out.fillRect(0, 0, w, h);
+    const v = out.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.75);
+    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+    out.fillStyle = v; out.fillRect(0, 0, w, h);
   }
 
   function loop(now) {
@@ -221,6 +287,7 @@ export function openPacman() {
     last = now;
     update(dt);
     draw(now / 1000);
+    crt(now / 1000, dt);
     raf = requestAnimationFrame(loop);
   }
 
