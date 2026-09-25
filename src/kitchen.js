@@ -83,6 +83,12 @@ function textures() {
       r.addColorStop(0, 'rgba(0,0,0,0.85)'); r.addColorStop(0.5, 'rgba(0,0,0,0.45)'); r.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = r; g.fillRect(0, 0, w, h);
     }),
+    // warm yellow halo for the floor candles, so they read against the red carpet
+    warm: canvasTex(64, 64, (g, w, h) => {
+      const r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+      r.addColorStop(0, 'rgba(255,236,170,1)'); r.addColorStop(0.25, 'rgba(255,190,90,0.45)'); r.addColorStop(1, 'rgba(255,150,40,0)');
+      g.fillStyle = r; g.fillRect(0, 0, w, h);
+    }),
     // halo around a candle flame
     halo: canvasTex(64, 64, (g, w, h) => {
       const r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
@@ -244,6 +250,35 @@ export function buildKitchen(group, x, z) {
     lamp: new THREE.Vector3(x, 2.1, z),
     tv: new THREE.Vector3(x + tv.x - 0.08, 0.76, z + tv.z - 0.5),
   };
+}
+
+// ── candles on the floor leading to the room ────────────────────────────────
+// points: [{ x, z }] world positions along the corridors (soulpath.js finds
+// them). Each is a short candle on a saucer with a halo and a warm pool of
+// light on the carpet: in the dark memory zone they read from far away.
+export function buildCandleTrail(group, points) {
+  const T = textures();
+  const wax = new THREE.MeshStandardMaterial({ color: 0xe6dac0, roughness: 0.6 });
+  const saucer = new THREE.MeshStandardMaterial({ color: 0xd9d2c0, roughness: 0.3 });
+  const flames = [];
+  for (const p of points) {
+    const h = 0.16 + Math.random() * 0.12;
+    const s = new THREE.Mesh(lathe([[0, 0], [0.06, 0.002], [0.065, 0.012], [0, 0.008]], 16), saucer);
+    s.position.set(p.x, 0.01, p.z); group.add(s);
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.02, h, 10), wax);
+    c.position.set(p.x, 0.018 + h / 2, p.z); group.add(c);
+    const fy = 0.018 + h + 0.02;
+    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.013, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff0c0, fog: false }));
+    flame.position.set(p.x, fy, p.z); flame.scale.y = 2; group.add(flame);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: T.warm, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    halo.scale.set(0.45, 0.45, 1); halo.position.set(p.x, fy, p.z); group.add(halo);
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), new THREE.MeshBasicMaterial({
+      map: T.warm, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.28, fog: true,
+    }));
+    pool.rotation.x = -Math.PI / 2; pool.position.set(p.x, 0.015, p.z); group.add(pool);
+    flames.push({ flame, halo });
+  }
+  return flames;
 }
 
 // ── one light rig for all rooms ─────────────────────────────────────────────

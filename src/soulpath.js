@@ -3,7 +3,7 @@ import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, 
 import { zoneWeights, ORIGIN } from './zones.js';
 import { t } from './i18n.js';
 import { EYE_HEIGHT } from './player.js';
-import { buildKitchen, createKitchenRig } from './kitchen.js';
+import { buildKitchen, buildCandleTrail, createKitchenRig } from './kitchen.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
 // Everything that makes the labyrinth respond to the visitor on the way from
@@ -251,7 +251,7 @@ export class SoulPath {
     // ── grandmother's kitchen: rare, only deep in the memory zone
     const rooms = chunkRooms(cx, cz);
     const room = rooms.find(r => r.x1 - r.x0 >= 4 && r.y1 - r.y0 >= 4);
-    if (room && hash2i(SEED_KITCHEN, cx, cz) % 13 === 0) {
+    if (room && hash2i(SEED_KITCHEN, cx, cz) % 7 === 0) {
       const x = (cx * CHUNK + (room.x0 + room.x1 + 1) / 2) * CELL;
       const z = (cz * CHUNK + (room.y0 + room.y1 + 1) / 2) * CELL;
       if (zoneWeights(x, z).memory > 0.8) {
@@ -261,6 +261,7 @@ export class SoulPath {
           minZ: (cz * CHUNK + room.y0) * CELL, maxZ: (cz * CHUNK + room.y1 + 1) * CELL,
         };
         stuff.kitchen.room = buildKitchen(group, x, z);
+        stuff.kitchen.room.trail = buildCandleTrail(group, this._candleTrails(stuff.kitchen));
       }
     }
     return stuff;
@@ -294,6 +295,56 @@ export class SoulPath {
     mesh.rotation.y = rotY;
     group.add(mesh);
     return { key, mesh, seg, x, z, waitT: 0, lift: 0, open: false };
+  }
+
+  // Three candle trails leading out of a room, as far apart as possible: a
+  // breadth-first walk from the room over open cells, the three farthest
+  // well-separated ends, and a candle every few cells on the way back in,
+  // set beside the wall so the corridor stays clear.
+  _candleTrails(k) {
+    const gi0 = cellOf(k.x), gj0 = cellOf(k.z);
+    const key = (i, j) => i + ',' + j;
+    const prev = new Map([[key(gi0, gj0), null]]), depth = new Map([[key(gi0, gj0), 0]]);
+    const q = [[gi0, gj0]];
+    for (let h = 0; h < q.length && h < 4000; h++) {
+      const [i, j] = q[h], d = depth.get(key(i, j));
+      if (d >= 30) continue;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di, nj = j + dj, kk = key(ni, nj);
+        if (prev.has(kk) || solidAtGlobal(ni, nj)) continue;
+        prev.set(kk, [i, j]); depth.set(kk, d + 1); q.push([ni, nj]);
+      }
+    }
+    const far = q.filter(([i, j]) => depth.get(key(i, j)) >= 18);
+    const ends = [];
+    for (let n = 0; n < 3 && far.length; n++) {
+      let best = null, bestScore = -1;
+      for (const c of far) {
+        const sep = ends.length ? Math.min(...ends.map(e => Math.hypot(e[0] - c[0], e[1] - c[1]))) : 0;
+        const score = depth.get(key(c[0], c[1])) + sep * 2;
+        if (score > bestScore) { bestScore = score; best = c; }
+      }
+      if (!best || (ends.length && bestScore < 30)) break;
+      ends.push(best);
+    }
+    const inRoom = (x, z) => x > k.minX && x < k.maxX && z > k.minZ && z < k.maxZ;
+    const points = [], used = new Set();
+    for (const end of ends) {
+      const path = [];
+      for (let c = end; c; c = prev.get(key(c[0], c[1]))) path.push(c);
+      for (let n = 3; n < path.length; n += 4) {
+        const [i, j] = path[n];
+        if (used.has(key(i, j))) continue;
+        used.add(key(i, j));
+        let x = centreOf(i), z = centreOf(j);
+        if (inRoom(x, z)) continue;
+        // nudge toward a neighbouring wall
+        const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([di, dj]) => solidAtGlobal(i + di, j + dj));
+        if (side) { x += side[0] * 0.38; z += side[1] * 0.38; }
+        points.push({ x, z });
+      }
+    }
+    return points;
   }
 
   _closedDoorsNear(x, z) {
@@ -484,7 +535,7 @@ export class SoulPath {
     }
     this.kitchenRig.update(room, time);
     if (room) {
-      for (const { flame, halo } of room.flames) {
+      for (const { flame, halo } of room.flames.concat(room.trail || [])) {
         const f = 1.7 + Math.sin(time * 13 + flame.id) * 0.25 + Math.random() * 0.2;
         flame.scale.set(1, f, 1);
         halo.material.opacity = 0.7 + Math.random() * 0.3;

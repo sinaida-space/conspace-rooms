@@ -410,10 +410,10 @@ export class Artworks {
     this._animT = 0;
     this._animFrom = { pos: this.camera.position.clone(), quat: this.camera.quaternion.clone() };
     const target = a.centerWorld.clone().addScaledVector(a.normal, DOLLY_DIST);
-    const look = new THREE.Object3D();
-    look.position.copy(target);
-    look.lookAt(a.centerWorld);
-    this._animTo = { pos: target, quat: look.quaternion.clone() };
+    // Camera-style orientation (looking down −Z at the artwork). A plain
+    // Object3D.lookAt aims +Z instead, which turned the view 180° away.
+    const m = new THREE.Matrix4().lookAt(target, a.centerWorld, new THREE.Vector3(0, 1, 0));
+    this._animTo = { pos: target, quat: new THREE.Quaternion().setFromRotationMatrix(m) };
     this._overlayRu.textContent = a.art.title_ru;
     this._overlayEn.textContent = a.art.title_en;
     this._overlay.classList.add('visible');

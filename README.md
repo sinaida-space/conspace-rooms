@@ -103,7 +103,7 @@ after three seconds of standing still, and every nearby work hums its own note
 (`src/audio.js`). `src/dust.js` hangs dust in the lamp beams. Nothing is stored.
 
 Secrets: walk backwards for 30 s; look for grandmother's kitchen in the memory
-zone; stand still for a minute in acceptance.
+zone (follow the candles on the floor); stand still for a minute in acceptance.
 
 ## Languages
 
