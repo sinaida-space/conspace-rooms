@@ -1,5 +1,9 @@
 import * as THREE from 'three';
+import { roundedBox } from './geom.js';
 import { CEIL_H } from './world.js';
+
+// rounded edges: radius a third of the thinnest side, capped at 4 cm
+const box = (w, h, d) => roundedBox(w, h, d, Math.min(0.04, Math.min(w, h, d) * 0.3));
 
 // ── conspace-rooms · kitchen.js ─────────────────────────────────────────────
 // Grandmother's room, the rare secret of the memory zone: a table under an
@@ -135,14 +139,14 @@ export function buildKitchen(group, x, z) {
 
   // ── table: wooden top and apron, tapered legs, oilcloth with a drape ──
   const TOP = 0.745;
-  add(new THREE.BoxGeometry(1.2, 0.035, 0.8), wood, 0, TOP, 0);
+  add(box(1.2, 0.035, 0.8), wood, 0, TOP, 0);
   for (const [w, d, px, pz] of [[1.08, 0.02, 0, -0.36], [1.08, 0.02, 0, 0.36], [0.02, 0.68, -0.56, 0], [0.02, 0.68, 0.56, 0]]) {
-    add(new THREE.BoxGeometry(w, 0.08, d), wood, px, TOP - 0.06, pz); // apron
+    add(box(w, 0.08, d), wood, px, TOP - 0.06, pz); // apron
   }
   for (const [lx, lz] of [[-0.55, -0.35], [0.55, -0.35], [-0.55, 0.35], [0.55, 0.35]]) {
     add(new THREE.CylinderGeometry(0.03, 0.021, TOP - 0.02, 10), wood, lx, (TOP - 0.02) / 2, lz);
   }
-  add(new THREE.BoxGeometry(1.28, 0.006, 0.88), cloth, 0, TOP + 0.021, 0);
+  add(box(1.28, 0.006, 0.88), cloth, 0, TOP + 0.021, 0);
   for (const [w, px, pz, ry] of [[1.28, 0, 0.44, 0], [1.28, 0, -0.44, Math.PI], [0.88, 0.64, 0, Math.PI / 2], [0.88, -0.64, 0, -Math.PI / 2]]) {
     const drape = add(new THREE.PlaneGeometry(w, 0.13), cloth, px, TOP - 0.045, pz);
     drape.rotation.y = ry;
@@ -220,10 +224,10 @@ export function buildKitchen(group, x, z) {
 
   // ── old television on a low cabinet, antenna, knobs, grille, red picture ──
   const tv = { x: 0, z: 1.9 };
-  add(new THREE.BoxGeometry(0.95, 0.46, 0.46), wood, tv.x, 0.23, tv.z);
-  add(new THREE.BoxGeometry(0.9, 0.02, 0.02), plastic, tv.x, 0.4, tv.z - 0.235);             // cabinet trim
-  add(new THREE.BoxGeometry(0.78, 0.58, 0.5), wood, tv.x, 0.75, tv.z);
-  add(new THREE.BoxGeometry(0.56, 0.46, 0.02), plastic, tv.x - 0.08, 0.76, tv.z - 0.25);     // bezel
+  add(box(0.95, 0.46, 0.46), wood, tv.x, 0.23, tv.z);
+  add(box(0.9, 0.02, 0.02), plastic, tv.x, 0.4, tv.z - 0.235);             // cabinet trim
+  add(box(0.78, 0.58, 0.5), wood, tv.x, 0.75, tv.z);
+  add(box(0.56, 0.46, 0.02), plastic, tv.x - 0.08, 0.76, tv.z - 0.25);     // bezel
   const screen = add(new THREE.PlaneGeometry(0.5, 0.38), new THREE.MeshBasicMaterial({ map: T.screen, fog: false }), tv.x - 0.08, 0.76, tv.z - 0.262, false);
   screen.rotation.y = Math.PI;
   screens.push(screen);

@@ -211,6 +211,16 @@ const FRAG_WALL = /* glsl */`
 #include <common>
 #include <fog_pars_fragment>
 ${LIB}
+varying float vU;
+varying vec2 vCorner;
+
+// Soft corners: an inner corner gathers a wide soft shadow, an outer corner's
+// edge catches a thin line of light, as if the plaster were rounded over.
+float cornerShade(float d, float kind){
+  if (kind < -0.5) return 1.0 - 0.5 * exp(-d * 4.5);
+  if (kind > 0.5) return 1.0 + 0.14 * exp(-d * 16.0) - 0.08 * exp(-d * 5.0) * (1.0 - exp(-d * 16.0));
+  return 1.0;
+}
 
 // ── FEAR: Soviet hospital wall ──────────────────────────────────────────────
 // Whitewash above, glossy green oil paint below a hand-painted line at 1.5 m,
@@ -354,6 +364,7 @@ void main(){
   float streak = smoothstep(0.62, 0.8, vnoise(vec2(h * 5.0, 0.0))) * smoothstep(PANEL_Y - 1.4 + rag * 2.0, PANEL_Y, y);
   float footRag = (vnoise(vec2(h * 2.6, 7.0)) - 0.5) * 0.18;
   float ao = mix(0.5, 1.0, smoothstep(0.0, 0.45 + footRag, y)) * (1.0 - 0.45 * topGrime) * (1.0 - 0.25 * streak);
+  ao *= cornerShade(vU * ${CELL.toFixed(2)}, vCorner.x) * cornerShade((1.0 - vU) * ${CELL.toFixed(2)}, vCorner.y);
   col = mix(col, col * vec3(0.85, 0.8, 0.66), topGrime * 0.6 + streak * 0.4);     // yellow-brown damp
 
   vec3 L = zoneLight(z);
@@ -368,6 +379,28 @@ void main(){
   lit += z.z * (0.06 + 0.7 * lace) * LIGHT_ACC * 0.5;  // acceptance walls glow from inside, brightest at the lace rims
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
+}
+`;
+
+// Wall vertex shader: passes where along the face we are (0 left edge, 1
+// right edge) and what each edge meets (world.js edgeType).
+const VERT_WALL = /* glsl */`
+#include <common>
+#include <fog_pars_vertex>
+attribute float aU;
+attribute vec2 aCorner;
+varying vec3 vWorldPos;
+varying vec3 vNormal;
+varying float vU;
+varying vec2 vCorner;
+void main(){
+  vU = aU; vCorner = aCorner;
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWorldPos = wp.xyz;
+  vNormal = normalize(mat3(modelMatrix) * normal);
+  vec4 mvPosition = viewMatrix * wp;
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
 }
 `;
 
@@ -608,6 +641,7 @@ export function createMaterials(quality) {
 
   const materials = { wall: mk(FRAG_WALL), floor: mk(FRAG_FLOOR), ceil: mk(FRAG_CEIL) };
   materials.ceil.vertexShader = VERT_CEIL;
+  materials.wall.vertexShader = VERT_WALL;
   materials.floor.vertexShader = VERT_FLOOR;
 
   // Flicker: a fixture near the visitor stutters now and then. How often

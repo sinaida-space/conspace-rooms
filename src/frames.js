@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { roundedBox } from './geom.js';
+
+// rounded edges: radius a third of the thinnest side, capped at 4 cm
+const box = (w, h, d) => roundedBox(w, h, d, Math.min(0.04, Math.min(w, h, d) * 0.3));
 
 // ── conspace-rooms · frames.js ──────────────────────────────────────────────
 // A baroque picture frame big enough to walk through, used for the portals.
@@ -142,16 +146,16 @@ export function baroqueFrame(openW, openH, rail = 0.3) {
   const depth = 0.14;
   const mat = map => new THREE.MeshBasicMaterial({ map, fog: true });
   const outerW = openW + rail * 2;
-  const top = new THREE.Mesh(new THREE.BoxGeometry(outerW, rail, depth), mat(T.horiz));
+  const top = new THREE.Mesh(box(outerW, rail, depth), mat(T.horiz));
   top.position.set(0, openH + rail / 2, 0); g.add(top);
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(outerW, 0.06, depth), mat(T.horiz)); // a low threshold
+  const sill = new THREE.Mesh(box(outerW, 0.06, depth), mat(T.horiz)); // a low threshold
   sill.position.set(0, 0.03, 0); g.add(sill);
   for (const s of [-1, 1]) {
-    const side = new THREE.Mesh(new THREE.BoxGeometry(rail, openH, depth), mat(T.vert));
+    const side = new THREE.Mesh(box(rail, openH, depth), mat(T.vert));
     side.position.set(s * (openW / 2 + rail / 2), openH / 2, 0); g.add(side);
-    const corner = new THREE.Mesh(new THREE.BoxGeometry(rail * 1.25, rail * 1.25, depth + 0.03), mat(T.corner));
+    const corner = new THREE.Mesh(box(rail * 1.25, rail * 1.25, depth + 0.03), mat(T.corner));
     corner.position.set(s * (openW / 2 + rail / 2), openH + rail / 2, 0); g.add(corner);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(rail * 1.1, rail * 1.1, depth + 0.02), mat(T.corner));
+    const foot = new THREE.Mesh(box(rail * 1.1, rail * 1.1, depth + 0.02), mat(T.corner));
     foot.position.set(s * (openW / 2 + rail / 2), rail * 0.55, 0); g.add(foot);
   }
   const crestMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.45),

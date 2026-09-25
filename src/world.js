@@ -110,12 +110,14 @@ function pushQuad(pos, nrm, a, b, c, d, nx, ny, nz) {
   for (let i = 0; i < 6; i++) nrm.push(nx, ny, nz);
 }
 
-function buildGeometry(pos, nrm, lamp, ao) {
+function buildGeometry(pos, nrm, lamp, ao, wallU, wallCorner) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
   g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nrm), 3));
   if (lamp) g.setAttribute('aLamp', new THREE.BufferAttribute(new Float32Array(lamp), 1));
   if (ao) g.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(ao), 1));
+  if (wallU) g.setAttribute('aU', new THREE.BufferAttribute(new Float32Array(wallU), 1));
+  if (wallCorner) g.setAttribute('aCorner', new THREE.BufferAttribute(new Float32Array(wallCorner), 2));
   g.computeBoundingSphere();
   return g;
 }
@@ -181,7 +183,18 @@ export class World {
   }
 
   _buildChunk(cx, cz) {
-    const wp = [], wn = [], fp = [], fn = [], cp = [], cn = [], cl = [], fa = [], ca = [];
+    const wp = [], wn = [], fp = [], fn = [], cp = [], cn = [], cl = [], fa = [], ca = [], wu = [], wc = [];
+    // wall corners: what each vertical edge of a wall face meets. -1 an inner
+    // corner (shadow gathers), +1 an outer corner (the edge catches light),
+    // 0 the wall simply continues. Softens every corner in the shader.
+    const edgeType = (gi, gj, sx, sz, tx, tz) => (solidAtGlobal(gi + tx, gj + tz) ? -1
+      : solidAtGlobal(gi + tx + sx, gj + tz + sz) ? 0 : 1);
+    const wallQuad = (gi, gj, sx, sz, tx, tz, a, b, c, d, nx, nz) => {
+      pushQuad(wp, wn, a, b, c, d, nx, 0, nz);
+      wu.push(0, 1, 1, 0, 1, 0);                  // vertex order a b c a c d: a and d on the left edge
+      const L = edgeType(gi, gj, sx, sz, -tx, -tz), R = edgeType(gi, gj, sx, sz, tx, tz);
+      for (let v = 0; v < 6; v++) wc.push(L, R);
+    };
     // corner occlusion: how many of the four cells around a grid corner are
     // wall. Floor and ceiling darken softly toward walls, the way real
     // corners collect shadow and dust.
@@ -204,21 +217,22 @@ export class World {
         const ok = isLampCell(gi, gj) ? 1 : 0;
         for (let v = 0; v < 6; v++) cl.push(ok);
         // walls where a neighbour is solid (queried globally → seamless)
+        // (the along-wall direction t runs from the face's left edge to its right)
         if (solidAtGlobal(gi + 1, gj)) // +X face
-          pushQuad(wp, wn, [x1, 0, z0], [x1, 0, z1], [x1, CEIL_H, z1], [x1, CEIL_H, z0], -1, 0, 0);
+          wallQuad(gi, gj, 1, 0, 0, 1, [x1, 0, z0], [x1, 0, z1], [x1, CEIL_H, z1], [x1, CEIL_H, z0], -1, 0);
         if (solidAtGlobal(gi - 1, gj)) // -X face
-          pushQuad(wp, wn, [x0, 0, z1], [x0, 0, z0], [x0, CEIL_H, z0], [x0, CEIL_H, z1], 1, 0, 0);
+          wallQuad(gi, gj, -1, 0, 0, -1, [x0, 0, z1], [x0, 0, z0], [x0, CEIL_H, z0], [x0, CEIL_H, z1], 1, 0);
         if (solidAtGlobal(gi, gj + 1)) // +Z face
-          pushQuad(wp, wn, [x1, 0, z1], [x0, 0, z1], [x0, CEIL_H, z1], [x1, CEIL_H, z1], 0, 0, -1);
+          wallQuad(gi, gj, 0, 1, -1, 0, [x1, 0, z1], [x0, 0, z1], [x0, CEIL_H, z1], [x1, CEIL_H, z1], 0, -1);
         if (solidAtGlobal(gi, gj - 1)) // -Z face
-          pushQuad(wp, wn, [x0, 0, z0], [x1, 0, z0], [x1, CEIL_H, z0], [x0, CEIL_H, z0], 0, 0, 1);
+          wallQuad(gi, gj, 0, -1, 1, 0, [x0, 0, z0], [x1, 0, z0], [x1, CEIL_H, z0], [x0, CEIL_H, z0], 0, 1);
       }
     }
     const group = new THREE.Group();
     group.name = 'chunk_' + cx + '_' + cz;
     if (fp.length) group.add(new THREE.Mesh(buildGeometry(fp, fn, null, fa), this.mat.floor));
     if (cp.length) group.add(new THREE.Mesh(buildGeometry(cp, cn, cl, ca), this.mat.ceil));
-    if (wp.length) group.add(new THREE.Mesh(buildGeometry(wp, wn), this.mat.wall));
+    if (wp.length) group.add(new THREE.Mesh(buildGeometry(wp, wn, null, null, wu, wc), this.mat.wall));
     this.scene.add(group);
     return group;
   }

@@ -1,5 +1,9 @@
 import * as THREE from 'three';
+import { roundedBox } from './geom.js';
 import { CEIL_H } from './world.js';
+
+// rounded edges: radius a third of the thinnest side, capped at 4 cm
+const box = (w, h, d) => roundedBox(w, h, d, Math.min(0.04, Math.min(w, h, d) * 0.3));
 
 // ── conspace-rooms · doorway.js ─────────────────────────────────────────────
 // A presence door: the corridor is closed by a stretch of ordinary wall (the
@@ -126,22 +130,22 @@ export function buildDoorway(span, wallMat, stage, text) {
   // architrave, proud of the wall on both faces
   const trim = basic(trimTex(stage));
   for (const s of [-1, 1]) {
-    const jamb = new THREE.Mesh(new THREE.BoxGeometry(FRAME, top, WALL_T + 0.05), trim);
+    const jamb = new THREE.Mesh(box(FRAME, top, WALL_T + 0.05), trim);
     jamb.position.set(s * (DOOR_W / 2 + FRAME / 2), top / 2, 0); g.add(jamb);
   }
-  const head = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W + 2 * FRAME, FRAME, WALL_T + 0.05), trim);
+  const head = new THREE.Mesh(box(DOOR_W + 2 * FRAME, FRAME, WALL_T + 0.05), trim);
   head.position.set(0, DOOR_H + FRAME / 2, 0); g.add(head);
   // the door itself on a hinge pivot at its left edge
   const pivot = new THREE.Group();
   pivot.position.set(-DOOR_W / 2, 0, 0); g.add(pivot);
   const leafMat = basic(stage === 1 ? paddedDoor() : panelDoor(stage));
-  const door = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W, DOOR_H, 0.05), leafMat);
+  const door = new THREE.Mesh(box(DOOR_W, DOOR_H, 0.05), leafMat);
   door.position.set(DOOR_W / 2, DOOR_H / 2, 0); pivot.add(door);
   const metal = new THREE.MeshBasicMaterial({ color: stage === 1 ? 0xb08a3a : 0x8c8c84, fog: true });
   for (const f of [-1, 1]) {                           // both faces: handle, peephole, plaque
     const rose = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.012, 16).rotateX(Math.PI / 2), metal);
     rose.position.set(DOOR_W - 0.09, 1.0, f * 0.031); pivot.add(rose);
-    const lever = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.018, 0.018), metal);
+    const lever = new THREE.Mesh(box(0.12, 0.018, 0.018), metal);
     lever.position.set(DOOR_W - 0.14, 1.0, f * 0.05); pivot.add(lever);
     const peep = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.012, 12).rotateX(Math.PI / 2), metal);
     peep.position.set(DOOR_W / 2, 1.6, f * 0.031); pivot.add(peep);
