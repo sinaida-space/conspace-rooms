@@ -249,6 +249,6 @@ async function boot() {
     const { createDust } = await import('./dust.js');
     window.__app.dust = createDust(scene, quality);
     const { SoulPath } = await import('./soulpath.js');
-    window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality });
+    window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer });
   }
 }

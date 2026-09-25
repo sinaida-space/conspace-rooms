@@ -3,6 +3,7 @@ import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, 
 import { zoneWeights, ORIGIN } from './zones.js';
 import { t } from './i18n.js';
 import { EYE_HEIGHT } from './player.js';
+import { buildKitchen, createKitchenRig } from './kitchen.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
 // Everything that makes the labyrinth respond to the visitor on the way from
@@ -147,8 +148,9 @@ function scratchTexture() {
 
 // ── SoulPath ────────────────────────────────────────────────────────────────
 export class SoulPath {
-  constructor({ scene, world, player, camera, artworks, audio, post, quality }) {
+  constructor({ scene, world, player, camera, artworks, audio, post, quality, renderer }) {
     Object.assign(this, { scene, world, player, camera, artworks, audio, post, quality });
+    this.kitchenRig = createKitchenRig(scene, renderer, quality);
     this.seen = new Set();          // art ids seen this visit
     this.chunkStuff = new Map();    // chunk key -> { group, writings[], doors[], kitchen }
     this.doorsOpen = new Set();     // door keys opened this visit
@@ -175,7 +177,6 @@ export class SoulPath {
     this._backT = 0; this._fwdT = 0; this.child = false;
     this._stillT = 0; this.nineteenth = null;
     this._inKitchen = false;
-    this._flames = []; this._screens = [];
 
     // doors take part in collision: wrap World's wall query once
     const orig = world.wallSegmentsNear.bind(world);
@@ -259,7 +260,7 @@ export class SoulPath {
           minX: (cx * CHUNK + room.x0) * CELL, maxX: (cx * CHUNK + room.x1 + 1) * CELL,
           minZ: (cz * CHUNK + room.y0) * CELL, maxZ: (cz * CHUNK + room.y1 + 1) * CELL,
         };
-        this._makeKitchen(group, x, z);
+        stuff.kitchen.room = buildKitchen(group, x, z);
       }
     }
     return stuff;
@@ -293,65 +294,6 @@ export class SoulPath {
     mesh.rotation.y = rotY;
     group.add(mesh);
     return { key, mesh, seg, x, z, waitT: 0, lift: 0, open: false };
-  }
-
-  _makeKitchen(group, x, z) {
-    const M = (color) => new THREE.MeshBasicMaterial({ color, fog: true });
-    const add = (geo, mat, px, py, pz) => { const m = new THREE.Mesh(geo, mat); m.position.set(x + px, py, z + pz); group.add(m); return m; };
-    const wood = M(0x5a3b22), woodDark = M(0x3b2616);
-    // table with an oilcloth: a checked canvas, the kind every kitchen had
-    const c = document.createElement('canvas'); c.width = c.height = 128;
-    const ctx = c.getContext('2d');
-    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
-      ctx.fillStyle = (i + j) % 2 ? '#e8e2d2' : '#5f8a86'; ctx.fillRect(i * 16, j * 16, 16, 16);
-    }
-    const cloth = new THREE.CanvasTexture(c); cloth.colorSpace = THREE.SRGBColorSpace;
-    add(new THREE.BoxGeometry(1.2, 0.04, 0.8), new THREE.MeshBasicMaterial({ map: cloth, fog: true }), 0, 0.76, 0);
-    for (const [lx, lz] of [[-0.54, -0.34], [0.54, -0.34], [-0.54, 0.34], [0.54, 0.34]]) {
-      add(new THREE.BoxGeometry(0.05, 0.74, 0.05), woodDark, lx, 0.37, lz);
-    }
-    for (const sx of [-0.85, 0.85]) { // two stools
-      add(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 16), wood, sx, 0.46, 0);
-      add(new THREE.CylinderGeometry(0.025, 0.025, 0.44, 6), woodDark, sx, 0.22, 0);
-    }
-    // teapot and a cup
-    const enamel = M(0xd9d2c0);
-    add(new THREE.SphereGeometry(0.11, 16, 12), enamel, 0.1, 0.87, 0).scale.set(1, 0.8, 1);
-    const spout = add(new THREE.CylinderGeometry(0.012, 0.022, 0.13, 8), enamel, 0.22, 0.9, 0);
-    spout.rotation.z = -0.9;
-    add(new THREE.SphereGeometry(0.03, 8, 6), M(0x7a2f1e), 0.1, 0.96, 0);
-    add(new THREE.CylinderGeometry(0.04, 0.035, 0.08, 12), M(0xe9e4d6), -0.25, 0.82, 0.12);
-    // a candelabra on the table: five candles, flames flicker in update()
-    add(new THREE.CylinderGeometry(0.012, 0.03, 0.26, 8), M(0x2a2119), -0.3, 0.91, -0.15);
-    for (let k = 0; k < 5; k++) {
-      const a = (k / 5) * Math.PI * 2, cxk = -0.3 + Math.cos(a) * (k ? 0.09 : 0), czk = -0.15 + Math.sin(a) * (k ? 0.09 : 0);
-      const hk = k ? 0.16 : 0.2;
-      add(new THREE.CylinderGeometry(0.011, 0.011, hk, 8), M(0xe8dcc4), cxk, 1.04 + hk / 2, czk);
-      const flame = add(new THREE.SphereGeometry(0.014, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3a1c, fog: false }), cxk, 1.06 + hk, czk);
-      flame.scale.y = 1.8;
-      this._flames.push(flame);
-    }
-    // an old television against the room, its screen a red glow
-    add(new THREE.BoxGeometry(0.9, 0.5, 0.45), woodDark, 0, 0.25, 1.9);
-    add(new THREE.BoxGeometry(0.72, 0.56, 0.5), M(0x16130f), 0, 0.78, 1.9);
-    const screen = add(new THREE.PlaneGeometry(0.5, 0.38), new THREE.MeshBasicMaterial({ color: 0xff1e1e, fog: false }), -0.06, 0.8, 1.64);
-    screen.rotation.y = Math.PI;
-    this._screens.push(screen);
-    // a fabric lampshade low over the table, glowing warm
-    const shade = add(new THREE.ConeGeometry(0.34, 0.26, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xc99a4a, side: THREE.DoubleSide, fog: true }), 0, 2.2, 0);
-    shade.rotation.x = 0;
-    add(new THREE.SphereGeometry(0.07, 12, 8), M(0xfff1c8), 0, 2.08, 0);
-    add(new THREE.CylinderGeometry(0.006, 0.006, CEIL_H - 2.3, 4), woodDark, 0, (CEIL_H + 2.3) / 2, 0);
-    // a warm pool of light on the floor under the table
-    const g = document.createElement('canvas'); g.width = g.height = 128;
-    const gctx = g.getContext('2d');
-    const grad = gctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-    grad.addColorStop(0, 'rgba(255,200,120,0.55)'); grad.addColorStop(1, 'rgba(255,200,120,0)');
-    gctx.fillStyle = grad; gctx.fillRect(0, 0, 128, 128);
-    const pool = add(new THREE.PlaneGeometry(3.2, 3.2), new THREE.MeshBasicMaterial({
-      map: new THREE.CanvasTexture(g), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    }), 0, 0.012, 0);
-    pool.rotation.x = -Math.PI / 2;
   }
 
   _closedDoorsNear(x, z) {
@@ -532,17 +474,23 @@ export class SoulPath {
       this.nineteenth.canvas.material.opacity = 0.55 + 0.25 * Math.sin(time * 0.8);
     }
 
-    // candle flames and the television breathe
-    for (const f of this._flames) {
-      if (!f.parent) continue;
-      f.scale.set(1, 1.6 + Math.sin(time * 13 + f.id) * 0.3 + Math.random() * 0.2, 1);
+    // grandmother's room: light the nearest one, let candles and picture breathe
+    let room = null, rd = 14;
+    for (const st of this.chunkStuff.values()) {
+      const k = st.kitchen;
+      if (!k) continue;
+      const d = Math.hypot(k.x - P.pos.x, k.z - P.pos.y);
+      if (d < rd) { rd = d; room = k.room; }
     }
-    for (const sc of this._screens) {
-      if (!sc.parent) continue;
-      sc.material.color.setRGB(0.85 + 0.15 * Math.sin(time * 7.3 + sc.id) * Math.random(), 0.1, 0.1);
+    this.kitchenRig.update(room, time);
+    if (room) {
+      for (const { flame, halo } of room.flames) {
+        const f = 1.7 + Math.sin(time * 13 + flame.id) * 0.25 + Math.random() * 0.2;
+        flame.scale.set(1, f, 1);
+        halo.material.opacity = 0.7 + Math.random() * 0.3;
+      }
+      for (const sc of room.screens) sc.material.color.setScalar(0.8 + 0.2 * Math.random());
     }
-    this._flames = this._flames.filter(f => f.parent?.parent); // drop ones whose chunk was disposed
-    this._screens = this._screens.filter(sc => sc.parent?.parent);
 
     // voices of the works nearby
     this._updateVoices(zone);
