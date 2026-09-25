@@ -207,7 +207,8 @@ body::after {
 
 
 .toast {
-  position: fixed; left: 50%; bottom: 6vh; transform: translateX(-50%) translateY(6px);
+  position: fixed; left: 50%; top: var(--toast-top, 16px); transform: translateX(-50%) translateY(-6px);
+  max-width: calc(100vw - 32px); text-align: center;
   z-index: 9; font-size: 1em; color: var(--fg);
   background: rgba(1,12,7,0.9); border: 2px solid var(--dim);
   padding: 0.6em 1.2em; opacity: 0; pointer-events: none;
@@ -255,7 +256,7 @@ body::after {
 
 #control-hud {
   position: fixed; left: 50%; bottom: 2vh; transform: translateX(-50%) translateY(6px);
-  z-index: 7; display: flex; gap: 1em; flex-wrap: wrap; justify-content: center;
+  z-index: 7; display: flex; gap: 1em; flex-wrap: nowrap; white-space: nowrap; justify-content: center;
   font-size: 0.95em; letter-spacing: 0.03em; color: var(--fg);
   opacity: 0; transition: opacity 0.5s ease, transform 0.5s ease;
   pointer-events: none; max-width: 92vw;
@@ -265,13 +266,14 @@ body::after {
 
 #hand-legend {
   position: fixed; left: 50%; bottom: 2vh; transform: translateX(-50%) translateY(6px);
-  z-index: 7; display: flex; gap: 1em; flex-wrap: wrap; justify-content: center;
+  z-index: 7; display: flex; gap: 1em; flex-wrap: nowrap; white-space: nowrap; justify-content: center;
   font-size: 0.9em; letter-spacing: 0.03em; color: var(--fg);
   opacity: 0; transition: opacity 0.5s ease, transform 0.5s ease;
   pointer-events: none; max-width: 92vw;
 }
 #hand-legend.visible { opacity: 0.9; transform: translateX(-50%) translateY(0); }
 #hand-legend span { border: 1px solid var(--dim); padding: 0.2em 0.7em; background: rgba(1,12,7,0.7); }
+#control-hud.no-room, #hand-legend.no-room { display: none; }
 
 #hud-toolbar {
   position: fixed; right: 1em; top: 1em; z-index: 8;
@@ -366,14 +368,16 @@ body::after {
 .gesture-note .gesture-privacy { margin: 0.9em 0 0; font-size: 0.92em; }
 #mode-select { gap: 0.9em; margin-bottom: 2em; }
 
-/* a soul's question: typed across the lower screen, then gone */
+/* a soul's question: typed across the middle of the screen, then gone.
+   Screen zones never share space: toolbar and counter on top, questions in
+   the middle, pad, legend and captions along the bottom. */
 #soul-q {
-  position: fixed; left: 50%; bottom: 18vh; transform: translateX(-50%); z-index: 9;
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 9;
   width: min(760px, calc(100vw - 32px)); text-align: center; pointer-events: none;
   opacity: 0; transition: opacity 1s ease;
 }
 #soul-q.visible { opacity: 1; }
-#soul-q .sq-label { font-size: 0.75em; letter-spacing: 0.2em; color: var(--dim); margin-bottom: 0.8em; }
+#soul-q .sq-label { display: inline-block; font-size: 0.75em; letter-spacing: 0.2em; color: #6fcf8e; margin-bottom: 0.5em; background: rgba(1, 8, 5, 0.55); padding: 0.2em 0.6em; }
 #soul-q .sq-text {
   font-size: clamp(1.1rem, 2.6vw, 1.7rem); line-height: 1.5; color: var(--fg);
   text-shadow: 0 0 8px rgba(57, 255, 106, 0.6), 0 0 24px rgba(57, 255, 106, 0.25);
@@ -418,7 +422,6 @@ body.can-inspect #pad .pad-inspect:active, body.inspecting #pad .pad-inspect:act
   #pad button:hover { border-color: var(--accent); }
 }
 /* the key legend sits between the pad's two halves on a desktop */
-body:has(#pad) #control-hud { max-width: calc(100vw - 2 * (10.3em + 32px)); }
 body:has(#pad) #inspect-overlay .inspect-card { margin-bottom: calc(max(16px, env(safe-area-inset-bottom)) + 7.6em); }
 body:has(#pad) #artwork-prompt { bottom: calc(max(16px, env(safe-area-inset-bottom)) + 7.6em); }
 

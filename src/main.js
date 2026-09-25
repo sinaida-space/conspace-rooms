@@ -126,7 +126,7 @@ async function boot() {
         const bobSin = Math.sin(player.bob);
         if (speed > 0.15 && bobSin > 0 && prevBobSin <= 0) audio.step();
         prevBobSin = bobSin;
-        audio.turn((player.yaw - prevYaw) / dt);
+        if (dt > 0) audio.turn((player.yaw - prevYaw) / dt);   // two frames can share a timestamp: 0/0 would stop the loop
       }
       prevYaw = player.yaw;
     } else {

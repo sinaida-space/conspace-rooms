@@ -99,7 +99,7 @@ export class AudioEngine {
 
   // subtle whoosh/tick tied to turn rate (rad/s), same shape as motion()
   turn(yawRate) {
-    if (!this.ctx || !this.turnFilter) return;
+    if (!this.ctx || !this.turnFilter || !Number.isFinite(yawRate)) return;
     const s = Math.min(1, Math.abs(yawRate) / 2.2);
     this.turnFilter.frequency.setTargetAtTime(700 + s * 900, this.ctx.currentTime, 0.08);
     this.turnGain.gain.setTargetAtTime(s * 0.02, this.ctx.currentTime, 0.08);

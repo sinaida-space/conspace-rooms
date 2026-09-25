@@ -239,12 +239,34 @@ export class UI {
     requestAnimationFrame(() => el.classList.add('visible'));
   }
 
-  // Publishes the bottom legend's height as --hud-h so the artwork prompt
-  // (artworks.js) can sit just above it instead of on top of it.
+  // The bottom legend stays on one line, centred between the pad's arrows and
+  // the buttons in the right corner. If it does not fit there it shrinks once,
+  // then steps aside entirely: nothing on screen may overlap. Its height goes
+  // out as --hud-h so the artwork prompt (artworks.js) sits just above it.
   _trackHudHeight(el) {
-    const set = () => document.documentElement.style.setProperty('--hud-h', `${el.offsetHeight}px`);
+    const fit = () => {
+      el.classList.remove('no-room');
+      el.style.fontSize = '';
+      const room = () => {
+        const band = el.getBoundingClientRect(), mid = innerWidth / 2;
+        let half = mid - 16;
+        for (const sel of ['#pad .pad-arrows', '#pad .pad-inspect', '#btn-mute']) {
+          const o = document.querySelector(sel);
+          if (!o || o.classList.contains('hidden')) continue;
+          const r = o.getBoundingClientRect();
+          if (!r.width || r.bottom < band.top - 8 || r.top > band.bottom + 8) continue;  // not in the legend's band
+          half = Math.min(half, r.left > mid ? r.left - mid - 12 : mid - r.right - 12);
+        }
+        return el.scrollWidth / 2 <= half;
+      };
+      if (room()) return;
+      el.style.fontSize = '0.8em';
+      if (!room()) el.classList.add('no-room');
+    };
+    const set = () => { fit(); document.documentElement.style.setProperty('--hud-h', `${el.classList.contains('no-room') ? 0 : el.offsetHeight}px`); };
     set();
-    new ResizeObserver(set).observe(el);
+    addEventListener('resize', set);
+    new MutationObserver(set).observe(document.body, { childList: true });   // the pad arrives later
   }
 
   // Persistent low-opacity key legend for keyboard mode — mirrors the
@@ -349,6 +371,9 @@ export class UI {
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = text;
+    const bar = $('hud-toolbar');                       // just under the toolbar, never on it
+    const top = bar && !bar.classList.contains('hidden') ? bar.getBoundingClientRect().bottom + 12 : 16;
+    el.style.setProperty('--toast-top', `${Math.round(top)}px`);
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('visible'));
     setTimeout(() => {
