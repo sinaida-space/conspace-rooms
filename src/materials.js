@@ -11,8 +11,9 @@ import { ZONE, ORIGIN } from './zones.js';
 // spawn point and blends three looks:
 //   FEAR       Soviet-hospital corridor: whitewash over glossy green oil paint,
 //              chipped, damp creeping up from the floor; linoleum; cold tubes
-//   MEMORY     grandmother's flat: half-drop rosette wallpaper, a rug hung on
-//              some walls, parquet, round warm lampshades
+//   MEMORY     grandmother's flat at night: dark green foliage wallpaper with
+//              oxblood roses, a red ornamental carpet, red lamp glow in a
+//              green half-dark
 //   ACCEPTANCE pale walls that thin into lace and let the light through
 // Only the zones with weight > 0 are evaluated, so a fragment pays for one
 // look almost everywhere and for two only inside a blend band.
@@ -35,7 +36,8 @@ const LIB = /* glsl */`
 
 // zone light colours: cold tube, warm tungsten lampshade, soft daylight
 #define LIGHT_FEAR vec3(0.84, 0.91, 0.86)
-#define LIGHT_MEM  vec3(1.05, 0.80, 0.52)
+#define LIGHT_MEM  vec3(1.00, 0.16, 0.10)   // red lamp / candle glow
+#define FILL_MEM   vec3(0.10, 0.26, 0.14)   // the green half-dark around it
 #define LIGHT_ACC  vec3(0.92, 0.90, 0.84)
 
 uniform float uTime;
@@ -155,52 +157,23 @@ vec3 fearWall(float h, float y, int oct){
   return col;
 }
 
-// A rug hung on the wall, the way every Soviet flat had one. Returns alpha in w.
-vec4 rug(vec2 q){
-  // q: -1..1 across the rug
-  float r = max(abs(q.x), abs(q.y));
-  if (r > 1.0) return vec4(0.0);
-  vec3 field = vec3(0.13, 0.15, 0.22);                 // deep indigo ground
-  vec3 ochre = vec3(0.50, 0.37, 0.17);
-  vec3 teal  = vec3(0.18, 0.31, 0.29);
-  vec3 col = field;
-  vec2 g = fract(q * vec2(7.0, 5.0)) - 0.5;            // small repeating rhombs
-  col = mix(col, ochre * 0.7, step(abs(g.x) + abs(g.y), 0.22));
-  float dia = abs(q.x) * 0.75 + abs(q.y);              // central medallion
-  col = mix(col, teal, step(dia, 0.55));
-  col = mix(col, ochre, step(dia, 0.38) - step(dia, 0.30));
-  col = mix(col, field, step(dia, 0.18));
-  col = mix(col, ochre, step(0.80, r) - step(0.88, r)); // double border
-  col = mix(col, teal, step(0.92, r));
-  return vec4(col, 1.0);
-}
-
-// MEMORY: faded ochre wallpaper with a half-drop rosette repeat, strip seams,
-// a wooden skirting board and, on some walls, a rug.
-vec3 memoryWall(float h, float y, float wallKey, int oct){
-  vec2 cell = vec2(h / 0.53, y / 0.62);
-  cell.y += 0.5 * mod(floor(cell.x), 2.0);             // half-drop, like real wallpaper
-  vec2 f = fract(cell) - 0.5;
-  f.x *= 1.15;
+// MEMORY: dense dark-green foliage wallpaper, domain-warped noise cut into
+// leaf shapes, with oxblood roses on a jittered half-drop repeat.
+vec3 memoryWall(float h, float y, int oct){
+  vec2 p = vec2(h, y);
+  vec2 warp = vec2(fbm(p * 2.0, 3), fbm(p * 2.0 + 5.2, 3)) * 1.6;
+  float leaves = fbm(p * 3.4 + warp * 1.4, oct);
+  vec3 col = mix(vec3(0.015, 0.045, 0.025), vec3(0.07, 0.22, 0.11), smoothstep(0.38, 0.62, leaves));
+  col = mix(col, vec3(0.22, 0.46, 0.26), smoothstep(0.64, 0.78, leaves) * 0.5); // leaf edges catching light
+  vec2 cell = vec2(h / 0.5, y / 0.5);
+  cell.y += 0.5 * mod(floor(cell.x), 2.0);
+  vec2 id = floor(cell);
+  vec2 f = fract(cell) - 0.5 + (vec2(hash21(id), hash21(id + 7.1)) - 0.5) * 0.35;
   float r = length(f);
-  float petals = abs(sin(atan(f.y, f.x) * 4.0));       // four-petal rosette
-  float motif = smoothstep(0.025, 0.0, abs(r - (0.17 + 0.07 * petals)));
-  motif = max(motif, smoothstep(0.045, 0.0, r - 0.035));
-  vec3 col = vec3(0.60, 0.49, 0.33);
-  col = mix(col, vec3(0.43, 0.31, 0.19), motif * 0.6);
-  float seam = smoothstep(0.012, 0.0, abs(fract(h / 0.53)));
-  col *= 1.0 - 0.18 * seam;
-  col *= 0.82 + 0.28 * fbm(vec2(h, y) * 0.8, oct);     // sun-bleached, uneven
-  if (y < 0.12) col = vec3(0.30, 0.20, 0.12) * (0.8 + 0.3 * fbm(vec2(h * 6.0, y * 20.0), 2));
-
-  // one rug per 4.8 m span, on roughly a third of the spans
-  float span = floor(h / 4.8);
-  if (hash21(vec2(span, wallKey) + 3.7) > 0.66) {
-    vec2 q = vec2(h - (span + 0.5) * 4.8, y - 1.62) / vec2(1.05, 0.72);
-    vec4 rg = rug(q);
-    float wool = 0.85 + 0.25 * vnoise(vec2(h, y) * 60.0);
-    col = mix(col, rg.rgb * wool, rg.w);
-  }
+  float petals = 0.5 + 0.5 * sin(atan(f.y, f.x) * 5.0 + r * 30.0); // swirl of petals
+  float rose = smoothstep(0.19, 0.12, r) * (0.6 + 0.4 * petals) * step(0.3, hash21(id + 3.3));
+  col = mix(col, vec3(0.34, 0.03, 0.05) * (0.6 + 0.6 * petals), rose);
+  if (y < 0.12) col = vec3(0.06, 0.05, 0.04);           // dark skirting board
   return col;
 }
 
@@ -213,7 +186,6 @@ void main(){
   vec3 N = normalize(vNormal);
   bool alongZ = abs(N.x) > abs(N.z);
   float h = alongZ ? vWorldPos.z : vWorldPos.x;        // horizontal wall coordinate
-  float wallKey = floor((alongZ ? vWorldPos.x : vWorldPos.z) * 0.83) + (alongZ ? 0.0 : 91.0);
   float y = vWorldPos.y;
   int oct = uTier > 0 ? 5 : 3;
   vec3 z = zoneWeights(vWorldPos.xz);
@@ -230,11 +202,11 @@ void main(){
 
   vec3 col = vec3(0.0);
   if (z.x > 0.001) col += z.x * fearWall(h, y, oct);
-  if (z.y > 0.001) col += z.y * memoryWall(h, y, wallKey, oct);
+  if (z.y > 0.001) col += z.y * memoryWall(h, y, oct);
   if (z.z > 0.001) col += z.z * acceptWall(h, y, oct);
 
   vec3 L = zoneLight(z);
-  vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L));
+  vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L + z.y * FILL_MEM * 1.6));
   lit += z.z * (0.06 + 0.7 * lace) * LIGHT_ACC * 0.5;  // acceptance walls glow from inside, brightest at the lace rims
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
@@ -258,20 +230,21 @@ vec3 fearFloor(vec2 p, int oct){
   return base * (1.0 + 0.18 * worn);
 }
 
-// MEMORY: worn parquet, 1.2 m blocks, grain direction alternating (basket weave).
+// MEMORY: a wall-to-wall red ornamental carpet, one medallion every 2.4 m.
 vec3 memoryFloor(vec2 p, int oct){
-  vec2 cell = floor(p / 1.2);
-  bool flip = mod(cell.x + cell.y, 2.0) > 0.5;
-  vec2 lp = flip ? p.yx : p.xy;
-  float grain = fbm(vec2(lp.x * 2.2, lp.y * 22.0), oct);
-  vec3 wood = mix(vec3(0.34, 0.22, 0.12), vec3(0.22, 0.14, 0.08), grain);
-  float ps = fract(lp.x / 0.3);                          // narrow planks
-  wood *= 1.0 - 0.45 * smoothstep(0.05, 0.0, min(ps, 1.0 - ps));
-  vec2 bs = fract(p / 1.2);
-  float bseam = min(min(bs.x, 1.0 - bs.x), min(bs.y, 1.0 - bs.y));
-  wood *= 1.0 - 0.35 * smoothstep(0.03, 0.0, bseam);
-  wood *= 0.85 + 0.15 * fbm(p * 0.6 + 5.0, 3);
-  return wood;
+  vec2 t = fract(p / 2.4) - 0.5;
+  float edge = max(abs(t.x), abs(t.y));
+  vec3 red = vec3(0.26, 0.03, 0.04), cream = vec3(0.50, 0.44, 0.40), dark = vec3(0.07, 0.02, 0.03);
+  vec3 col = mix(red, dark, smoothstep(0.30, 0.50, edge) * 0.6);   // darker between medallions
+  float r = length(t), ang = atan(t.y, t.x);
+  float med = smoothstep(0.02, 0.0, abs(r - 0.18 - 0.05 * sin(ang * 8.0)));   // arabesque medallion
+  med += smoothstep(0.015, 0.0, abs(r - 0.30 - 0.03 * cos(ang * 12.0)));
+  col = mix(col, cream, clamp(med, 0.0, 1.0) * 0.8);
+  vec2 g = fract(t * 9.0 + 0.5) - 0.5;                             // small motifs in the field
+  col = mix(col, cream * 0.7, smoothstep(0.12, 0.05, abs(g.x) + abs(g.y)) * step(0.34, r) * step(r, 0.42));
+  col *= 0.8 + 0.3 * vnoise(p * 80.0);                             // wool pile
+  col *= 0.85 + 0.2 * fbm(p * 0.5, oct);                           // wear
+  return col;
 }
 
 // ACCEPTANCE: pale limestone.
@@ -292,10 +265,10 @@ void main(){
 
   // grime creeps in along the 1.2 m grid lines (where walls stand), less so in the light
   vec2 g = abs(fract(p / 1.2) - 0.5);
-  col *= mix(mix(0.55, 1.0, smoothstep(0.42, 0.30, max(g.x, g.y))), 1.0, z.z);
+  col *= mix(mix(0.55, 1.0, smoothstep(0.42, 0.30, max(g.x, g.y))), 1.0, z.z + z.y); // carpet hides the seams
 
   vec3 L = zoneLight(z);
-  vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L));
+  vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L + z.y * FILL_MEM * 1.2));
   lit += z.z * 0.05 * LIGHT_ACC;
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
@@ -322,16 +295,16 @@ void main(){
   vec2 panelHalf = 0.5 * vec2(1.6, 0.45) / SPACING;
   float tube = step(abs(f.x), panelHalf.x) * step(abs(f.y), panelHalf.y);
   tube *= 0.6 + 0.4 * smoothstep(panelHalf.y, 0.0, abs(f.y));
-  // MEMORY fixture: round fabric lampshade seen from below, warm core and rim
+  // MEMORY fixture: a small shade glowing red, like the lamp by grandmother's bed
   float r = length(f * SPACING);
-  float shade = smoothstep(0.42, 0.40, r) * (0.55 + 0.45 * smoothstep(0.40, 0.05, r));
-  shade += 0.35 * band(r, 0.41, 0.02);
+  float shade = smoothstep(0.24, 0.22, r) * (0.45 + 0.55 * smoothstep(0.22, 0.03, r));
+  shade += 0.3 * band(r, 0.23, 0.015);
   // ACCEPTANCE: a wide soft skylight
   float sky = smoothstep(0.45, 0.15, max(abs(f.x), abs(f.y)));
   float fixture = z.x * tube + z.y * shade + z.z * sky;
 
   vec3 matteFear = vec3(0.66, 0.68, 0.64);
-  vec3 matteMem  = vec3(0.70, 0.64, 0.55);              // yellowed whitewash
+  vec3 matteMem  = vec3(0.07, 0.07, 0.06);              // smoke-darkened ceiling
   vec3 matteAcc  = vec3(0.92, 0.92, 0.89);
   vec3 matte = (matteFear * z.x + matteMem * z.y + matteAcc * z.z) * (0.85 + 0.15 * fbm(p * 3.0, oct));
   float rosette = z.y * band(r, 0.75, 0.03) * 0.25;     // plaster ceiling rose around each lamp

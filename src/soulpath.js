@@ -175,6 +175,7 @@ export class SoulPath {
     this._backT = 0; this._fwdT = 0; this.child = false;
     this._stillT = 0; this.nineteenth = null;
     this._inKitchen = false;
+    this._flames = []; this._screens = [];
 
     // doors take part in collision: wrap World's wall query once
     const orig = world.wallSegmentsNear.bind(world);
@@ -320,6 +321,22 @@ export class SoulPath {
     spout.rotation.z = -0.9;
     add(new THREE.SphereGeometry(0.03, 8, 6), M(0x7a2f1e), 0.1, 0.96, 0);
     add(new THREE.CylinderGeometry(0.04, 0.035, 0.08, 12), M(0xe9e4d6), -0.25, 0.82, 0.12);
+    // a candelabra on the table: five candles, flames flicker in update()
+    add(new THREE.CylinderGeometry(0.012, 0.03, 0.26, 8), M(0x2a2119), -0.3, 0.91, -0.15);
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2, cxk = -0.3 + Math.cos(a) * (k ? 0.09 : 0), czk = -0.15 + Math.sin(a) * (k ? 0.09 : 0);
+      const hk = k ? 0.16 : 0.2;
+      add(new THREE.CylinderGeometry(0.011, 0.011, hk, 8), M(0xe8dcc4), cxk, 1.04 + hk / 2, czk);
+      const flame = add(new THREE.SphereGeometry(0.014, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3a1c, fog: false }), cxk, 1.06 + hk, czk);
+      flame.scale.y = 1.8;
+      this._flames.push(flame);
+    }
+    // an old television against the room, its screen a red glow
+    add(new THREE.BoxGeometry(0.9, 0.5, 0.45), woodDark, 0, 0.25, 1.9);
+    add(new THREE.BoxGeometry(0.72, 0.56, 0.5), M(0x16130f), 0, 0.78, 1.9);
+    const screen = add(new THREE.PlaneGeometry(0.5, 0.38), new THREE.MeshBasicMaterial({ color: 0xff1e1e, fog: false }), -0.06, 0.8, 1.64);
+    screen.rotation.y = Math.PI;
+    this._screens.push(screen);
     // a fabric lampshade low over the table, glowing warm
     const shade = add(new THREE.ConeGeometry(0.34, 0.26, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xc99a4a, side: THREE.DoubleSide, fog: true }), 0, 2.2, 0);
     shade.rotation.x = 0;
@@ -514,6 +531,18 @@ export class SoulPath {
     if (this.nineteenth) {
       this.nineteenth.canvas.material.opacity = 0.55 + 0.25 * Math.sin(time * 0.8);
     }
+
+    // candle flames and the television breathe
+    for (const f of this._flames) {
+      if (!f.parent) continue;
+      f.scale.set(1, 1.6 + Math.sin(time * 13 + f.id) * 0.3 + Math.random() * 0.2, 1);
+    }
+    for (const sc of this._screens) {
+      if (!sc.parent) continue;
+      sc.material.color.setRGB(0.85 + 0.15 * Math.sin(time * 7.3 + sc.id) * Math.random(), 0.1, 0.1);
+    }
+    this._flames = this._flames.filter(f => f.parent?.parent); // drop ones whose chunk was disposed
+    this._screens = this._screens.filter(sc => sc.parent?.parent);
 
     // voices of the works nearby
     this._updateVoices(zone);
