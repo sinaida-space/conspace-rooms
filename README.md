@@ -68,10 +68,7 @@ Then open http://localhost:4800/ in a browser. Requires WebGL2.
 Vercel, from `main` (root), no build step:
 https://conspace-rooms.vercel.app/
 
-Every push to `main` redeploys production. Project settings: Application
-Preset `Other`, Root Directory `./`, build, output and install commands left
-empty. Vercel Web Analytics and Speed Insights stay off: the privacy policy
-promises no analytics.
+Every push to `main` redeploys production.
 
 All asset and module paths are relative, so the site works unmodified under a
 subpath or at a domain root.
