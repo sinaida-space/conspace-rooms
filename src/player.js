@@ -139,8 +139,6 @@ export class Player {
     }
 
     this.intent = walk;
-    // let the gaze drift back to the horizon when nobody is looking up or down
-    if (!this.dragging) this.pitch *= 1 - Math.min(1, dt * 0.6);
     this.eye += (this.eyeTarget - this.eye) * Math.min(1, dt * 1.2); // slow, dreamlike height change
 
     // heading basis (camera faces -Z at yaw 0)

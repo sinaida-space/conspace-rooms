@@ -90,6 +90,8 @@ const STRINGS = {
     wallAccept: ['it~is~over now', 'leave the pain here', 'experience can be~read again', 'keep going', 'dawn', 'what is~left if~you let~go?', 'this has already been survived', 'freedom'],
     doorWait: 'stay here a~while',
     youLabel: 'You',
+    roomLabel: 'GRANDMOTHER’S ROOM',
+    roomHint: 'Three souls live here. Stand still and one will come closer. Walk into it.',
     soulLabels: ['THE SOUL OF~SOMEONE CLOSE', 'THE SOUL OF~A~CHILD', 'THE SOUL OF~A~GROWN-UP'],
     soulQuestions: [
       [
@@ -231,6 +233,8 @@ const STRINGS = {
     wallAccept: ['всё прошло', 'оставь боль здесь', 'опыт можно прочитать заново', 'иди дальше', 'рассвет', 'что останется, если отпустить?', 'с~этим уже справились', 'свобода'],
     doorWait: 'постой здесь',
     youLabel: 'Ты',
+    roomLabel: 'БАБУШКИНА КОМНАТА',
+    roomHint: 'Здесь живут три души. Замри, и~одна подойдёт ближе. Шагни в~неё.',
     soulLabels: ['ДУША БЛИЗКОГО ЧЕЛОВЕКА', 'ДУША РЕБЁНКА', 'ДУША ВЗРОСЛОГО'],
     soulQuestions: [
       [

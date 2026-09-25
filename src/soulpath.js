@@ -390,7 +390,16 @@ export class SoulPath {
         }));
         sprite.scale.set(0.35, 0.35, 1);
         kg.add(sprite);
-        const w = { sprite, cat, gone: false, back: 0, seed: Math.random() * 10 };
+        // a faint tail of smaller lights that lag behind, so it reads as alive
+        const tail = [0.6, 0.42, 0.28].map(k => {
+          const tsp = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: glowTexture(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: k,
+          }));
+          tsp.scale.set(0.35 * k, 0.35 * k, 1);
+          kg.add(tsp);
+          return tsp;
+        });
+        const w = { sprite, tail, cat, gone: false, back: 0, seed: Math.random() * 10, pull: new THREE.Vector3() };
         this._placeWisp(w, stuff.kitchen);
         return w;
       });
@@ -439,7 +448,11 @@ export class SoulPath {
       sc.material.map = tex; sc.material.needsUpdate = true;
       setTimeout(() => { sc.material.map = prev; sc.material.needsUpdate = true; tex.dispose(); }, 12000);
     }
-    // across the screen: typed, then gone
+    this._say(label, text);
+  }
+
+  // A line typed across the lower screen, then gone.
+  _say(label, text) {
     document.getElementById('soul-q')?.remove();
     const el = document.createElement('div');
     el.id = 'soul-q';
@@ -760,7 +773,11 @@ export class SoulPath {
       const k = s.kitchen;
       if (k && memoryStage && P.pos.x > k.minX && P.pos.x < k.maxX && P.pos.y > k.minZ && P.pos.y < k.maxZ) inKitchen = true;
     }
-    if (inKitchen !== this._inKitchen) { this._inKitchen = inKitchen; this.audio?.hush(inKitchen); }
+    if (inKitchen !== this._inKitchen) {
+      this._inKitchen = inKitchen;
+      this.audio?.hush(inKitchen);
+      if (inKitchen && !this._roomHinted) { this._roomHinted = true; this._say(t('roomLabel'), t('roomHint')); }
+    }
 
     // secret: a minute of stillness in acceptance hangs a nineteenth frame
     if (!this.nineteenth && zone.accept > 0.7 && speed < 0.05 && !P.locked) this._stillT += dt;
@@ -803,14 +820,24 @@ export class SoulPath {
       if (!k || !memoryStage || !k.wisps) continue;
       for (const w of k.wisps) {
         if (w.gone) {
+          for (const tsp of w.tail) tsp.visible = false;
           w.sprite.material.opacity = Math.max(0, w.sprite.material.opacity - dt);
           w.sprite.scale.multiplyScalar(1 + dt * 1.5);
           if (time > w.back) { w.gone = false; this._placeWisp(w, k); w.sprite.scale.set(0.35, 0.35, 1); }
           continue;
         }
         w.sprite.material.opacity = Math.min(1, w.sprite.material.opacity + dt * 0.5);
+        // a still visitor draws the nearest soul in, slowly; moving lets it drift home
+        const dxp = P.pos.x - w.home.x, dzp = P.pos.y - w.home.z, dp = Math.hypot(dxp, dzp);
+        const drawn = speed < 0.1 && dp < 5 ? Math.min(1, w.pull.x + dt * 0.12) : Math.max(0, w.pull.x - dt * 0.2);
+        w.pull.x = drawn;
         const b = Math.sin(time * 0.9 + w.seed);
-        w.sprite.position.set(w.home.x + Math.sin(time * 0.4 + w.seed) * 0.25, w.home.y + b * 0.12, w.home.z + Math.cos(time * 0.35 + w.seed) * 0.25);
+        w.sprite.position.set(
+          w.home.x + dxp * drawn * 0.85 + Math.sin(time * 0.4 + w.seed) * 0.25,
+          w.home.y + b * 0.12,
+          w.home.z + dzp * drawn * 0.85 + Math.cos(time * 0.35 + w.seed) * 0.25);
+        let lead = w.sprite.position;
+        for (const tsp of w.tail) { tsp.position.lerp(lead, Math.min(1, dt * 4)); tsp.visible = true; lead = tsp.position; }
         const s2 = 0.32 + 0.05 * Math.sin(time * 3 + w.seed);
         w.sprite.scale.set(s2, s2, 1);
         if (Math.hypot(w.sprite.position.x - P.pos.x, w.sprite.position.z - P.pos.y) < 1.1) {
