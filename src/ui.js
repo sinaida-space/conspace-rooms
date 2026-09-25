@@ -113,7 +113,7 @@ export class UI {
   async runBootSequence(caps) {
     const el = $('boot-sequence');
     if (!el) return;
-    this._armSoulsEgg();
+    this._armPacman();
     const lines = t('boot', { gpu: (caps.gpuClass || 'unknown').toUpperCase() });
     for (const line of lines) {
       await this._typeLine(el, line);
@@ -165,55 +165,17 @@ export class UI {
     });
   }
 
-  // Easter egg: type "souls" (or tap the wordmark five times) during the
-  // welcome screen and one SOULS piece is redrawn as an ASCII portrait,
-  // sampled locally from its own pixels.
-  _armSoulsEgg() {
+  // Easter egg: clicking the CONSPACE ROOMS wordmark opens a small Pac-Man
+  // in the site's phosphor greens (src/pacman.js, loaded on demand).
+  _armPacman() {
     if (this._eggArmed) return;
     this._eggArmed = true;
-    let typed = '', taps = 0, tapTimer = 0;
-    const fire = () => { this._drawSoulsAscii(); typed = ''; taps = 0; };
-    addEventListener('keydown', e => {
-      if ($('welcome')?.classList.contains('hidden')) return;
-      const k = e.key.toLowerCase();
-      // "ыщгды" is what "souls" types on a Russian layout
-      const map = { ы: 's', щ: 'o', г: 'u', д: 'l' };
-      typed = (typed + (map[k] || k)).slice(-5);
-      if (typed === 'souls') fire();
+    const mark = $('wordmark');
+    if (!mark) return;
+    mark.addEventListener('click', async () => {
+      const { openPacman } = await import('./pacman.js');
+      openPacman();
     });
-    $('wordmark')?.addEventListener('click', () => {
-      clearTimeout(tapTimer);
-      tapTimer = setTimeout(() => { taps = 0; }, 1200);
-      if (++taps >= 5) fire();
-    });
-  }
-
-  async _drawSoulsAscii() {
-    const pre = $('souls-ascii');
-    if (!pre) return;
-    const n = 1 + Math.floor(Math.random() * 18);
-    const img = new Image();
-    img.src = `assets/artworks/${String(n).padStart(2, '0')}.jpg`;
-    try { await img.decode(); } catch (e) { return; }
-    const cols = 96;
-    const rows = Math.round(cols * (img.height / img.width) * 0.5); // glyph cells are ~2× taller than wide
-    const c = document.createElement('canvas');
-    c.width = cols; c.height = rows;
-    const ctx = c.getContext('2d');
-    ctx.drawImage(img, 0, 0, cols, rows);
-    const px = ctx.getImageData(0, 0, cols, rows).data;
-    const ramp = ' .:-=+*#%@';
-    let out = '';
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
-        const i = (y * cols + x) * 4;
-        const l = (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / 255;
-        out += ramp[Math.min(ramp.length - 1, Math.floor(l * ramp.length))];
-      }
-      out += '\n';
-    }
-    pre.textContent = out;
-    pre.classList.remove('hidden');
   }
 
   showWebglError() {

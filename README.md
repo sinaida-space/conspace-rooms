@@ -91,7 +91,7 @@ URL (`?lang=ru` / `?lang=en`), never in storage, so a link with `?lang=ru`
 opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 (`tech.html`, `privacy.html`) hold both languages and switch the same way.
 
-Easter egg: type `souls` (or tap the title five times) on the welcome screen.
+Easter egg: click the CONSPACE ROOMS title on the welcome screen.
 
 ## Stack
 
