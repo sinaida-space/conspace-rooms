@@ -55,7 +55,7 @@ void main(){
     a = max(body * (0.7 + 0.3 * n(p * 16.0 + o)), sp * 0.7);
   }
   // barely there: the room's own light, a touch brighter, very transparent
-  a *= 0.09 * vVis;
+  a *= 0.2 * vVis;
   if (a < 0.002) discard;
   gl_FragColor = vec4(uTint * (0.9 + 0.3 * vSeed.y), a);
 }`;
