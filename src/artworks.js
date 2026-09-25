@@ -129,23 +129,24 @@ function wrapText(ctx, text, cx, y, maxWidth, lineHeight) {
 }
 
 function buildPlacardTexture(art) {
+  // a dark plate with pale letters: it has to read on whitewash and on wallpaper
   const c = document.createElement('canvas');
-  c.width = 320; c.height = 200;
+  c.width = 640; c.height = 380;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#f4efe6';
+  ctx.fillStyle = '#0d0f0e';
   ctx.fillRect(0, 0, c.width, c.height);
-  ctx.strokeStyle = '#c9c0ac';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
+  ctx.strokeStyle = '#6f7a73';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, c.width - 6, c.height - 6);
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#171512';
-  ctx.font = '700 24px "Departure Mono", ui-monospace, monospace';
-  ctx.fillText('UVALISS', c.width / 2, 54);
-  ctx.font = '400 21px "Departure Mono", ui-monospace, monospace';
-  wrapText(ctx, getLang() === 'ru' ? art.title_ru : art.title_en, c.width / 2, 108, c.width - 40, 26);
-  ctx.fillStyle = '#8a8171';
-  ctx.font = '400 17px "Departure Mono", ui-monospace, monospace';
-  ctx.fillText('SOULS', c.width / 2, c.height - 28);
+  ctx.fillStyle = '#f1ece0';
+  ctx.font = '400 44px "Departure Mono", ui-monospace, monospace';
+  ctx.fillText('UVALISS', c.width / 2, 92);
+  ctx.font = '400 42px "Departure Mono", ui-monospace, monospace';
+  wrapText(ctx, getLang() === 'ru' ? art.title_ru : art.title_en, c.width / 2, 200, c.width - 70, 52);
+  ctx.fillStyle = '#a9b3ac';
+  ctx.font = '400 30px "Departure Mono", ui-monospace, monospace';
+  ctx.fillText('SOULS', c.width / 2, c.height - 44);
   const tex = new THREE.CanvasTexture(c);
   tex.anisotropy = 4;
   return tex;
@@ -159,7 +160,7 @@ function ensureDom() {
 #artwork-prompt {
   position: fixed; left: 50%; bottom: calc(2vh + var(--hud-h, 0px) + 12px); transform: translateX(-50%) translateY(6px);
   z-index: 5; font-family: 'Departure Mono', ui-monospace, monospace; font-size: 0.85em;
-  color: #f2f2f2; background: rgba(10,10,10,0.55); border: 1px solid rgba(242,242,242,0.35);
+  color: #baffc9; background: rgba(1,8,5,0.9); border: 1px solid #3f8a5a;
   padding: 0.5em 1em; letter-spacing: 0.04em; opacity: 0; pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
@@ -175,12 +176,13 @@ function ensureDom() {
 #inspect-overlay.visible { opacity: 1; }
 #inspect-overlay .inspect-card {
   margin-bottom: 9vh; text-align: center; font-family: 'Departure Mono', ui-monospace, monospace;
-  color: #f2f2f2; opacity: 0; transform: translateY(8px); transition: opacity 0.5s ease 0.2s, transform 0.5s ease 0.2s;
+  color: #baffc9; opacity: 0; transform: translateY(8px); transition: opacity 0.5s ease 0.2s, transform 0.5s ease 0.2s;
+  background: rgba(1,8,5,0.9); border: 1px solid #3f8a5a; padding: 0.8em 1.4em; max-width: calc(100vw - 32px);
 }
 #inspect-overlay.visible .inspect-card { opacity: 1; transform: translateY(0); }
-#inspect-overlay .ru { font-size: 1.1em; letter-spacing: 0.03em; margin-bottom: 0.2em; }
-#inspect-overlay .en { font-size: 0.95em; color: #cfcfcf; margin-bottom: 0.5em; }
-#inspect-overlay .tag { font-size: 0.75em; letter-spacing: 0.12em; color: #8a8a8a; }
+#inspect-overlay .ru { font-size: 1.25em; letter-spacing: 0.03em; margin-bottom: 0.25em; color: #baffc9; text-shadow: 0 0 8px rgba(57,255,106,0.45); }
+#inspect-overlay .en { font-size: 1em; color: #9fdcb2; margin-bottom: 0.5em; }
+#inspect-overlay .tag { font-size: 0.8em; letter-spacing: 0.12em; color: #6fcf8e; }
 `;
   document.head.appendChild(style);
 
@@ -298,7 +300,7 @@ export class Artworks {
     sub.add(frameMesh);
 
     const placardTex = this._getPlacard(art);
-    const pw = 0.34, ph = 0.20;
+    const pw = 0.42, ph = 0.25;
     const placard = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshBasicMaterial({ map: placardTex }));
     placard.position.set(width / 2 + border + 0.10 + pw / 2, PLACARD_Y - EYE_Y, 0.002);
     sub.add(placard);

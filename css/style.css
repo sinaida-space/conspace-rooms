@@ -412,11 +412,12 @@ body.inspecting #control-hud, body.inspecting #hand-legend, body.inspecting #pad
 #pad .pad-inspect {
   position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 3.6em);
   font-size: 1em; letter-spacing: 0.04em; padding: 0.7em 0.8em;
-  color: var(--dim); opacity: 0.45; transition: opacity 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+  color: var(--fg); opacity: 0; visibility: hidden; pointer-events: none !important;   /* only while a work is in reach */
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
 }
 #pad .pi-close, body.inspecting #pad .pi-open { display: none; }
 body.inspecting #pad .pi-close { display: inline; }
-body.can-inspect #pad .pad-inspect, body.inspecting #pad .pad-inspect { opacity: 1; color: var(--fg); border-color: var(--accent); box-shadow: var(--glow); }
+body.can-inspect #pad .pad-inspect, body.inspecting #pad .pad-inspect { opacity: 1; visibility: visible; pointer-events: auto !important; transition: opacity 0.3s ease; color: var(--fg); border-color: var(--accent); box-shadow: var(--glow); }
 body.can-inspect #pad .pad-inspect:active, body.inspecting #pad .pad-inspect:active { background: var(--accent); color: var(--bg); }
 @media (hover: hover) {
   #pad button:hover { border-color: var(--accent); }
