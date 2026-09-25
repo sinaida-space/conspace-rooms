@@ -24,7 +24,7 @@ export const CEIL_H = 3.2;               // ceiling height
 const BAND = new Set([4, 5, 10, 11]);
 
 // ── deterministic hashing ───────────────────────────────────────────────────
-function hash2i(seed, x, y) {
+export function hash2i(seed, x, y) {
   let h = seed | 0;
   h = Math.imul(h ^ (x | 0), 0x27d4eb2d);
   h ^= h >>> 15;
@@ -36,7 +36,7 @@ function hash2i(seed, x, y) {
 }
 
 // mulberry32 — small deterministic PRNG seeded from a chunk hash
-function mulberry32(seed) {
+export function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) | 0;

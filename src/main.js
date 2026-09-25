@@ -79,6 +79,7 @@ async function boot() {
   const clock = new THREE.Clock();
   let t = 0, atmo = null, post = null, audio = null;
   let prevBobSin = 0, prevYaw = 0;
+  const dustLight = new THREE.Color();
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
     t += dt;
@@ -99,6 +100,11 @@ async function boot() {
         renderer.setClearColor(scene.fog.color);
       }
       if (atmo) atmo.update(dt, t, camera.position, zone);
+      if (window.__app.dust) {
+        mixZone(dustLight, zone, 0xd6e8da, 0xffcc85, 0xeeeee2);
+        window.__app.dust.update(t, camera.position, dustLight);
+      }
+      if (window.__app.soul) window.__app.soul.update(dt, t, zone);
       if (artworks) { artworks.sync(); artworks.update(dt); }
       speed = player.vel.length();
       if (audio) {
@@ -239,5 +245,10 @@ async function boot() {
     window.__app.player = player;
     window.__app.atmo = atmo;
     window.__app.artworks = artworks;
+
+    const { createDust } = await import('./dust.js');
+    window.__app.dust = createDust(scene, quality);
+    const { SoulPath } = await import('./soulpath.js');
+    window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality });
   }
 }

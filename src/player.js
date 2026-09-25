@@ -23,6 +23,8 @@ const MIN_FOV = 35;        // deg — fully zoomed in
 const MAX_FOV = 70;        // deg — resting FOV, matches main.js's initial camera
 const ZOOM_SENS = 240;     // FOV degrees per unit of hand-distance change
 
+export const EYE_HEIGHT = EYE;
+
 export class Player {
   constructor(world, camera, canvas, opts = {}) {
     this.world = world;
@@ -38,6 +40,9 @@ export class Player {
     this.yaw = 0;
     this.pitch = 0;
     this.bob = 0;
+    this.eye = EYE;        // current eye height; soulpath.js lowers it for the child-height secret
+    this.eyeTarget = EYE;
+    this.intent = 0;       // last walk intent: 1 forward, -1 backward, 0 still
 
     this.keys = Object.create(null);
     this.hand = {
@@ -73,7 +78,7 @@ export class Player {
 
     // pointer-lock mouse look (keyboard mode)
     this.canvas.addEventListener('click', () => {
-      if (this.mode === 'keys') this.canvas.requestPointerLock?.();
+      if (this.mode === 'keys') this.canvas.requestPointerLock?.()?.catch?.(() => {}); // refused in some embeds; mouse look is optional
     });
     addEventListener('mousemove', e => {
       if (document.pointerLockElement !== this.canvas) return;
@@ -120,6 +125,9 @@ export class Player {
       walk = (this.keys.KeyW || this.keys.ArrowUp ? 1 : 0) - (this.keys.KeyS || this.keys.ArrowDown ? 1 : 0);
       strafe = (this.keys.KeyD ? 1 : 0) - (this.keys.KeyA ? 1 : 0);
     }
+
+    this.intent = walk;
+    this.eye += (this.eyeTarget - this.eye) * Math.min(1, dt * 1.2); // slow, dreamlike height change
 
     // heading basis (camera faces -Z at yaw 0)
     const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw); // forward
@@ -177,7 +185,7 @@ export class Player {
   }
 
   _apply(bobY = 0) {
-    this.camera.position.set(this.pos.x, EYE + bobY, this.pos.y);
+    this.camera.position.set(this.pos.x, this.eye + bobY, this.pos.y);
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
   }
 }
