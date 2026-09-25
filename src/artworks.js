@@ -85,6 +85,11 @@ function chunkArtworkPlan(cx, cz, slots, deck) {
   return chosen.map((slot, i) => ({ slot, artIndex: deck[(ord * 3 + i) % deck.length] }));
 }
 
+// The wall runs that carry a work in this chunk, so other things keep off them.
+export function artworkSlots(cx, cz, slots) {
+  return chunkArtworkPlan(cx, cz, slots, [0]).map(p => p.slot);
+}
+
 // ── texture loading (lazy, per file, half-res on tier 0) ───────────────────
 function loadTexture(url, halfRes) {
   return new Promise((resolve, reject) => {

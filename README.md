@@ -112,6 +112,7 @@ opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 - [Departure Mono](https://github.com/rektdeckard/departure-mono) by Helena Zhang (SIL OFL 1.1), self-hosted in `assets/fonts/`
 - [three.js](https://threejs.org/) (vendored) for rendering
 - Procedural GLSL materials; the labyrinth geometry uses no texture files
+- Two CC0 models from [Poly Haven](https://polyhaven.com/) in `assets/models/` (Old Bed Frame, Wheelchair 01), simplified with glTF-Transform; every other hospital prop is drawn in `src/ward.js`
 - [MediaPipe Tasks Vision](https://developers.google.com/mediapipe) hand landmarker for gesture mode (loaded lazily, opt-in)
 
 ## Rights

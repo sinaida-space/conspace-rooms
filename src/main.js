@@ -251,7 +251,7 @@ async function boot() {
     const { createSpots } = await import('./spots.js');
     window.__app.spots = createSpots(scene, quality);
     const { SoulPath } = await import('./soulpath.js');
-    window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage });
+    window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo });
   }
 }
 

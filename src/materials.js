@@ -611,6 +611,77 @@ void main(){
 }
 `;
 
+// ── props ───────────────────────────────────────────────────────────────────
+// Things standing in the corridors (ward.js) are lit by the same faked
+// fixtures and candles as the walls, so they sit in the light instead of
+// glowing on their own. Colour comes from a map, vertex colours (alpha is
+// gloss) and instance colours, whichever the geometry carries.
+const VERT_PROP = /* glsl */`
+#include <common>
+#include <fog_pars_vertex>
+varying vec3 vWorldPos;
+varying vec3 vNormal;
+varying vec2 vUv0;
+varying vec4 vCol;
+void main(){
+  vec4 p = vec4(position, 1.0);
+  vec3 n = normal;
+  #ifdef USE_INSTANCING
+    p = instanceMatrix * p; n = mat3(instanceMatrix) * n;
+  #endif
+  vec4 wp = modelMatrix * p;
+  vWorldPos = wp.xyz;
+  vNormal = normalize(mat3(modelMatrix) * n);
+  vUv0 = uv;
+  vCol = vec4(1.0, 1.0, 1.0, 0.3);
+  #if defined( USE_COLOR_ALPHA )
+    vCol = color;
+  #elif defined( USE_COLOR )
+    vCol.rgb = color;
+  #endif
+  #ifdef USE_INSTANCING_COLOR
+    vCol.rgb *= instanceColor;
+  #endif
+  vec4 mvPosition = viewMatrix * wp;
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}
+`;
+const FRAG_PROP = /* glsl */`
+#include <common>
+#include <fog_pars_fragment>
+${LIB}
+uniform sampler2D uMap;
+uniform float uHasMap;
+uniform vec3  uColor;
+uniform float uGlow;       // light of its own (a lamp lens), trembling
+uniform float uSeed;
+varying vec2 vUv0;
+varying vec4 vCol;
+void main(){
+  vec3 z = uZone;
+  vec3 L = zoneLight(z);
+  vec3 N = normalize(vNormal);
+  if (!gl_FrontFacing) N = -N;
+  vec3 base = uColor * vCol.rgb;
+  float alpha = 1.0;
+  if (uHasMap > 0.5) { vec4 tx = texture2D(uMap, vUv0); base *= tx.rgb; alpha = tx.a; }
+  if (alpha < 0.5) discard;
+  vec3 V = normalize(cameraPosition - vWorldPos);
+  vec3 d, s;
+  fixtureLightSpec(vWorldPos, N, V, L, 48.0, d, s);
+  vec3 cl = candleLight(vWorldPos, N);
+  float ao = mix(0.5, 1.0, smoothstep(0.0, 0.3, vWorldPos.y));    // contact shade on the floor
+  vec3 lit = base * (d + 0.05 * L + z.y * FILL_MEM * 1.4 + cl) * ao + s * vCol.a * ao;
+  if (uGlow > 0.0) {
+    float fl = step(0.12, vnoise(vec2(uTime * 7.0, uSeed)));        // now and then it dies for a blink
+    lit += base * uGlow * (0.75 + 0.25 * fl);
+  }
+  gl_FragColor = vec4(rolloff(lit), 1.0);
+  #include <fog_fragment>
+}
+`;
+
 // ── factory ─────────────────────────────────────────────────────────────────
 function rand(lo, hi) { return lo + Math.random() * (hi - lo); }
 
@@ -653,8 +724,23 @@ export function createMaterials(quality) {
   let trailHead = 0, sinceSample = 0;
   const lastPos = new THREE.Vector2(1e5, 1e5);
 
+  // A material for props: { map, color, vertexColors, glow, seed }. Shares the
+  // world's uniforms, so fixtures, candles, flicker and stage reach it too.
+  const prop = ({ map = null, color = 0xffffff, vertexColors = false, glow = 0, seed = 0 } = {}) => new THREE.ShaderMaterial({
+    uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), shared, {
+      uMap: { value: map }, uHasMap: { value: map ? 1 : 0 }, uColor: { value: new THREE.Color(color) },
+      uGlow: { value: glow }, uSeed: { value: seed },
+    }),
+    vertexShader: VERT_PROP,
+    fragmentShader: FRAG_PROP,
+    vertexColors,
+    fog: true,
+    side: THREE.DoubleSide,
+  });
+
   return {
     materials,
+    prop,
     // camPos: viewer position; zone: zoneWeights() at the viewer
     update(dt, t, camPos, zone) {
       shared.uTime.value = t;

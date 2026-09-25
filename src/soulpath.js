@@ -6,6 +6,8 @@ import { EYE_HEIGHT } from './player.js';
 import { buildKitchen, createKitchenRig, buildScatter, tickCandles } from './kitchen.js';
 import { baroqueFrame } from './frames.js';
 import { buildDoorway } from './doorway.js';
+import { artworkSlots } from './artworks.js';
+import { createWardKit, wardPlan, reserveSlot, reserveAround, cellKey } from './ward.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
 // Everything that makes the labyrinth respond to the visitor on the way from
@@ -226,8 +228,10 @@ function posterTexture(text, n, stage) {
 
 // ── SoulPath ────────────────────────────────────────────────────────────────
 export class SoulPath {
-  constructor({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage }) {
+  constructor({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo }) {
     Object.assign(this, { scene, world, player, camera, artworks, audio, post, quality, stage });
+    this.ward = createWardKit(atmo, quality);   // what the hospital left behind (fear stage only)
+    this._wardCells = new Map();                // chunk key -> cells the island owns
     this._lastStage = stage.stage;
     this._prevPos = { x: player.pos.x, z: player.pos.y };
     this.kitchenRig = createKitchenRig(scene, renderer, quality);
@@ -279,6 +283,8 @@ export class SoulPath {
     world.wallSegmentsNear = (x, z) => {
       const segs = orig(x, z);
       for (const d of this._doorsNear(x, z)) { segs.push(...d.walls); if (!d.open) segs.push(d.seg); }
+      if (this.stage.stage === 0) for (const st of this.chunkStuff.values()) for (const b of st.ward?.plan.boxes || [])
+        if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
       return segs;
     };
   }
@@ -294,6 +300,9 @@ export class SoulPath {
     for (const [key, stuff] of this.chunkStuff) {
       if (this.world.chunks.has(key)) continue;
       this.scene.remove(stuff.group);
+      stuff.group.userData.gone = true;               // a model still loading must not land here
+      if (stuff.ward) stuff.ward.group.userData.gone = true;
+      this._wardCells.delete(key);
       stuff.group.traverse(o => {
         if (o.userData.keep) return;                  // shared scatter geometry and materials
         o.geometry?.dispose();
@@ -326,6 +335,7 @@ export class SoulPath {
         mesh.position.copy(pos);
         mesh.rotation.y = Math.atan2(slot.normal.x, slot.normal.z);
         group.add(mesh);
+        stuff.taken = [[pos.x, pos.z, 1.3]];
         const w = { mesh, zone, seed: rw(), behindT: 0 };
         this._writeOn(w);
         stuff.writings.push(w);
@@ -354,10 +364,26 @@ export class SoulPath {
           sl.position.z + sl.normal.z * 0.013 + (sl.normal.z === 0 ? off : 0));
         mesh.rotation.set(0, Math.atan2(sl.normal.x, sl.normal.z), (rpo() - 0.5) * 0.05); // pinned a little crooked
         group.add(mesh);
+        (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.0]);
         const p = { mesh, q: Math.floor(rpo() * 1000) };
         this._printPoster(p);
         stuff.posters.push(p);
       }
+    }
+
+    // ── the hospital's leftovers: one small island in some rooms, off the
+    // walls that carry a work, a poster or a writing
+    const taken = new Set();
+    for (const sl of artworkSlots(cx, cz, this.world.getWallSlots(cx, cz))) reserveSlot(taken, sl);
+    for (const [x, z, r] of stuff.taken || []) reserveAround(taken, x, z, r);
+    const plan = wardPlan(cx, cz, taken, this.ward.withModels);
+    if (plan) {
+      const wg = new THREE.Group();
+      group.add(wg);
+      this.ward.build(wg, plan);
+      wg.visible = this.stage.stage === 0;
+      stuff.ward = { group: wg, plan };
+      this._wardCells.set(cx + ':' + cz, plan.cells);
     }
 
     // ── scattered things: candles, teapots, cups. The closer the portal into
@@ -585,9 +611,11 @@ export class SoulPath {
     const prox = d => { const k = Math.max(0, Math.min(1, 1 - d / 45)); return k * k * (3 - 2 * k); };
     const YELLOW = new THREE.Color(0xffd27a), RED = new THREE.Color(0xff2a14), PALE_WAX = new THREE.Color(0xe6dac0), RED_WAX = new THREE.Color(0x8e1216);
     const items = [];
+    const wardCells = this._wardCells.get(cx + ':' + cz);
     for (let j = 0; j < CHUNK; j++) for (let i = 0; i < CHUNK; i++) {
       const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
       if (solidAtGlobal(gi, gj)) continue;
+      if (wardCells?.has(cellKey(gi, gj))) continue;  // the hospital's things own these cells
       const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([di, dj]) => solidAtGlobal(gi + di, gj + dj));
       const r = rnd();
       if (!side) continue;                              // only along walls, so paths stay clear
@@ -1006,6 +1034,7 @@ export class SoulPath {
       for (const st of this.chunkStuff.values()) for (const w of st.writings) { w.zone = target; this._writeOn(w); }
       for (const st of this.chunkStuff.values()) for (const p of st.posters || []) this._printPoster(p);
       this._rebuildScatter();
+      for (const st of this.chunkStuff.values()) if (st.ward) st.ward.group.visible = this.stage.stage === 0;
     }
 
     // grandmother's room: light the nearest one, let candles and picture breathe
