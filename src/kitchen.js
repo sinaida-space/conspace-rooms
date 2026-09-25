@@ -281,6 +281,61 @@ export function buildCandleTrail(group, points) {
   return flames;
 }
 
+// ── scattered things along the walls ────────────────────────────────────────
+// items: [{ type: 'candle' | 'teapot' | 'cup', x, z, rot }]. One InstancedMesh
+// per part per chunk, so a hundred things cost a handful of draw calls.
+let SHARED = null;
+function shared() {
+  if (SHARED) return SHARED;
+  const T = textures();
+  const enamel = new THREE.MeshBasicMaterial({ color: 0xcfc8b6, fog: true });
+  SHARED = {
+    saucer: [lathe([[0, 0], [0.06, 0.002], [0.065, 0.012], [0, 0.008]], 16), enamel],
+    wax: [new THREE.CylinderGeometry(0.018, 0.02, 0.2, 10), new THREE.MeshBasicMaterial({ color: 0xe6dac0, fog: true })],
+    flame: [new THREE.SphereGeometry(0.013, 8, 6).scale(1, 2, 1), new THREE.MeshBasicMaterial({ color: 0xfff0c0, fog: false })],
+    pool: [new THREE.PlaneGeometry(1.3, 1.3).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({
+      map: T.warm, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.3, fog: true })],
+    pot: [lathe([[0, 0], [0.055, 0], [0.085, 0.015], [0.1, 0.05], [0.098, 0.085], [0.08, 0.115], [0.05, 0.13], [0.042, 0.135], [0, 0.135]]), enamel],
+    potLid: [lathe([[0, 0], [0.042, 0], [0.03, 0.02], [0.012, 0.025], [0.014, 0.04], [0, 0.045]], 20), enamel],
+    spout: [new THREE.CylinderGeometry(0.01, 0.018, 0.12, 8).rotateZ(-0.9).translate(0.12, 0.08, 0), enamel],
+    rim: [new THREE.TorusGeometry(0.043, 0.004, 6, 24).rotateX(Math.PI / 2).translate(0, 0.135, 0), new THREE.MeshBasicMaterial({ color: 0x8a1a1a, fog: true })],
+    cup: [lathe([[0, 0.006], [0.028, 0.006], [0.042, 0.03], [0.046, 0.075], [0.043, 0.075], [0.04, 0.035], [0, 0.03]]), enamel],
+  };
+  return SHARED;
+}
+export function buildScatter(group, items) {
+  const S = shared();
+  const parts = {
+    candle: [['saucer', 0.01], ['wax', 0.118], ['flame', 0.24], ['pool', 0.016]],
+    teapot: [['pot', 0], ['potLid', 0.132], ['spout', 0], ['rim', 0]],
+    cup: [['saucer', 0.0], ['cup', 0.0]],
+  };
+  const counts = {};
+  for (const it of items) for (const [name] of parts[it.type]) counts[name] = (counts[name] || 0) + 1;
+  const meshes = {}, idx = {};
+  for (const name in counts) {
+    const [geo, mat] = S[name];
+    meshes[name] = new THREE.InstancedMesh(geo, mat, counts[name]);
+    meshes[name].frustumCulled = false; // instances spread over the whole chunk
+    meshes[name].userData.keep = true;  // geometry and material are shared: never dispose them with a chunk
+    idx[name] = 0;
+    group.add(meshes[name]);
+  }
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
+  for (const it of items) {
+    q.setFromAxisAngle(up, it.rot);
+    for (const [name, y] of parts[it.type]) {
+      m.compose(new THREE.Vector3(it.x, y, it.z), q, one);
+      meshes[name].setMatrixAt(idx[name]++, m);
+    }
+  }
+  for (const name in meshes) meshes[name].instanceMatrix.needsUpdate = true;
+  return {
+    count: items.length,
+    dispose() { for (const name in meshes) { group.remove(meshes[name]); meshes[name].dispose(); } }, // frees instance buffers only
+  };
+}
+
 // ── one light rig for all rooms ─────────────────────────────────────────────
 export function createKitchenRig(scene, renderer, quality) {
   const shadows = quality.tier > 0;

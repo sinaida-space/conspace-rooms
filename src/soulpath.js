@@ -3,7 +3,7 @@ import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, 
 import { zoneWeights, ORIGIN, ZONE } from './zones.js';
 import { t } from './i18n.js';
 import { EYE_HEIGHT } from './player.js';
-import { buildKitchen, buildCandleTrail, createKitchenRig } from './kitchen.js';
+import { buildKitchen, buildCandleTrail, createKitchenRig, buildScatter } from './kitchen.js';
 import { baroqueFrame } from './frames.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
@@ -46,6 +46,24 @@ const SEED_WRITING = CONSPACE_SEED ^ 0x77a1;
 const SEED_DOOR = CONSPACE_SEED ^ 0x0d00;
 const SEED_KITCHEN = CONSPACE_SEED ^ 0x4b17;
 const SEED_PORTAL = CONSPACE_SEED ^ 0x9047;
+const SEED_SCATTER = CONSPACE_SEED ^ 0x5ca7;
+
+// Portals of one chunk as a pure function, so any chunk can ask where the
+// nearest portal is without that chunk being built.
+function portalPlan(cx, cz) {
+  const out = [];
+  const rp = mulberry32(hash2i(SEED_PORTAL, cx, cz));
+  for (const edge of ['west', 'north']) {
+    const band = rp() < 0.5 ? 4 : 10, roll = rp();
+    const mx = edge === 'west' ? cx * CHUNK * CELL : (cx * CHUNK + band + 1) * CELL;
+    const mz = edge === 'west' ? (cz * CHUNK + band + 1) * CELL : cz * CHUNK * CELL;
+    const d = Math.hypot(mx - ORIGIN.x, mz - ORIGIN.z);
+    const target = d >= ZONE.ACC_A ? 2 : d >= ZONE.MEM_A ? 1 : 0;
+    if (!target || roll > 0.4) continue;
+    out.push({ edge, band, target, x: mx, z: mz });
+  }
+  return out;
+}
 
 // ── small helpers ───────────────────────────────────────────────────────────
 const cellOf = v => Math.floor(v / CELL);
@@ -206,6 +224,7 @@ export class SoulPath {
       if (this.world.chunks.has(key)) continue;
       this.scene.remove(stuff.group);
       stuff.group.traverse(o => {
+        if (o.userData.keep) return;                  // shared scatter geometry and materials
         o.geometry?.dispose();
         if (o.material && o.material !== this.markMat) { o.material.map?.dispose(); o.material.dispose(); }
       });
@@ -245,17 +264,14 @@ export class SoulPath {
     // ── portals: out past the fear zone, some crossings carry a doorway into
     // the next stage. Deterministic per edge, so they are always where they were.
     const usedEdges = new Set();
-    const rp = mulberry32(hash2i(SEED_PORTAL, cx, cz));
-    for (const edge of ['west', 'north']) {
-      const band = rp() < 0.5 ? 4 : 10, roll = rp();
-      const mx = edge === 'west' ? cx * CHUNK * CELL : (cx * CHUNK + band + 1) * CELL;
-      const mz = edge === 'west' ? (cz * CHUNK + band + 1) * CELL : cz * CHUNK * CELL;
-      const d = Math.hypot(mx - ORIGIN.x, mz - ORIGIN.z);
-      const target = d >= ZONE.ACC_A ? 2 : d >= ZONE.MEM_A ? 1 : 0;
-      if (!target || roll > 0.4) continue;
-      stuff.portals.push(this._makePortal(group, cx, cz, edge, band, target));
-      usedEdges.add(edge);
+    for (const pp of portalPlan(cx, cz)) {
+      stuff.portals.push(this._makePortal(group, cx, cz, pp.edge, pp.band, pp.target));
+      usedEdges.add(pp.edge);
     }
+
+    // ── scattered things: candles, teapots, cups. The closer the portal into
+    // the next stage, the more of them, so they thicken into a trail.
+    stuff.scatter = this._buildScatter(group, cx, cz);
 
     // ── presence doors on this chunk's west and north edge crossings.
     // Never in the spawn chunk, so nobody starts boxed in.
@@ -424,6 +440,47 @@ export class SoulPath {
         this.post?.burst(1.6);
         this.audio?.chime();
       }
+    }
+  }
+
+  // Distance from (x, z) to the nearest portal leading past the current stage,
+  // searched over the chunks around, built or not.
+  _nextPortals(cx, cz) {
+    const out = [];
+    for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
+      for (const p of portalPlan(cx + dx, cz + dz)) if (p.target === this.stage.stage + 1) out.push(p);
+    }
+    return out;
+  }
+
+  _buildScatter(group, cx, cz) {
+    const rnd = mulberry32(hash2i(SEED_SCATTER ^ (this.stage.stage * 7919), cx, cz));
+    const items = [], portals = this._nextPortals(cx, cz);
+    for (let j = 0; j < CHUNK; j++) for (let i = 0; i < CHUNK; i++) {
+      const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+      if (solidAtGlobal(gi, gj)) continue;
+      const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([di, dj]) => solidAtGlobal(gi + di, gj + dj));
+      const r = rnd();
+      if (!side) continue;                              // only along walls, so paths stay clear
+      const x = centreOf(gi) + side[0] * 0.36 + (rnd() - 0.5) * 0.3;
+      const z = centreOf(gj) + side[1] * 0.36 + (rnd() - 0.5) * 0.3;
+      let d = Infinity;
+      for (const pp of portals) d = Math.min(d, Math.hypot(pp.x - x, pp.z - z));
+      // a few far away, thick within ~10 m of the portal
+      const p = d === Infinity ? 0.012 : Math.max(0.012, Math.min(0.55, 0.55 * (1 - d / 40) ** 2));
+      if (r > p) continue;
+      const k = rnd();
+      items.push({ type: k < 0.55 ? 'candle' : k < 0.8 ? 'teapot' : 'cup', x, z, rot: rnd() * 6.28 });
+    }
+    return buildScatter(group, items);
+  }
+
+  // After a stage change the trail must lead to the next portal: rebuild it.
+  _rebuildScatter() {
+    for (const [key, st] of this.chunkStuff) {
+      st.scatter?.dispose();
+      const [cx, cz] = key.split(':').map(Number);
+      st.scatter = this._buildScatter(st.group, cx, cz);
     }
   }
 
@@ -618,6 +675,7 @@ export class SoulPath {
       this._lastStage = this.stage.stage;
       const target = { fear: +(this.stage.stage === 0), memory: +(this.stage.stage === 1), accept: +(this.stage.stage === 2) };
       for (const st of this.chunkStuff.values()) for (const w of st.writings) { w.zone = target; this._writeOn(w); }
+      this._rebuildScatter();
     }
 
     // grandmother's room: light the nearest one, let candles and picture breathe
