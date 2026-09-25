@@ -5,6 +5,7 @@ import { t } from './i18n.js';
 import { EYE_HEIGHT } from './player.js';
 import { buildKitchen, createKitchenRig, buildScatter } from './kitchen.js';
 import { baroqueFrame } from './frames.js';
+import { buildDoorway } from './doorway.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
 // Everything that makes the labyrinth respond to the visitor on the way from
@@ -128,31 +129,6 @@ function scrawlTexture(text, zone) {
   return tex;
 }
 
-function doorTexture(text, zone) {
-  const c = document.createElement('canvas');
-  c.width = 256; c.height = 340;
-  const ctx = c.getContext('2d');
-  // painted hospital door, varnished flat door, or a pale veil
-  const base = zone.memory > 0.5 ? '#7a5534' : zone.accept > 0.5 ? '#d4d7ce' : '#4f8069';
-  ctx.fillStyle = base; ctx.fillRect(0, 0, c.width, c.height);
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 6;
-  ctx.strokeRect(24, 24, c.width - 48, 130); ctx.strokeRect(24, 180, c.width - 48, 136);
-  for (let i = 0; i < 900; i++) { // wear
-    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.05})`;
-    ctx.fillRect(Math.random() * c.width, Math.random() * c.height, 2, 2);
-  }
-  ctx.fillStyle = zone.accept > 0.5 ? 'rgba(40,44,40,0.8)' : 'rgba(230,236,226,0.85)';
-  ctx.font = '20px "Departure Mono", monospace';
-  ctx.textAlign = 'center';
-  // wrap onto two lines when needed
-  const words = text.split(' '); let line = '', lines = [];
-  for (const w of words) { const tt = line ? line + ' ' + w : w; if (ctx.measureText(tt).width > c.width - 40 && line) { lines.push(line); line = w; } else line = tt; }
-  lines.push(line);
-  lines.forEach((l, i) => ctx.fillText(l, c.width / 2, 168 + (i - (lines.length - 1) / 2) * 24));
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
 
 function placardTexture(lines) {
   const c = document.createElement('canvas');
@@ -283,7 +259,7 @@ export class SoulPath {
     const orig = world.wallSegmentsNear.bind(world);
     world.wallSegmentsNear = (x, z) => {
       const segs = orig(x, z);
-      for (const d of this._closedDoorsNear(x, z)) segs.push(d.seg);
+      for (const d of this._doorsNear(x, z)) { segs.push(...d.walls); if (!d.open) segs.push(d.seg); }
       return segs;
     };
   }
@@ -302,7 +278,7 @@ export class SoulPath {
       stuff.group.traverse(o => {
         if (o.userData.keep) return;                  // shared scatter geometry and materials
         o.geometry?.dispose();
-        if (o.material && o.material !== this.markMat) { o.material.map?.dispose(); o.material.dispose(); }
+        if (o.material && o.material !== this.markMat && !o.userData.keepMaterial) { o.material.map?.dispose(); o.material.dispose(); }
       });
       this.chunkStuff.delete(key);
     }
@@ -480,33 +456,25 @@ export class SoulPath {
   }
 
   _makeDoor(group, cx, cz, edge, band, key) {
-    // The corridor crosses the edge through cells band, band+1 (2.4 m wide).
-    const span = 2 * CELL;
-    let x, z, rotY, seg;
-    if (edge === 'west') {
-      x = cx * CHUNK * CELL; z = (cz * CHUNK + band) * CELL + span / 2; rotY = Math.PI / 2;
-      seg = { a: { x, z: z - span / 2 }, b: { x, z: z + span / 2 }, nx: 1, nz: 0 };
-    } else {
-      x = (cx * CHUNK + band) * CELL + span / 2; z = cz * CHUNK * CELL; rotY = 0;
-      seg = { a: { x: x - span / 2, z }, b: { x: x + span / 2, z }, nx: 0, nz: 1 };
-    }
-    const zone = this.stage.weights();
-    const lines = t('doorWait');
-    const tex = doorTexture(lines[Math.abs(hash2i(SEED_DOOR, cx * 3 + band, cz * 5 + (edge === 'west' ? 1 : 2))) % lines.length], zone);
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(span, CEIL_H, 0.08),
-      new THREE.MeshBasicMaterial({ map: tex, color: 0x9a9a9a }));
-    mesh.position.set(x, CEIL_H / 2, z);
-    mesh.rotation.y = rotY;
-    group.add(mesh);
-    // warm light spilling from under the door, on both sides, seen from afar
-    const slit = new THREE.Mesh(new THREE.PlaneGeometry(span - 0.1, 1.2).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ map: glowTexture(), color: 0xffc070, transparent: true, depthWrite: false,
-        blending: THREE.AdditiveBlending, opacity: 1, fog: true }));
-    slit.position.set(x, 0.015, z);
-    slit.rotation.y = rotY;
-    group.add(slit);
-    return { key, mesh, slit, seg, x, z, waitT: 0, lift: 0, open: false };
+    // The corridor crosses the edge through cells band, band+1 (2.4 m wide):
+    // it gets closed by a piece of wall with a real door in it.
+    const span = 2 * CELL, west = edge === 'west';
+    const x = west ? cx * CHUNK * CELL : (cx * CHUNK + band) * CELL + span / 2;
+    const z = west ? (cz * CHUNK + band) * CELL + span / 2 : cz * CHUNK * CELL;
+    const d = buildDoorway(span, this.world.mat.wall, this.stage.stage, t('doorWait'));
+    d.group.position.set(x, 0, z);
+    d.group.rotation.y = west ? Math.PI / 2 : 0;
+    group.add(d.group);
+    // collision: the two wall pieces always, the door gap while closed
+    const segAlong = (u0, u1) => west
+      ? { a: { x, z: z + u0 }, b: { x, z: z + u1 }, nx: 1, nz: 0 }
+      : { a: { x: x + u0, z }, b: { x: x + u1, z }, nx: 0, nz: 1 };
+    const walls = [segAlong(-span / 2, -d.gap / 2), segAlong(d.gap / 2, span / 2)];
+    const seg = segAlong(-d.gap / 2, d.gap / 2);
+    const routeSeg = segAlong(-span / 2, span / 2);   // path-finding treats the closed crossing as shut
+    return { key, pivot: d.pivot, leaf: d.door, walls, seg, routeSeg, x, z, waitT: 0, lift: 0, open: false };
   }
+
 
   // A doorway of light across a 2.4 m corridor crossing: a baroque frame
   // and a shimmering veil in the colours of the stage it leads to.
@@ -616,15 +584,14 @@ export class SoulPath {
     }
   }
 
-  _closedDoorsNear(x, z) {
+  _doorsNear(x, z) {
     const out = [];
     for (const stuff of this.chunkStuff.values()) {
-      for (const d of stuff.doors) {
-        if (!d.open && Math.abs(d.x - x) < 4 && Math.abs(d.z - z) < 4) out.push(d);
-      }
+      for (const d of stuff.doors) if (Math.abs(d.x - x) < 4 && Math.abs(d.z - z) < 4) out.push(d);
     }
     return out;
   }
+
 
   // ── route for the red scratches: breadth-first over open cells ─────────
   _route(goalFn, fromGi, fromGj, maxNodes = 7000) {
@@ -656,10 +623,10 @@ export class SoulPath {
     for (const stuff of this.chunkStuff.values()) for (const d of stuff.doors) {
       if (d.open) continue;
       const mx = (Math.max(i, ni)) * CELL, mz = (Math.max(j, nj)) * CELL;
-      if (i !== ni && Math.abs(mx - d.seg.a.x) < 1e-3 && d.seg.a.x === d.seg.b.x
-        && centreOf(j) > d.seg.a.z && centreOf(j) < d.seg.b.z) return true;
-      if (j !== nj && Math.abs(mz - d.seg.a.z) < 1e-3 && d.seg.a.z === d.seg.b.z
-        && centreOf(i) > d.seg.a.x && centreOf(i) < d.seg.b.x) return true;
+      if (i !== ni && Math.abs(mx - d.routeSeg.a.x) < 1e-3 && d.routeSeg.a.x === d.routeSeg.b.x
+        && centreOf(j) > d.routeSeg.a.z && centreOf(j) < d.routeSeg.b.z) return true;
+      if (j !== nj && Math.abs(mz - d.routeSeg.a.z) < 1e-3 && d.routeSeg.a.z === d.routeSeg.b.z
+        && centreOf(i) > d.routeSeg.a.x && centreOf(i) < d.routeSeg.b.x) return true;
     }
     return false;
   }
@@ -756,19 +723,18 @@ export class SoulPath {
     // presence doors: stand still close to one and it lifts into the ceiling
     for (const s of this.chunkStuff.values()) for (const d of s.doors) {
       if (d.open) {
-        if (d.lift < 1) {
-          d.lift = Math.min(1, d.lift + dt / 1.6);
-          d.mesh.position.y = CEIL_H / 2 + d.lift * (CEIL_H - 0.05);
+        if (d.lift < 1) {                             // swing open on the hinges, slowing at the end
+          d.lift = Math.min(1, d.lift + dt / 1.8);
+          d.pivot.rotation.y = -1.75 * (1 - (1 - d.lift) ** 3);
         }
         continue;
       }
       const near = Math.hypot(d.x - P.pos.x, d.z - P.pos.y) < 2.8;
       d.waitT = near && speed < 0.08 && !P.locked ? d.waitT + dt : Math.max(0, d.waitT - dt * 2);
       const glow = 0.8 + 0.2 * Math.min(1, d.waitT / DOOR_WAIT);
-      d.mesh.material.color.setScalar(glow);
+      d.leaf.material.color.setScalar(glow);
       if (d.waitT >= DOOR_WAIT) {
         d.open = true;
-        d.slit.visible = false;
         this.doorsOpen.add(d.key);
         this.audio?.chime();
       }
