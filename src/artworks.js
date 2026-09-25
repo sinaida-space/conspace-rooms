@@ -152,7 +152,7 @@ function ensureDom() {
   const style = document.createElement('style');
   style.textContent = `
 #artwork-prompt {
-  position: fixed; left: 50%; bottom: calc(2vh + 5.5em); transform: translateX(-50%) translateY(6px);
+  position: fixed; left: 50%; bottom: calc(2vh + var(--hud-h, 0px) + 12px); transform: translateX(-50%) translateY(6px);
   z-index: 5; font-family: 'Departure Mono', ui-monospace, monospace; font-size: 0.85em;
   color: #f2f2f2; background: rgba(10,10,10,0.55); border: 1px solid rgba(242,242,242,0.35);
   padding: 0.5em 1em; letter-spacing: 0.04em; opacity: 0; pointer-events: none;

@@ -1,6 +1,7 @@
 // Welcome screen: collab statement, links, machine capability check, mode select.
 import { detectDevice } from './device.js';
-import { t, setLang, langFromUrl, applyStatic } from './i18n.js';
+import { t, getLang, setLang, langFromUrl, applyStatic } from './i18n.js';
+import { renderFooter } from './footer.js';
 
 const $ = id => document.getElementById(id);
 const wait = ms => new Promise(res => setTimeout(res, ms));
@@ -48,6 +49,7 @@ export class UI {
       setLang(preset);
       gate?.classList.add('hidden');
       applyStatic();
+      renderFooter(getLang());
       return;
     }
     const el = $('lang-boot');
@@ -60,6 +62,7 @@ export class UI {
     });
     setLang(chosen);
     applyStatic();
+    renderFooter(getLang());
     gate?.classList.add('hidden');
   }
 
@@ -254,6 +257,14 @@ export class UI {
     addEventListener('touchstart', () => { clearTimeout(timer); hide(); }, { once: true });
   }
 
+  // Publishes the bottom legend's height as --hud-h so the artwork prompt
+  // (artworks.js) can sit just above it instead of on top of it.
+  _trackHudHeight(el) {
+    const set = () => document.documentElement.style.setProperty('--hud-h', `${el.offsetHeight}px`);
+    set();
+    new ResizeObserver(set).observe(el);
+  }
+
   // Persistent low-opacity key legend for keyboard mode — mirrors the
   // touch-hint pattern above but stays up (no auto-fade) since keys mode has
   // more bindings to remember than touch mode.
@@ -263,6 +274,7 @@ export class UI {
     el.id = 'control-hud';
     el.innerHTML = t('hud').map(s => `<span>${s}</span>`).join('');
     document.body.appendChild(el);
+    this._trackHudHeight(el);
     requestAnimationFrame(() => el.classList.add('visible'));
   }
 
@@ -273,6 +285,7 @@ export class UI {
     el.id = 'hand-legend';
     el.innerHTML = t('handLegend').map(s => `<span>${s}</span>`).join('');
     document.body.appendChild(el);
+    this._trackHudHeight(el);
     requestAnimationFrame(() => el.classList.add('visible'));
   }
 

@@ -121,7 +121,12 @@
   <a class="back" href="index.html?lang=en">← back to&nbsp;CONSPACE ROOMS</a>
 </section>
 
+<footer id="site-footer"></footer>
 <script src="src/doc-lang.js"></script>
+<script type="module">
+  import { renderFooter } from './src/footer.js';
+  renderFooter(document.documentElement.lang);
+</script>
 </body>
 </html>
 <!-- Je suis le spectre d'une rose que tu portais hier au bal. -->

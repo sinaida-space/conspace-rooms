@@ -268,4 +268,33 @@ body::after {
   text-align: center;
 }
 
+/* Footer: product · navigate · more. Bright green only on the name and hover. */
+.site-footer {
+  display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 2.5rem;
+  width: 100%; max-width: 60rem; margin: 4em auto 0;
+  padding: 1.6em 0 calc(1.6em + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(63, 138, 90, 0.45);
+  font-size: 0.85rem; color: var(--dim); text-shadow: none;
+}
+.site-footer h2 {
+  font-size: 1em; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--fg); margin: 0 0 0.8em;
+}
+.footer-col { display: flex; flex-direction: column; align-items: flex-start; gap: 0.45em; }
+.footer-col p { margin: 0; }
+.site-footer a {
+  color: var(--dim); text-decoration: none;
+  border-bottom: 1px solid rgba(63, 138, 90, 0.5);
+}
+.site-footer a:hover, .site-footer a:focus-visible { color: var(--fg); border-bottom-color: var(--accent); }
+.site-footer .footer-brand {
+  color: var(--accent); border: 0; font-size: 1.15em; letter-spacing: 0.08em;
+  text-shadow: var(--glow); margin-bottom: 0.3em;
+}
+.footer-version { opacity: 0.7; }
+@media (max-width: 42rem) { .site-footer { grid-template-columns: 1fr; gap: 1.8rem; } }
+#welcome .site-footer { max-width: 64ch; }
+#welcome .site-footer p { margin: 0; }
+body.doc .site-footer { max-width: none; }
+
 /* Je suis le spectre d'une rose que tu portais hier au bal. */

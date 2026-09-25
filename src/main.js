@@ -170,6 +170,7 @@ async function boot() {
     } else {
       activeMode = 'keys';
       if (player) player.mode = 'keys';
+      document.getElementById('hand-legend')?.remove(); // one legend at a time, never stacked
       ui.showControlHud();
       ui.showToast(t('camKeys'));
     }
