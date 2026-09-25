@@ -3,6 +3,7 @@ import { Quality } from './quality.js';
 import { InputRouter } from './input.js';
 import { UI, detectCapabilities } from './ui.js';
 import { t, applyStatic } from './i18n.js';
+import { zoneWeights, mixZone } from './zones.js';
 
 const canvas = document.getElementById('gl');
 const caps = detectCapabilities();
@@ -88,7 +89,16 @@ async function boot() {
       player.update(dt);
       world.update(player.pos.x, player.pos.y);
       atmo = atmo ?? window.__app.atmo;
-      if (atmo) atmo.update(dt, t, camera.position);
+      // "Путь души": fog and clear colour follow the zone the visitor stands in
+      const zone = zoneWeights(camera.position.x, camera.position.z);
+      window.__app.zone = zone;
+      if (scene.fog?.isFogExp2) {
+        mixZone(scene.fog.color, zone, 0x0e1f14, 0x1f150b, 0xa9b0a2);
+        const base = quality.tier === 0 ? 1.5 : 1;
+        scene.fog.density = base * (0.03 * zone.fear + 0.034 * zone.memory + 0.038 * zone.accept);
+        renderer.setClearColor(scene.fog.color);
+      }
+      if (atmo) atmo.update(dt, t, camera.position, zone);
       if (artworks) { artworks.sync(); artworks.update(dt); }
       speed = player.vel.length();
       if (audio) {
