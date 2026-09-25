@@ -255,12 +255,18 @@ export class SoulPath {
     this._inKitchen = false;
     this._soulIdx = [0, 0, 0];            // next question per soul
     // guide: five presses of the M key (any layout: physical key) toggles it
-    this.guide = null; this._mTimes = [];
+    this.guide = null; this._mTimes = []; this._fiveTimes = [];
     addEventListener('keydown', e => {
       if (e.code !== 'KeyM' || e.repeat) return;
       const now = performance.now();
       this._mTimes = this._mTimes.filter(tm => now - tm < 2500).concat(now);
       if (this._mTimes.length >= 5) { this._mTimes = []; this._toggleGuide(); }
+    });
+    addEventListener('keydown', e => {
+      if ((e.code !== 'Digit5' && e.code !== 'Numpad5') || e.repeat) return;
+      const now = performance.now();
+      this._fiveTimes = this._fiveTimes.filter(tm => now - tm < 3000).concat(now);
+      if (this._fiveTimes.length >= 5) { this._fiveTimes = []; this._jumpToRoom(); }
     });
 
     // doors take part in collision: wrap World's wall query once
@@ -661,6 +667,32 @@ export class SoulPath {
         this._askSoul(r.cat, null);
       }
     }
+  }
+
+  // Straight into the nearest grandmother's room, the world switched to the
+  // red rooms on the way.
+  _jumpToRoom() {
+    const P = this.player;
+    const cx = Math.floor(P.pos.x / (CHUNK * CELL)), cz = Math.floor(P.pos.y / (CHUNK * CELL));
+    let best = null, bd = Infinity;
+    for (let dz = -12; dz <= 12; dz++) for (let dx = -12; dx <= 12; dx++) {
+      const k = kitchenPlan(cx + dx, cz + dz);
+      if (!k) continue;
+      const d = Math.hypot(k.x - P.pos.x, k.z - P.pos.y);
+      if (d < bd) { bd = d; best = k; }
+    }
+    if (!best) return;
+    this.stage.go(1);
+    // stand a step from the table, looking at it
+    const sx = best.x - 1.4, sz = best.z - 1.4;
+    const ok = !solidAtGlobal(cellOf(sx), cellOf(sz));
+    P.pos.set(ok ? sx : best.x, ok ? sz : best.z - 1.2);
+    P.vel.set(0, 0);
+    P.yaw = Math.atan2(-(best.x - P.pos.x), -(best.z - P.pos.y));
+    P.pitch = -0.25;
+    this._prevPos = { x: P.pos.x, z: P.pos.y };      // not a walk through anything
+    this.world.update(P.pos.x, P.pos.y);
+    this.post?.burst(1.4);
   }
 
   // ── guide ──────────────────────────────────────────────────────────────

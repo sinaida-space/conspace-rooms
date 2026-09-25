@@ -27,6 +27,41 @@ function canvasTex(w, h, draw, repeat) {
   if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(...repeat); }
   return t;
 }
+// Years of use on any surface: fine scratches in every direction, a few deep
+// gouges, dents, pale rubbed patches where hands and elbows went, and rings
+// left by wet cups. Drawn over a finished texture.
+function wear(g, w, h, { rings = 4, pale = 'rgba(255,235,200,', dark = 'rgba(20,10,4,' } = {}) {
+  g.lineCap = 'round';
+  for (let i = 0; i < 260; i++) {                       // fine scratches
+    const x = Math.random() * w, y = Math.random() * h, a = Math.random() * 6.28, l = 4 + Math.random() * 40;
+    g.strokeStyle = (Math.random() < 0.7 ? pale : dark) + (0.08 + Math.random() * 0.18) + ')';
+    g.lineWidth = 0.4 + Math.random() * 0.8;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  for (let i = 0; i < 6; i++) {                         // deep gouges: dark line with a pale lip
+    let x = Math.random() * w, y = Math.random() * h; const a = Math.random() * 6.28, l = 20 + Math.random() * 60;
+    for (const [c, lw, o] of [[dark + '0.55)', 2.2, 0], [pale + '0.35)', 1, 1.2]]) {
+      g.strokeStyle = c; g.lineWidth = lw; g.beginPath(); g.moveTo(x + o, y + o);
+      g.lineTo(x + Math.cos(a) * l + o + (Math.random() - 0.5) * 4, y + Math.sin(a) * l + o + (Math.random() - 0.5) * 4); g.stroke();
+    }
+  }
+  for (let i = 0; i < 14; i++) {                        // dents
+    const x = Math.random() * w, y = Math.random() * h, r = 1.5 + Math.random() * 3;
+    const d = g.createRadialGradient(x - 0.5, y - 0.5, 0, x, y, r); d.addColorStop(0, dark + '0.5)'); d.addColorStop(1, dark + '0)');
+    g.fillStyle = d; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
+  for (let i = 0; i < 5; i++) {                         // rubbed pale patches
+    const x = Math.random() * w, y = Math.random() * h, r = 20 + Math.random() * 50;
+    const d = g.createRadialGradient(x, y, 0, x, y, r); d.addColorStop(0, pale + '0.12)'); d.addColorStop(1, pale + '0)');
+    g.fillStyle = d; g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  for (let i = 0; i < rings; i++) {                     // cup rings
+    const x = Math.random() * w, y = Math.random() * h, r = 14 + Math.random() * 10;
+    g.strokeStyle = dark + (0.18 + Math.random() * 0.15) + ')'; g.lineWidth = 1.5 + Math.random() * 1.5;
+    g.beginPath(); g.arc(x, y, r, Math.random() * 1.5, 6.28 - Math.random() * 1.2); g.stroke();
+  }
+}
+
 function textures() {
   if (TEX) return TEX;
   TEX = {
@@ -41,6 +76,11 @@ function textures() {
         for (let x = 0; x <= w; x += 8) g.lineTo(x, y0 + Math.sin(x * 0.03 + ph) * amp);
         g.stroke();
       }
+      wear(g, w, h, { rings: 3 });
+      // the edges are worn pale where they were handled most
+      const e = g.createLinearGradient(0, 0, 0, h); e.addColorStop(0, 'rgba(210,170,120,0.18)'); e.addColorStop(0.06, 'rgba(210,170,120,0)');
+      e.addColorStop(0.94, 'rgba(210,170,120,0)'); e.addColorStop(1, 'rgba(210,170,120,0.18)');
+      g.fillStyle = e; g.fillRect(0, 0, w, h);
     }),
     // oilcloth: teal and cream checks, worn pale where hands rest, fine cracks
     cloth: canvasTex(512, 512, (g, w, h) => {
@@ -48,15 +88,21 @@ function textures() {
       for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
         g.fillStyle = (i + j) % 2 ? '#f1eadb' : '#7fa89a'; g.fillRect(i * s, j * s, s, s);
       }
-      const wear = g.createRadialGradient(w / 2, h / 2, 20, w / 2, h / 2, w * 0.6);
-      wear.addColorStop(0, 'rgba(255,250,235,0.18)'); wear.addColorStop(1, 'rgba(0,0,0,0.12)');
-      g.fillStyle = wear; g.fillRect(0, 0, w, h);
+      const rub = g.createRadialGradient(w / 2, h / 2, 20, w / 2, h / 2, w * 0.6);
+      rub.addColorStop(0, 'rgba(255,250,235,0.18)'); rub.addColorStop(1, 'rgba(0,0,0,0.12)');
+      g.fillStyle = rub; g.fillRect(0, 0, w, h);
       g.strokeStyle = 'rgba(40,30,20,0.25)'; g.lineWidth = 0.7;
       for (let k = 0; k < 40; k++) {
         let x = Math.random() * w, y = Math.random() * h;
         g.beginPath(); g.moveTo(x, y);
         for (let q = 0; q < 6; q++) { x += (Math.random() - 0.5) * 30; y += (Math.random() - 0.5) * 30; g.lineTo(x, y); }
         g.stroke();
+      }
+      wear(g, w, h, { rings: 6, pale: 'rgba(255,255,245,', dark: 'rgba(60,40,20,' });
+      for (let i = 0; i < 5; i++) {                       // knife cuts through the oilcloth to the white backing
+        const x = Math.random() * w, y = Math.random() * h, a = Math.random() * 6.28, l = 10 + Math.random() * 30;
+        g.strokeStyle = 'rgba(245,240,225,0.8)'; g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
       }
     }),
     // the television picture: a red forest over a glowing field, scanlines
@@ -93,6 +139,12 @@ function textures() {
         for (let r = 16; r > 2; r -= 3) { g.fillStyle = r % 2 ? '#a3202a' : '#d24a4f'; g.beginPath(); g.arc(x + (Math.random() - 0.5) * 2, y, r, 0, 7); g.fill(); }
       }
       for (let i = 0; i < 6; i++) { g.fillStyle = '#6d6a64'; const x = Math.random() * w, y = Math.random() < 0.6 ? Math.random() * h * 0.1 : h - Math.random() * 12; g.beginPath(); g.ellipse(x, y, 3 + Math.random() * 6, 2 + Math.random() * 3, 0, 0, 7); g.fill(); }
+    }),
+    // dark bakelite-ish plastic: dust settled in the fine texture, scratches
+    plastic: canvasTex(256, 256, (g, w, h) => {
+      g.fillStyle = '#1a1714'; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(200,190,170,${Math.random() * 0.06})`; g.fillRect(Math.random() * w, Math.random() * h, 1, 1); }
+      wear(g, w, h, { rings: 0, pale: 'rgba(200,190,170,', dark: 'rgba(0,0,0,' });
     }),
     // speaker grille on the television's side panel
     grille: canvasTex(64, 128, (g, w, h) => {
@@ -136,7 +188,7 @@ export function buildKitchen(group, x, z) {
   const enamelRed = std({ color: 0x9a1b1b, roughness: 0.3 });
   const brass = std({ color: 0x6b4a22, roughness: 0.35, metalness: 0.8 });
   const wax = std({ color: 0xe6dac0, roughness: 0.6 });
-  const plastic = std({ color: 0x151310, roughness: 0.45 });
+  const plastic = std({ map: T.plastic, roughness: 0.5 });
   const fabric = std({ color: 0xc08a3e, roughness: 0.9, side: THREE.DoubleSide, emissive: 0x5a2a0c, emissiveIntensity: 0.25 });
 
   const flames = [], screens = [];
