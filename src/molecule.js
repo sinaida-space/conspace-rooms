@@ -5,7 +5,8 @@
 // between them along the bonds: an arc crawls from bulb to bulb, every bulb on
 // the way flares, and the room hums like an old appliance switching on.
 // A third click lights the whole molecule at once and opens a small window
-// with a few lines about cortisol, which tears itself away after five seconds.
+// with a few lines about cortisol, pinned to the star by a thin leader line.
+// Any movement or action tears it away.
 // Runs only while the welcome screen is visible.
 import { t } from './i18n.js';
 
@@ -159,24 +160,53 @@ export function startMolecule(host) {
     }
     for (const b of bulbs) { b.target = 1; b.until = now + 5000 + depth.get(b) * 70; }
     zap(1.6);
-    showCard();
+    showCard(from);
   }
 
-  // The info window: glitches in, holds five seconds, tears itself away.
-  function showCard() {
-    card?.remove();
+  // The info window: glitches in beside the star it came from, joined to it
+  // by a leader line (drawn in draw()), and tears itself away at the first
+  // sign of the visitor doing anything.
+  let cardStar = null;
+  function showCard(star) {
+    hideCard(true);
     card = document.createElement('aside');
     card.className = 'cortisol-card';
     card.setAttribute('role', 'note');
     card.innerHTML = `<p class="cc-bar">CORTISOL.TXT</p><h3>${t('cortTitle')}</h3>`
       + t('cortLines').map(l => `<p>${l}</p>`).join('');
-    // beside the text column if there is room, otherwise along the bottom
-    const col = host.querySelector('.welcome-col')?.getBoundingClientRect();
-    if (!col || innerWidth - col.right < 370) card.classList.add('cc-bottom');
     host.appendChild(card);
+    cardStar = star;
+    // right of the star if it fits, else left; always inside the viewport
+    const m = 24, gap = 96, cw = card.offsetWidth, ch = card.offsetHeight;
+    let x = star.x + gap;
+    if (x + cw > innerWidth - m) x = star.x - gap - cw;
+    x = Math.max(m, Math.min(innerWidth - m - cw, x));
+    const y = Math.max(m, Math.min(innerHeight - m - ch, star.y - ch * 0.35));
+    card.style.left = x + 'px'; card.style.top = y + 'px';
+    // dismiss on any action, armed after a beat so the opening click doesn't count
+    let moved = 0;
+    const onMove = e => { moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0); if (moved > 40) hideCard(); };
+    const onAct = () => hideCard();
+    card._off = () => {
+      removeEventListener('mousemove', onMove);
+      for (const ev of ['wheel', 'keydown', 'pointerdown', 'touchstart']) removeEventListener(ev, onAct);
+      host.removeEventListener('scroll', onAct);
+    };
+    setTimeout(() => {
+      if (!card) return;
+      addEventListener('mousemove', onMove);
+      for (const ev of ['wheel', 'keydown', 'pointerdown', 'touchstart']) addEventListener(ev, onAct, { passive: true });
+      host.addEventListener('scroll', onAct, { passive: true });
+    }, 700);
+  }
+  function hideCard(instant) {
+    if (!card) return;
     const mine = card;
-    setTimeout(() => mine.classList.add('cc-out'), 5000);
-    setTimeout(() => { mine.remove(); if (card === mine) card = null; }, 5700);
+    card = null; cardStar = null;
+    mine._off?.();
+    if (instant) { mine.remove(); return; }
+    mine.classList.add('cc-out');
+    setTimeout(() => mine.remove(), 650);
   }
 
   // random glow: every so often a bulb decides to light up for a while
@@ -233,6 +263,16 @@ export function startMolecule(host) {
       ctx.restore();
       if (p < 0.05) arc.route[0].flare = 1;
     }
+    // leader line from the star to its info window
+    if (card && cardStar) {
+      const rc = card.getBoundingClientRect();
+      const tx = cardStar.x < rc.left ? rc.left : rc.right, ty = Math.min(rc.bottom - 12, Math.max(rc.top + 12, cardStar.y));
+      ctx.save();
+      ctx.strokeStyle = 'rgba(57,255,106,0.85)'; ctx.lineWidth = 1.2; ctx.setLineDash([5, 4]); ctx.lineDashOffset = -now / 60;
+      const elbow = cardStar.x + (tx - cardStar.x) * 0.45;
+      ctx.beginPath(); ctx.moveTo(cardStar.x, cardStar.y); ctx.lineTo(elbow, cardStar.y); ctx.lineTo(elbow, ty); ctx.lineTo(tx, ty); ctx.stroke();
+      ctx.restore();
+    }
     // bulbs as stars: a tiny dim point when dark; a bright core, soft glow
     // and a faint twinkle when lit; a thin four-point sparkle on a flare
     for (const b of bulbs) {
@@ -263,7 +303,7 @@ export function startMolecule(host) {
     removeEventListener('resize', layout);
     host.removeEventListener('click', onClick);
     canvas.remove();
-    card?.remove();
+    hideCard(true);
     audio?.close?.();
   }
 
