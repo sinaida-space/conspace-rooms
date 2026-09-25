@@ -1,3 +1,4 @@
+import { startAmbience } from './ambience.js';
 // Generative audio, zero files: low drone bed + crackle, motion-reactive
 // filter, soft chime on demand.
 // Init-only — build only after a user gesture (start()), not auto-started.
@@ -173,15 +174,49 @@ export class AudioEngine {
     const body = ctx.createGain(); body.gain.value = 0.65;
     trem.connect(tremG); tremG.connect(body.gain);
     o1.connect(body); o2.connect(o2g); o2g.connect(body);
-    body.connect(gain); gain.connect(lp); lp.connect(panner); panner.connect(this.master);
+    if (!this.voiceBus) { this.voiceBus = ctx.createGain(); this.voiceBus.connect(this.master); }
+    body.connect(gain); gain.connect(lp); lp.connect(panner); panner.connect(this.voiceBus);
     [o1, o2, trem].forEach(o => o.start());
     return { oscs: [o1, o2, trem], gain, lp, panner, out: panner };
+  }
+
+  // A whisper: breath-like noise swelling and falling, for the souls.
+  whisper() {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime, len = ctx.sampleRate * 3;
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const s = ctx.createBufferSource(); s.buffer = buf;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(900, t); bp.frequency.linearRampToValueAtTime(1700, t + 2.5); bp.Q.value = 4;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.9); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.8);
+    s.connect(bp); bp.connect(g); g.connect(this.master); s.start(t); s.stop(t + 3);
+    this.chime();
+  }
+
+  // Looking closely at a work: its own sound world rises, the corridor's
+  // drone and the other works' notes sink under it.
+  inspect(index) {
+    if (!this.ctx) return;
+    this.endInspect();
+    const now = this.ctx.currentTime;
+    this.droneGain?.gain.setTargetAtTime(0.004, now, 0.5);
+    this.voiceBus?.gain.setTargetAtTime(0.15, now, 0.5);
+    this._stopAmbience = startAmbience(this.ctx, this.master, index);
+  }
+  endInspect() {
+    if (!this._stopAmbience) return;
+    this._stopAmbience();
+    this._stopAmbience = null;
+    const now = this.ctx.currentTime;
+    this.droneGain?.gain.setTargetAtTime(this._hushed ? 0 : (this._zoneLevel ?? 0.05), now, 0.8);
+    this.voiceBus?.gain.setTargetAtTime(1, now, 0.8);
   }
 
   // The bed follows the zone: harsh in fear, softer in memory, almost gone in
   // acceptance. hush() silences it entirely (grandmother's kitchen).
   setZone(zone) {
-    if (!this.ctx || !this.droneGain) return;
+    if (!this.ctx || !this.droneGain || this._stopAmbience) return; // inspect owns the bed meanwhile
     this._zoneLevel = 0.05 * (zone.fear + 0.55 * zone.memory + 0.18 * zone.accept);
     const target = this._hushed ? 0 : this._zoneLevel;
     this.droneGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.6);

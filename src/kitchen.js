@@ -252,35 +252,6 @@ export function buildKitchen(group, x, z) {
   };
 }
 
-// ── candles on the floor leading to the room ────────────────────────────────
-// points: [{ x, z }] world positions along the corridors (soulpath.js finds
-// them). Each is a short candle on a saucer with a halo and a warm pool of
-// light on the carpet: in the dark memory zone they read from far away.
-export function buildCandleTrail(group, points) {
-  const T = textures();
-  const wax = new THREE.MeshStandardMaterial({ color: 0xe6dac0, roughness: 0.6 });
-  const saucer = new THREE.MeshStandardMaterial({ color: 0xd9d2c0, roughness: 0.3 });
-  const flames = [];
-  for (const p of points) {
-    const h = 0.16 + Math.random() * 0.12;
-    const s = new THREE.Mesh(lathe([[0, 0], [0.06, 0.002], [0.065, 0.012], [0, 0.008]], 16), saucer);
-    s.position.set(p.x, 0.01, p.z); group.add(s);
-    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.02, h, 10), wax);
-    c.position.set(p.x, 0.018 + h / 2, p.z); group.add(c);
-    const fy = 0.018 + h + 0.02;
-    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.013, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff0c0, fog: false }));
-    flame.position.set(p.x, fy, p.z); flame.scale.y = 2; group.add(flame);
-    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: T.warm, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-    halo.scale.set(0.45, 0.45, 1); halo.position.set(p.x, fy, p.z); group.add(halo);
-    const pool = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), new THREE.MeshBasicMaterial({
-      map: T.warm, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.28, fog: true,
-    }));
-    pool.rotation.x = -Math.PI / 2; pool.position.set(p.x, 0.015, p.z); group.add(pool);
-    flames.push({ flame, halo });
-  }
-  return flames;
-}
-
 // ── scattered things along the walls ────────────────────────────────────────
 // items: [{ type: 'candle' | 'teapot' | 'cup', x, z, rot }]. One InstancedMesh
 // per part per chunk, so a hundred things cost a handful of draw calls.
@@ -291,10 +262,10 @@ function shared() {
   const enamel = new THREE.MeshBasicMaterial({ color: 0xcfc8b6, fog: true });
   SHARED = {
     saucer: [lathe([[0, 0], [0.06, 0.002], [0.065, 0.012], [0, 0.008]], 16), enamel],
-    wax: [new THREE.CylinderGeometry(0.018, 0.02, 0.2, 10), new THREE.MeshBasicMaterial({ color: 0xe6dac0, fog: true })],
-    flame: [new THREE.SphereGeometry(0.013, 8, 6).scale(1, 2, 1), new THREE.MeshBasicMaterial({ color: 0xfff0c0, fog: false })],
+    wax: [new THREE.CylinderGeometry(0.018, 0.02, 0.2, 10), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true })],
+    flame: [new THREE.SphereGeometry(0.016, 8, 6).scale(1, 2.2, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false })],
     pool: [new THREE.PlaneGeometry(1.3, 1.3).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({
-      map: T.warm, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.3, fog: true })],
+      map: T.warm, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.4, fog: true })],
     pot: [lathe([[0, 0], [0.055, 0], [0.085, 0.015], [0.1, 0.05], [0.098, 0.085], [0.08, 0.115], [0.05, 0.13], [0.042, 0.135], [0, 0.135]]), enamel],
     potLid: [lathe([[0, 0], [0.042, 0], [0.03, 0.02], [0.012, 0.025], [0.014, 0.04], [0, 0.045]], 20), enamel],
     spout: [new THREE.CylinderGeometry(0.01, 0.018, 0.12, 8).rotateZ(-0.9).translate(0.12, 0.08, 0), enamel],
@@ -326,10 +297,15 @@ export function buildScatter(group, items) {
     q.setFromAxisAngle(up, it.rot);
     for (const [name, y] of parts[it.type]) {
       m.compose(new THREE.Vector3(it.x, y, it.z), q, one);
+      if (name === 'flame' || name === 'pool') meshes[name].setColorAt(idx[name], it.flame);
+      if (name === 'wax') meshes[name].setColorAt(idx[name], it.wax);
       meshes[name].setMatrixAt(idx[name]++, m);
     }
   }
-  for (const name in meshes) meshes[name].instanceMatrix.needsUpdate = true;
+  for (const name in meshes) {
+    meshes[name].instanceMatrix.needsUpdate = true;
+    if (meshes[name].instanceColor) meshes[name].instanceColor.needsUpdate = true;
+  }
   return {
     count: items.length,
     dispose() { for (const name in meshes) { group.remove(meshes[name]); meshes[name].dispose(); } }, // frees instance buffers only

@@ -11,7 +11,8 @@ import { CELL } from './world.js';
 
 const EYE = 1.65;          // eye height (m)
 const RADIUS = 0.3;        // capsule radius (m)
-const MAX_SPEED = 2.2;     // m/s
+const MAX_SPEED = 3.2;     // m/s, walking
+const RUN_SPEED = 6.0;     // m/s, Shift held (or a long touch-walk)
 const ACCEL = 9;           // approach rate toward target velocity (1/s)
 const YAW_RATE = 1.8;      // rad/s while turning
 const DEADZONE = 0.15;     // touch-turn deadzone
@@ -149,7 +150,12 @@ export class Player {
     let tz = fz * walk + rz * strafe;
     const tl = Math.hypot(tx, tz);
     if (tl > 1) { tx /= tl; tz /= tl; }
-    const target = new THREE.Vector2(tx * MAX_SPEED, tz * MAX_SPEED);
+    // run: Shift on the keyboard; on touch, keep walking for 1.5 s and it
+    // speeds up by itself; both hand fists held long do the same
+    this._walkT = walk > 0 ? (this._walkT || 0) + dt : 0;
+    const running = this.keys.ShiftLeft || this.keys.ShiftRight || ((this.mode === 'light' || this.hand.present) && this._walkT > 1.5);
+    const top = running ? RUN_SPEED : MAX_SPEED;
+    const target = new THREE.Vector2(tx * top, tz * top);
 
     // soft accel toward target velocity
     const k = Math.min(1, ACCEL * dt);

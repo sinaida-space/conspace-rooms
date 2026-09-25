@@ -365,6 +365,22 @@ body::after {
 .gesture-note .gesture-privacy { margin: 0.9em 0 0; font-size: 0.92em; }
 #mode-select { gap: 0.9em; margin-bottom: 2em; }
 
+/* a soul's question: typed across the lower screen, then gone */
+#soul-q {
+  position: fixed; left: 50%; bottom: 18vh; transform: translateX(-50%); z-index: 9;
+  width: min(760px, calc(100vw - 32px)); text-align: center; pointer-events: none;
+  opacity: 0; transition: opacity 1s ease;
+}
+#soul-q.visible { opacity: 1; }
+#soul-q .sq-label { font-size: 0.75em; letter-spacing: 0.2em; color: var(--dim); margin-bottom: 0.8em; }
+#soul-q .sq-text {
+  font-size: clamp(1.1rem, 2.6vw, 1.7rem); line-height: 1.5; color: var(--fg);
+  text-shadow: 0 0 8px rgba(57, 255, 106, 0.6), 0 0 24px rgba(57, 255, 106, 0.25);
+  background: rgba(1, 8, 5, 0.55); padding: 0.4em 0.6em; text-wrap: balance;
+}
+
+body.inspecting #control-hud, body.inspecting #hand-legend, body.inspecting #touch-hint { opacity: 0 !important; }
+
 /* in-page confirm dialog */
 .dialog {
   position: fixed; inset: 0; z-index: 50; background: rgba(1, 8, 5, 0.7);

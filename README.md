@@ -96,14 +96,21 @@ shaders in `src/materials.js`):
   walls, parquet, warm lampshades.
 - **Acceptance** (175 m and on): pale walls dissolving into lace and light.
 
-`src/soulpath.js` adds the responsive layer: red scratches on the walls lead to
-the nearest SOULS piece not yet seen, chalk writings sit at a child's height and
-change behind you when you turn around, some crossings have doors that lift
-after three seconds of standing still, and every nearby work hums its own note
-(`src/audio.js`). `src/dust.js` hangs dust in the lamp beams. Nothing is stored.
+`src/soulpath.js` adds the responsive layer. The world stays in one stage and
+moves on only through a portal: a scratched baroque frame with a shimmering
+veil. Candles along the walls are the map: in the hospital corridors their
+flames redden toward a portal into the red rooms; in the red rooms the flame
+turns yellow toward the next portal and the wax itself reddens toward
+grandmother's room. In that room three souls drift (someone close, a child, a
+grown-up); walk into one and its question types itself on the television.
+Terminal printouts on the walls ask questions of their own, chalk writings sit
+at a child's height, red scratches lead to unseen works, some doors lift after
+three seconds of stillness. Every work hums its own note, and when you look
+closely at one (E) it opens its own sound world (`src/ambience.js`: rain,
+wind, fire, a clock, a music box, a heart monitor…). Shift runs.
+`src/dust.js` hangs dust in the lamp beams. Nothing is stored.
 
-Secrets: walk backwards for 30 s; look for grandmother's kitchen in the memory
-zone (follow the candles on the floor); stand still for a minute in acceptance.
+Secrets: walk backwards for 30 s; stand still for a minute in the last stage.
 
 ## Languages
 

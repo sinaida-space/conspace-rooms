@@ -3,7 +3,7 @@ import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, 
 import { zoneWeights, ORIGIN, ZONE } from './zones.js';
 import { t } from './i18n.js';
 import { EYE_HEIGHT } from './player.js';
-import { buildKitchen, buildCandleTrail, createKitchenRig, buildScatter } from './kitchen.js';
+import { buildKitchen, createKitchenRig, buildScatter } from './kitchen.js';
 import { baroqueFrame } from './frames.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
@@ -21,6 +21,12 @@ import { baroqueFrame } from './frames.js';
 //   portals         shimmering doorways further out; walking through one moves
 //                   the whole world to the next stage (fear → memory → light).
 //                   Nothing else changes the stage.
+//   souls           in grandmother's room three lights drift: the soul of
+//                   someone close (gold), of a child (pale blue), of a grown-up
+//                   (deep red). Walk into one and it scatters; its question
+//                   types itself on the television and across the screen.
+//   posters         old terminal printouts pinned to corridor walls, each
+//                   asking one question
 //   secrets         walk backwards long enough and you shrink to a child's
 //                   height; grandmother's kitchen hides in the memory zone; in
 //                   acceptance, a minute of stillness hangs a nineteenth frame
@@ -47,6 +53,8 @@ const SEED_DOOR = CONSPACE_SEED ^ 0x0d00;
 const SEED_KITCHEN = CONSPACE_SEED ^ 0x4b17;
 const SEED_PORTAL = CONSPACE_SEED ^ 0x9047;
 const SEED_SCATTER = CONSPACE_SEED ^ 0x5ca7;
+const SEED_POSTER = CONSPACE_SEED ^ 0x7057;
+const SOUL_COLORS = [0xffd27a, 0xbfe6ff, 0xd0202a]; // someone close · a child · a grown-up
 
 // Portals of one chunk as a pure function, so any chunk can ask where the
 // nearest portal is without that chunk being built.
@@ -63,6 +71,21 @@ function portalPlan(cx, cz) {
     out.push({ edge, band, target, x: mx, z: mz });
   }
   return out;
+}
+
+// Grandmother's room of one chunk (or null), as a pure function: a big enough
+// room, one chunk in seven, deep in the memory ring.
+function kitchenPlan(cx, cz) {
+  const room = chunkRooms(cx, cz).find(r => r.x1 - r.x0 >= 4 && r.y1 - r.y0 >= 4);
+  if (!room || hash2i(SEED_KITCHEN, cx, cz) % 7 !== 0) return null;
+  const x = (cx * CHUNK + (room.x0 + room.x1 + 1) / 2) * CELL;
+  const z = (cz * CHUNK + (room.y0 + room.y1 + 1) / 2) * CELL;
+  if (zoneWeights(x, z).memory <= 0.8) return null;
+  return {
+    x, z,
+    minX: (cx * CHUNK + room.x0) * CELL, maxX: (cx * CHUNK + room.x1 + 1) * CELL,
+    minZ: (cz * CHUNK + room.y0) * CELL, maxZ: (cz * CHUNK + room.y1 + 1) * CELL,
+  };
 }
 
 // ── small helpers ───────────────────────────────────────────────────────────
@@ -169,6 +192,54 @@ function scratchTexture() {
   return tex;
 }
 
+let GLOW = null;
+function glowTexture() {
+  if (GLOW) return GLOW;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.2, 'rgba(255,255,255,0.6)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+  GLOW = new THREE.CanvasTexture(c);
+  return GLOW;
+}
+
+// A question printed like an old terminal screen dump and pinned to the wall:
+// phosphor text on black, a double-line box, a file path header, a prompt,
+// tape on the corners, the print faded and scuffed.
+const PHOSPHOR = ['#39ff6a', '#ffb347', '#dfe8d8'];
+function posterTexture(text, n, stage) {
+  const W = 480, H = 640, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), ink = PHOSPHOR[stage] || PHOSPHOR[0];
+  g.fillStyle = '#040806'; g.fillRect(0, 0, W, H);
+  g.fillStyle = ink; g.strokeStyle = ink; g.shadowColor = ink; g.shadowBlur = 6;
+  g.lineWidth = 3; g.strokeRect(22, 22, W - 44, H - 44);
+  g.lineWidth = 1.5; g.strokeRect(32, 32, W - 64, H - 64);
+  g.font = '18px "Departure Mono", monospace';
+  g.fillText(`C:\\CONSPACE\\SOULS\\Q_${String(n).padStart(2, '0')}.TXT`, 48, 70);
+  g.fillRect(48, 84, W - 96, 2);
+  g.font = '30px "Departure Mono", monospace';
+  const words = text.split(' '); let line = '', y = 150;
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (g.measureText(test).width > W - 110 && line) { g.fillText(line, 48, y); line = w; y += 44; }
+    else line = test;
+  }
+  g.fillText(line, 48, y);
+  g.font = '18px "Departure Mono", monospace';
+  g.fillText('> _', 48, H - 70);
+  g.fillText('[ ENTER ]', W - 170, H - 70);
+  g.shadowBlur = 0;
+  for (let yy = 0; yy < H; yy += 3) { g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, yy, W, 1); } // scanlines of the print
+  for (let i = 0; i < 1400; i++) { g.fillStyle = `rgba(255,255,255,${Math.random() * 0.05})`; g.fillRect(Math.random() * W, Math.random() * H, 2, 2); }
+  const fade = g.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.75);
+  fade.addColorStop(0, 'rgba(0,0,0,0)'); fade.addColorStop(1, 'rgba(20,14,6,0.55)');
+  g.fillStyle = fade; g.fillRect(0, 0, W, H);
+  g.fillStyle = 'rgba(214,200,160,0.75)';             // tape on the corners
+  for (const [tx, ty, r] of [[30, 12, -0.4], [W - 30, 12, 0.4]]) { g.save(); g.translate(tx, ty); g.rotate(r); g.fillRect(-36, -10, 72, 20); g.restore(); }
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  return tex;
+}
+
 // ── SoulPath ────────────────────────────────────────────────────────────────
 export class SoulPath {
   constructor({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage }) {
@@ -202,6 +273,7 @@ export class SoulPath {
     this._backT = 0; this._fwdT = 0; this.child = false;
     this._stillT = 0; this.nineteenth = null;
     this._inKitchen = false;
+    this._soulIdx = [0, 0, 0];            // next question per soul
 
     // doors take part in collision: wrap World's wall query once
     const orig = world.wallSegmentsNear.bind(world);
@@ -269,6 +341,26 @@ export class SoulPath {
       usedEdges.add(pp.edge);
     }
 
+    // ── posters: one terminal printout on some chunks, beside (never over) a work
+    const rpo = mulberry32(hash2i(SEED_POSTER, cx, cz));
+    stuff.posters = [];
+    if (rpo() < 0.45) {
+      const long = this.world.getWallSlots(cx, cz).filter(sl => sl.length >= 4);
+      if (long.length) {
+        const sl = long[Math.floor(rpo() * long.length)];
+        const off = (rpo() < 0.5 ? -1 : 1) * (sl.length * CELL / 2 - 0.7);
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 1.04), new THREE.MeshBasicMaterial({ fog: true }));
+        mesh.position.set(
+          sl.position.x + sl.normal.x * 0.013 + (sl.normal.x === 0 ? off : 0), 1.6,
+          sl.position.z + sl.normal.z * 0.013 + (sl.normal.z === 0 ? off : 0));
+        mesh.rotation.set(0, Math.atan2(sl.normal.x, sl.normal.z), (rpo() - 0.5) * 0.05); // pinned a little crooked
+        group.add(mesh);
+        const p = { mesh, q: Math.floor(rpo() * 1000) };
+        this._printPoster(p);
+        stuff.posters.push(p);
+      }
+    }
+
     // ── scattered things: candles, teapots, cups. The closer the portal into
     // the next stage, the more of them, so they thicken into a trail.
     stuff.scatter = this._buildScatter(group, cx, cz);
@@ -286,26 +378,79 @@ export class SoulPath {
       }
     }
 
-    // ── grandmother's kitchen: rare, only deep in the memory zone
-    const rooms = chunkRooms(cx, cz);
-    const room = rooms.find(r => r.x1 - r.x0 >= 4 && r.y1 - r.y0 >= 4);
-    if (room && hash2i(SEED_KITCHEN, cx, cz) % 7 === 0) {
-      const x = (cx * CHUNK + (room.x0 + room.x1 + 1) / 2) * CELL;
-      const z = (cz * CHUNK + (room.y0 + room.y1 + 1) / 2) * CELL;
-      if (zoneWeights(x, z).memory > 0.8) {
-        stuff.kitchen = {
-          x, z,
-          minX: (cx * CHUNK + room.x0) * CELL, maxX: (cx * CHUNK + room.x1 + 1) * CELL,
-          minZ: (cz * CHUNK + room.y0) * CELL, maxZ: (cz * CHUNK + room.y1 + 1) * CELL,
-        };
-        const kg = new THREE.Group();                 // only exists in the memory stage
-        group.add(kg);
-        stuff.kitchen.group = kg;
-        stuff.kitchen.room = buildKitchen(kg, x, z);
-        stuff.kitchen.room.trail = buildCandleTrail(kg, this._candleTrails(stuff.kitchen));
-      }
+    // ── grandmother's room: rare, only deep in the memory ring
+    const kp = kitchenPlan(cx, cz);
+    if (kp) {
+      const kg = new THREE.Group();                   // only exists in the memory stage
+      group.add(kg);
+      stuff.kitchen = { ...kp, group: kg, room: buildKitchen(kg, kp.x, kp.z) };
+      stuff.kitchen.wisps = SOUL_COLORS.map((color, cat) => {
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: glowTexture(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+        }));
+        sprite.scale.set(0.35, 0.35, 1);
+        kg.add(sprite);
+        const w = { sprite, cat, gone: false, back: 0, seed: Math.random() * 10 };
+        this._placeWisp(w, stuff.kitchen);
+        return w;
+      });
     }
     return stuff;
+  }
+
+  _printPoster(p) {
+    const list = t('posterQuestions');
+    const i = p.q % list.length;
+    const old = p.mesh.material.map;
+    p.mesh.material.map = posterTexture(list[i], i + 1, this.stage.stage);
+    p.mesh.material.needsUpdate = true;
+    old?.dispose();
+  }
+
+  // Somewhere inside the room, at chest height, away from the walls.
+  _placeWisp(w, k) {
+    const m = 0.8;
+    w.home = new THREE.Vector3(
+      k.minX + m + Math.random() * Math.max(0.1, k.maxX - k.minX - 2 * m),
+      1.2 + Math.random() * 0.6,
+      k.minZ + m + Math.random() * Math.max(0.1, k.maxZ - k.minZ - 2 * m));
+    w.sprite.position.copy(w.home);
+  }
+
+  // A soul scattered: its question types itself on the television and across
+  // the screen, under a whisper.
+  _askSoul(cat, room) {
+    const qs = t('soulQuestions')[cat];
+    const text = qs[this._soulIdx[cat]++ % qs.length];
+    const label = t('soulLabels')[cat];
+    this.audio?.whisper?.();
+    // on the television: black screen, phosphor text
+    for (const sc of room.screens) {
+      const c = document.createElement('canvas'); c.width = 512; c.height = 384;
+      const g = c.getContext('2d');
+      g.fillStyle = '#050000'; g.fillRect(0, 0, 512, 384);
+      g.fillStyle = '#ff3a2a'; g.font = '26px "Departure Mono", monospace';
+      const words = text.split(' '); let line = '', y = 110;
+      for (const w of words) { const tt = line ? line + ' ' + w : w; if (g.measureText(tt).width > 440 && line) { g.fillText(line, 36, y); line = w; y += 36; } else line = tt; }
+      g.fillText(line, 36, y);
+      for (let yy = 0; yy < 384; yy += 3) { g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, yy, 512, 1); }
+      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+      const prev = sc.material.map;
+      sc.material.map = tex; sc.material.needsUpdate = true;
+      setTimeout(() => { sc.material.map = prev; sc.material.needsUpdate = true; tex.dispose(); }, 12000);
+    }
+    // across the screen: typed, then gone
+    document.getElementById('soul-q')?.remove();
+    const el = document.createElement('div');
+    el.id = 'soul-q';
+    el.innerHTML = `<p class="sq-label"></p><p class="sq-text"></p>`;
+    el.querySelector('.sq-label').textContent = label;
+    document.body.appendChild(el);
+    const tEl = el.querySelector('.sq-text');
+    let i = 0;
+    const type = setInterval(() => { tEl.textContent = text.slice(0, ++i); if (i >= text.length) clearInterval(type); }, 45);
+    requestAnimationFrame(() => el.classList.add('visible'));
+    setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 1200); }, 11000);
   }
 
   _writeOn(w) {
@@ -336,56 +481,6 @@ export class SoulPath {
     mesh.rotation.y = rotY;
     group.add(mesh);
     return { key, mesh, seg, x, z, waitT: 0, lift: 0, open: false };
-  }
-
-  // Three candle trails leading out of a room, as far apart as possible: a
-  // breadth-first walk from the room over open cells, the three farthest
-  // well-separated ends, and a candle every few cells on the way back in,
-  // set beside the wall so the corridor stays clear.
-  _candleTrails(k) {
-    const gi0 = cellOf(k.x), gj0 = cellOf(k.z);
-    const key = (i, j) => i + ',' + j;
-    const prev = new Map([[key(gi0, gj0), null]]), depth = new Map([[key(gi0, gj0), 0]]);
-    const q = [[gi0, gj0]];
-    for (let h = 0; h < q.length && h < 4000; h++) {
-      const [i, j] = q[h], d = depth.get(key(i, j));
-      if (d >= 30) continue;
-      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const ni = i + di, nj = j + dj, kk = key(ni, nj);
-        if (prev.has(kk) || solidAtGlobal(ni, nj)) continue;
-        prev.set(kk, [i, j]); depth.set(kk, d + 1); q.push([ni, nj]);
-      }
-    }
-    const far = q.filter(([i, j]) => depth.get(key(i, j)) >= 18);
-    const ends = [];
-    for (let n = 0; n < 3 && far.length; n++) {
-      let best = null, bestScore = -1;
-      for (const c of far) {
-        const sep = ends.length ? Math.min(...ends.map(e => Math.hypot(e[0] - c[0], e[1] - c[1]))) : 0;
-        const score = depth.get(key(c[0], c[1])) + sep * 2;
-        if (score > bestScore) { bestScore = score; best = c; }
-      }
-      if (!best || (ends.length && bestScore < 30)) break;
-      ends.push(best);
-    }
-    const inRoom = (x, z) => x > k.minX && x < k.maxX && z > k.minZ && z < k.maxZ;
-    const points = [], used = new Set();
-    for (const end of ends) {
-      const path = [];
-      for (let c = end; c; c = prev.get(key(c[0], c[1]))) path.push(c);
-      for (let n = 3; n < path.length; n += 4) {
-        const [i, j] = path[n];
-        if (used.has(key(i, j))) continue;
-        used.add(key(i, j));
-        let x = centreOf(i), z = centreOf(j);
-        if (inRoom(x, z)) continue;
-        // nudge toward a neighbouring wall
-        const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([di, dj]) => solidAtGlobal(i + di, j + dj));
-        if (side) { x += side[0] * 0.38; z += side[1] * 0.38; }
-        points.push({ x, z });
-      }
-    }
-    return points;
   }
 
   // A doorway of light across a 2.4 m corridor crossing: a baroque frame
@@ -453,9 +548,21 @@ export class SoulPath {
     return out;
   }
 
+  // Candles along the walls are the map. Their colour tells how close you are:
+  //   fear stage     the flame reddens toward a portal into the red rooms
+  //   memory stage   the flame turns yellow toward the next portal, and the
+  //                  wax itself reddens toward grandmother's room
+  //   light stage    pale, nothing left to find
   _buildScatter(group, cx, cz) {
-    const rnd = mulberry32(hash2i(SEED_SCATTER ^ (this.stage.stage * 7919), cx, cz));
-    const items = [], portals = this._nextPortals(cx, cz);
+    const st = this.stage.stage;
+    const rnd = mulberry32(hash2i(SEED_SCATTER ^ (st * 7919), cx, cz));
+    const portals = this._nextPortals(cx, cz);
+    const kitchens = [];
+    if (st === 1) for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) { const k = kitchenPlan(cx + dx, cz + dz); if (k) kitchens.push(k); }
+    const near = (list, x, z) => { let d = Infinity; for (const p of list) d = Math.min(d, Math.hypot(p.x - x, p.z - z)); return d; };
+    const prox = d => { const k = Math.max(0, Math.min(1, 1 - d / 45)); return k * k * (3 - 2 * k); };
+    const YELLOW = new THREE.Color(0xffd27a), RED = new THREE.Color(0xff2a14), PALE_WAX = new THREE.Color(0xe6dac0), RED_WAX = new THREE.Color(0x8e1216);
+    const items = [];
     for (let j = 0; j < CHUNK; j++) for (let i = 0; i < CHUNK; i++) {
       const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
       if (solidAtGlobal(gi, gj)) continue;
@@ -464,13 +571,13 @@ export class SoulPath {
       if (!side) continue;                              // only along walls, so paths stay clear
       const x = centreOf(gi) + side[0] * 0.36 + (rnd() - 0.5) * 0.3;
       const z = centreOf(gj) + side[1] * 0.36 + (rnd() - 0.5) * 0.3;
-      let d = Infinity;
-      for (const pp of portals) d = Math.min(d, Math.hypot(pp.x - x, pp.z - z));
-      // a few far away, thick within ~10 m of the portal
-      const p = d === Infinity ? 0.006 : Math.max(0.006, Math.min(0.2, 0.2 * (1 - d / 40) ** 2));
-      if (r > p) continue;
-      const k = rnd();
-      items.push({ type: k < 0.4 ? 'candle' : k < 0.75 ? 'teapot' : 'cup', x, z, rot: rnd() * 6.28 });
+      const pp = prox(near(portals, x, z)), pk = st === 1 ? prox(near(kitchens, x, z)) : 0;
+      if (r > 0.035 + 0.05 * Math.max(pp, pk)) continue;
+      const flame = st === 0 ? YELLOW.clone().lerp(RED, pp)
+        : st === 1 ? RED.clone().lerp(YELLOW, pp)
+          : new THREE.Color(0xfff4dc);
+      const wax = st === 1 ? PALE_WAX.clone().lerp(RED_WAX, pk) : PALE_WAX.clone();
+      items.push({ type: 'candle', x, z, rot: rnd() * 6.28, flame, wax });
     }
     return buildScatter(group, items);
   }
@@ -675,6 +782,7 @@ export class SoulPath {
       this._lastStage = this.stage.stage;
       const target = { fear: +(this.stage.stage === 0), memory: +(this.stage.stage === 1), accept: +(this.stage.stage === 2) };
       for (const st of this.chunkStuff.values()) for (const w of st.writings) { w.zone = target; this._writeOn(w); }
+      for (const st of this.chunkStuff.values()) for (const p of st.posters || []) this._printPoster(p);
       this._rebuildScatter();
     }
 
@@ -689,6 +797,28 @@ export class SoulPath {
       if (d < rd) { rd = d; room = k.room; }
     }
     this.kitchenRig.update(room, time);
+    // the souls in the room drift, and scatter when walked into
+    for (const st of this.chunkStuff.values()) {
+      const k = st.kitchen;
+      if (!k || !memoryStage || !k.wisps) continue;
+      for (const w of k.wisps) {
+        if (w.gone) {
+          w.sprite.material.opacity = Math.max(0, w.sprite.material.opacity - dt);
+          w.sprite.scale.multiplyScalar(1 + dt * 1.5);
+          if (time > w.back) { w.gone = false; this._placeWisp(w, k); w.sprite.scale.set(0.35, 0.35, 1); }
+          continue;
+        }
+        w.sprite.material.opacity = Math.min(1, w.sprite.material.opacity + dt * 0.5);
+        const b = Math.sin(time * 0.9 + w.seed);
+        w.sprite.position.set(w.home.x + Math.sin(time * 0.4 + w.seed) * 0.25, w.home.y + b * 0.12, w.home.z + Math.cos(time * 0.35 + w.seed) * 0.25);
+        const s2 = 0.32 + 0.05 * Math.sin(time * 3 + w.seed);
+        w.sprite.scale.set(s2, s2, 1);
+        if (Math.hypot(w.sprite.position.x - P.pos.x, w.sprite.position.z - P.pos.y) < 1.1) {
+          w.gone = true; w.back = time + 20;
+          this._askSoul(w.cat, k.room);
+        }
+      }
+    }
     if (room) {
       for (const { flame, halo } of room.flames.concat(room.trail || [])) {
         const f = 1.7 + Math.sin(time * 13 + flame.id) * 0.25 + Math.random() * 0.2;

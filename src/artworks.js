@@ -161,7 +161,10 @@ function ensureDom() {
 #artwork-prompt.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 #inspect-overlay {
   position: fixed; inset: 0; z-index: 6; pointer-events: none;
-  background: rgba(6,6,6,0.55); opacity: 0; transition: opacity 0.5s ease;
+  /* focus, never dim: the centre stays clear, the edges and the caption strip darken */
+  background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 38%, rgba(0,0,0,0.6) 100%),
+              linear-gradient(to top, rgba(0,0,0,0.7) 0, rgba(0,0,0,0) 22%);
+  opacity: 0; transition: opacity 0.5s ease;
   display: flex; align-items: flex-end; justify-content: center;
 }
 #inspect-overlay.visible { opacity: 1; }
@@ -417,6 +420,8 @@ export class Artworks {
     this._overlayRu.textContent = a.art.title_ru;
     this._overlayEn.textContent = a.art.title_en;
     this._overlay.classList.add('visible');
+    window.__app?.audio?.inspect(parseInt(a.art.id, 10) - 1);
+    document.body.classList.add('inspecting'); // hide the key legend under the caption
   }
 
   _updateInspectAnim(dt) {
@@ -428,6 +433,8 @@ export class Artworks {
 
   _closeInspect() {
     this.inspecting = null;
+    window.__app?.audio?.endInspect();
+    document.body.classList.remove('inspecting');
     this.player.locked = false;
     this._overlay.classList.remove('visible');
     this.player.update(0); // snap camera back to the player's frozen transform

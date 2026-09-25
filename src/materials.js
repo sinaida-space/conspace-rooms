@@ -205,7 +205,7 @@ vec3 fearWall(float h, float y, int oct, out float gloss){
   float n = fbm(vec2(h, y) * 1.6, oct);
   vec3 white = vec3(0.70, 0.73, 0.68) * (0.78 + 0.34 * n + 0.06 * vnoise(vec2(h, y) * 30.0));
   float crackN = abs(vnoise(vec2(h, y) * 1.6 + 2.0) - 0.5);           // hairline cracks in the plaster
-  white *= 1.0 - 0.5 * smoothstep(0.01, 0.0, crackN) * smoothstep(0.4, 0.65, vnoise(vec2(h, y) * 0.5));
+  white *= 1.0 - 0.45 * smoothstep(0.005, 0.0, crackN) * smoothstep(0.4, 0.65, vnoise(vec2(h, y) * 0.5));
   float edge = 1.5 + (fbm(vec2(h * 3.0, 0.0), 3) - 0.5) * 0.06;
   vec3 paint = vec3(0.13, 0.30, 0.23) * (0.88 + 0.16 * fbm(vec2(h, y) * 4.0, 2));
   float chip = smoothstep(0.70, 0.76, fbm(vec2(h, y) * 5.0 + 3.0, 3));
