@@ -2,27 +2,42 @@
 
 # CONSPACE ROOMS
 
-**Live:** https://conspace-rooms.vercel.app/
+**Live:** https://conspace-rooms.vercel.app/ (RU / EN)
 
-An interactive web installation — a collaboration between Sinaida and UVALISS.
+A walk-through web installation by [Sinaida](https://sinaida.eu/) and
+[UVALISS](https://uvaliss.ru/) (Alisa Feer). Eighteen works from the SOULS series
+by UVALISS hang in a labyrinth of half-lit rooms that the browser builds as you
+walk. There is no map, no signage and no ending. Put on headphones and go slowly.
 
-You walk an infinite, procedurally generated labyrinth of undocumented, half-lit rooms —
-liminal space with no signage, no exits marked, no map. It is not a level to be solved; it
-is a space to be present in. Eighteen SOULS pieces by UVALISS hang framed on its walls,
-found rather than curated, encountered in whatever order the corridors happen to unfold.
-This is an open call as much as a finished piece — the labyrinth keeps generating past any
-single walkthrough, and there is no "end" to reach.
+## What it is about
+
+SOULS is a series about looking into your own inner world and accepting it as it
+is. The labyrinth walks the same road: hospital corridors of fear, then a
+grandmother's flat full of memory, then pale rooms that dissolve into lace and
+light. The works hang wherever the corridors happen to put them, so every visit
+meets them in a different order.
+
+## The vibe
+
+Half-remembered late Soviet interiors: green oil paint under whitewash, humming
+tubes, rugs on the walls, a television left on in an empty room. Liminal-space
+stillness with a green terminal screen for a front door. Candles are the map,
+some doors open only when you stand still, and every work hums its own note.
+
+## Why it exists
+
+Paintings usually wait in rooms you have to travel to. This one opens from any
+browser, on a laptop or a phone, and it opens from Russia without a VPN, where
+most of Alisa's audience lives. It keeps nothing about you: no analytics, no
+accounts, and the camera image never leaves your device.
 
 ## Collaboration
 
-Sinaida × UVALISS — SOULS series.
-
 UVALISS (Alisa Feer) is a visual artist from Saint Petersburg exploring themes of light and
-darkness, childhood and dreams. Her SOULS series looks into one's own inner world and
-accepts it as it is.
+darkness, childhood and dreams.
 
-- Sinaida — [sinaida.eu](https://sinaida.eu/) · [@sin.ai.da](https://www.instagram.com/sin.ai.da)
-- UVALISS — [uvaliss.ru](https://uvaliss.ru/) · [@uvaliss](https://www.instagram.com/uvaliss/)
+- Sinaida: [sinaida.eu](https://sinaida.eu/) · [@sin.ai.da](https://www.instagram.com/sin.ai.da)
+- UVALISS: [uvaliss.ru](https://uvaliss.ru/) · [@uvaliss](https://www.instagram.com/uvaliss/)
 
 ## Controls
 
@@ -57,10 +72,6 @@ Every push to `main` redeploys production. Project settings: Application
 Preset `Other`, Root Directory `./`, build, output and install commands left
 empty. Vercel Web Analytics and Speed Insights stay off: the privacy policy
 promises no analytics.
-
-Cloudflare Pages is not used: Cloudflare is throttled in Russia. Codeberg
-Pages is not used either: its terms require free licenses and the artworks are
-all rights reserved.
 
 All asset and module paths are relative, so the site works unmodified under a
 subpath or at a domain root.
@@ -117,9 +128,9 @@ Easter egg: click the CONSPACE ROOMS title on the welcome screen.
 - Vanilla JS (ES modules), no build step
 - [Departure Mono](https://github.com/rektdeckard/departure-mono) by Helena Zhang (SIL OFL 1.1), self-hosted in `assets/fonts/`
 - [three.js](https://threejs.org/) (vendored) for rendering
-- Procedural GLSL materials — no texture files for the labyrinth geometry itself
+- Procedural GLSL materials; the labyrinth geometry uses no texture files
 - [MediaPipe Tasks Vision](https://developers.google.com/mediapipe) hand landmarker for gesture mode (loaded lazily, opt-in)
 
 ## Rights
 
-© Sinaida Krivchenko & UVALISS (Alsa Feer). Artworks all rights reserved.
+© Sinaida Krivchenko & UVALISS (Alisa Feer). Artworks all rights reserved.
