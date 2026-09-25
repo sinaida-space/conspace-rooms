@@ -1,0 +1,6 @@
+{
+  "rewrites": [{ "source": "/voprosy", "destination": "/voprosy.html" }],
+  "headers": [
+    { "source": "/voprosy(.html)?", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] }
+  ]
+}

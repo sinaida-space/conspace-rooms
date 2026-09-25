@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<script>
+  // Old GitHub Pages link: forward to the Vercel home, keeping the page, ?lang and #hash.
+  if (location.hostname.endsWith('github.io')) {
+    location.replace('https://conspace-rooms.vercel.app' +
+      location.pathname.replace(/^\/conspace-rooms/, '').replace(/\.html$/, '') + location.search + location.hash);
+  }
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOULS · CONSPACE ROOMS</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#010805">
+<link rel="icon" href="assets/icons/favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+<link rel="preload" href="assets/fonts/DepartureMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/page.css">
+<style>
+  /* Unlisted page: every question in the piece, in the welcome screen's panels. */
+  body.souls { padding: 6vh 16px 10vh; max-width: 64ch; margin: 0 auto; }
+  .souls-boot { font-size: 0.85em; color: var(--dim); margin-bottom: 1.6em; white-space: pre-wrap; }
+  .souls h1 { font-size: clamp(2.4rem, 9vw, 4.2rem); letter-spacing: 0.24em; line-height: 1.1; margin-bottom: 0.4em; }
+  .souls .sub { color: var(--dim); margin-bottom: 2.4em; }
+  .souls .credits-panel h2 { margin-bottom: 1.2em; }
+  .souls .expect li::before { content: counter(q, decimal-leading-zero); color: var(--dim); font-size: 0.8em; top: 0.2em; }
+  .souls .expect { counter-reset: q; }
+  .souls .expect li { counter-increment: q; padding-left: 2.4em; }
+  .souls .expect li:last-child { margin-bottom: 0; }
+  .souls #site-footer { margin-top: 3em; }
+</style>
+</head>
+<body class="souls">
+
+<p class="lang-switch"><a href="?lang=ru" lang="ru">RU</a> · <a href="?lang=en" lang="en">EN</a></p>
+<p class="souls-boot" id="boot"></p>
+<h1>SOULS</h1>
+<p class="sub" id="sub"></p>
+<main id="lists"></main>
+
+<footer id="site-footer"></footer>
+
+<script type="module">
+  import { t, setLang, langFromUrl } from './src/i18n.js';
+  import { renderFooter } from './src/footer.js';
+
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  scrollTo(0, 0);
+
+  // Russian unless the link asks for English.
+  const lang = langFromUrl() || 'ru';
+  setLang(lang);
+  document.querySelectorAll('.lang-switch a').forEach(a => a.classList.toggle('current', a.lang === lang));
+
+  const L = {
+    ru: { boot: 'C:\\CONSPACE\\SOULS> type voprosy.txt', sub: 'Все вопросы, которые задаёт лабиринт.',
+          posters: 'Распечатки на стенах', farewell: 'Экран прощания' },
+    en: { boot: 'C:\\CONSPACE\\SOULS> type questions.txt', sub: 'Every question the labyrinth asks.',
+          posters: 'Printouts on the walls', farewell: 'Farewell screen' },
+  }[lang];
+  document.getElementById('boot').textContent = L.boot;
+  document.getElementById('sub').textContent = L.sub;
+
+  const groups = t('soulLabels').map((label, i) => [label, t('soulQuestions')[i]]);
+  groups.push([L.posters, t('posterQuestions')], [L.farewell, t('questions')]);
+
+  document.getElementById('lists').replaceChildren(...groups.map(([title, qs]) => {
+    const panel = document.createElement('section');
+    panel.className = 'credits-panel';
+    const h = document.createElement('h2');
+    h.textContent = title;
+    const ol = document.createElement('ol');
+    ol.className = 'expect';
+    ol.replaceChildren(...qs.map(q => Object.assign(document.createElement('li'), { textContent: q })));
+    panel.append(h, ol);
+    return panel;
+  }));
+
+  renderFooter(lang);
+</script>
+</body>
+</html>
+<!-- Je suis le spectre d'une rose que tu portais hier au bal. -->
