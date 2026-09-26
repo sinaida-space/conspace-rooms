@@ -169,18 +169,28 @@ function leafTexture() {
   return t;
 }
 
-function tunnelText(text) {
-  const c = document.createElement('canvas'); c.width = 1024; c.height = 128;
-  const g = c.getContext('2d');                      // transparent: only the letters show
-  g.textAlign = 'center'; g.textBaseline = 'middle';
-  let size = 64;
-  do { g.font = `400 ${size}px "Departure Mono", ui-monospace, monospace`; size -= 2; } while (g.measureText(text).width > 940 && size > 20);
-  g.lineJoin = 'round';
-  g.lineWidth = 12; g.strokeStyle = 'rgba(4, 14, 8, 0.92)';        // a dark rim: it must read against the light
-  g.strokeText(text, 512, 66);
-  g.fillStyle = '#fff6ea';
-  g.fillText(text, 512, 66);
-  return new THREE.CanvasTexture(c);
+// An old enamel plaque for the words: cream enamel, a dark blue border and
+// letters, chipped down to black iron at the edges, rust around the chips.
+function plaqueTexture(text) {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 180;
+  const g = c.getContext('2d'), W = c.width, H = c.height;
+  const bg = g.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#efe9da'); bg.addColorStop(1, '#ddd5c2');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  g.strokeStyle = '#1f2c58'; g.lineWidth = 9; g.strokeRect(14, 14, W - 28, H - 28);
+  g.fillStyle = '#1f2c58'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  let size = 76;
+  do { g.font = `400 ${size}px "Departure Mono", ui-monospace, monospace`; size -= 2; } while (g.measureText(text).width > W - 110 && size > 20);
+  g.fillText(text, W / 2, H / 2 + 4);
+  for (let i = 0; i < 16; i++) {                     // chips at the rim, rust bleeding from them
+    const x = Math.random() * W, y = Math.random() < 0.5 ? Math.random() * 22 : H - Math.random() * 22, r = 2 + Math.random() * 7;
+    g.fillStyle = 'rgba(126, 72, 36, 0.45)'; g.beginPath(); g.arc(x, y, r * 1.8, 0, 7); g.fill();
+    g.fillStyle = '#161512'; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
+  for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(90, 70, 40, ${Math.random() * 0.08})`; g.fillRect(Math.random() * W, Math.random() * H, 2, 2); }
+  for (const x of [34, W - 34]) { g.fillStyle = '#6f6a60'; g.beginPath(); g.arc(x, 30, 6, 0, 7); g.fill(); }   // where the chains hook in
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
 }
 
 // the outline of one arch opening, for the glow at the far end
@@ -274,12 +284,22 @@ export function buildRoseArch(text) {
   const rays = buildLightRays(LENGTH + 3.5, { nearW: HALF * 1.8, nearH: POST_H + 0.6, farW: 2.3, farH: 3.1, z0: -LENGTH - 0.25, gapK: 0 });
   g.add(rays.group);
 
-  // the words, under the top of the entrance
-  const words = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.21),
-    new THREE.MeshBasicMaterial({ map: tunnelText(text), transparent: true, depthWrite: false, opacity: 0 }));
-  words.position.set(0, 1.72, 0.05);                  // at eye level, inside the entrance
-  g.add(words);
-
+  // the words, on an enamel plaque hung by two chains from the entrance arch
+  const plaque = new THREE.Group();
+  const PW = 1.3, PH = 0.23, PY = 2.08;               // plaque size and the height of its centre
+  const front = new THREE.MeshBasicMaterial({ map: plaqueTexture(text), fog: true });
+  const back = new THREE.MeshBasicMaterial({ color: 0x2a2724, fog: true });
+  plaque.add(new THREE.Mesh(new THREE.BoxGeometry(PW, PH, 0.018), [back, back, back, back, front, back]));
+  const topY = POST_H + Math.sqrt(1 - (0.5 / HALF) ** 2) * HALF;   // where the arc passes above each chain
+  for (const x of [-0.5, 0.5]) {
+    const len = topY - (PY + PH / 2);
+    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, len, 5), iron);
+    chain.position.set(x, PH / 2 + len / 2, 0);
+    plaque.add(chain);
+  }
+  plaque.position.set(0, PY, 0.02);
+  plaque.visible = false;
+  g.add(plaque);
   arches.forEach(ag => ag.scale.set(1, 0.001, 1));
   let grow = 0;
   return {
@@ -297,10 +317,12 @@ export function buildRoseArch(text) {
       leafPts.geometry.setDrawRange(0, Math.floor(leafPts.geometry.attributes.position.count * Math.min(1, bloom * 1.3)));
       const k = Math.max(0, (grow - 0.35) / 0.65) * (0.85 + 0.15 * Math.sin(time * 1.7));
       rays.set(k, time); glowU.uK.value = 1.3 * k;
-      words.material.opacity = Math.max(0, (grow - 0.7) / 0.3);
+      plaque.visible = grow > 0.55;
+      plaque.rotation.z = Math.sin(time * 0.9) * 0.02;   // it sways a little on its chains
+      plaque.scale.setScalar(Math.min(1, Math.max(0.001, (grow - 0.55) / 0.25)));
     },
     dispose() {
-      g.traverse(o => { o.geometry?.dispose(); if (o.material && o.material !== vine && o.material !== iron) { o.material.map?.dispose(); o.material.dispose(); } });
+      g.traverse(o => { o.geometry?.dispose(); for (const m of [].concat(o.material || [])) if (m !== vine && m !== iron) { m.map?.dispose(); m.dispose(); } });
       vine.dispose(); iron.dispose(); rays.dispose();
     },
   };
