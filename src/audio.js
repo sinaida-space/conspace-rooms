@@ -133,7 +133,7 @@ export class AudioEngine {
       v.panner.positionX ? (v.panner.positionX.value = src.x, v.panner.positionZ.value = src.z)
         : v.panner.setPosition(src.x, 1.55, src.z);
       v.lp.frequency.setTargetAtTime(src.occluded ? 420 : 2600, now, 0.3);
-      v.gain.gain.setTargetAtTime(src.seen ? 0.022 : 0.06, now, 0.8);
+      v.gain.gain.setTargetAtTime(this._silenced ? 0 : (src.seen ? 0.022 : 0.06), now, 0.8);
     }
   }
 
@@ -220,6 +220,19 @@ export class AudioEngine {
   // A presence door gives way for a moment, then slams.
   doorLight(seconds) { this.music?.light(seconds); }
   doorSlam() { this.music?.slam(); }
+
+  // ── the finale: the chord, then silence for the card of questions ────────
+  finale() { this.music?.resolve(); }
+  silence() {
+    this._silenced = true;
+    this.music?.release();
+    if (this.voices) { const now = this.ctx.currentTime; for (const v of this.voices.values()) v.gain.gain.setTargetAtTime(0, now, 1.2); }
+  }
+  unsilence() {
+    this._silenced = false;
+    if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.9 * (this._volume ?? 1), this.ctx.currentTime, 1.5);
+    this.music?.unresolve();
+  }
 
   setMuted(m) {
     this.muted = m;

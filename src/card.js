@@ -76,6 +76,20 @@ export function drawCard(canvas, { questions, heading, empty, boot }) {
     y += size * 0.75;
   });
 
+  // the grain: one warm honey seed below the questions, the only warm colour
+  // on the card (also drawn in the empty state)
+  const gx = W / 2, gy = bottom + (H - 110 - bottom) / 2;
+  const halo = g.createRadialGradient(gx, gy, 0, gx, gy, 50);
+  halo.addColorStop(0, 'rgba(224, 176, 96, 0.5)'); halo.addColorStop(1, 'rgba(224, 176, 96, 0)');
+  g.fillStyle = halo; g.fillRect(gx - 60, gy - 60, 120, 120);
+  g.save();
+  g.translate(gx, gy); g.rotate(-0.2);
+  g.fillStyle = '#e0b060';
+  g.beginPath(); g.ellipse(0, 0, 15, 9, 0, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = 'rgba(120, 80, 30, 0.6)'; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(0, -8); g.lineTo(0, 8); g.stroke();
+  g.restore();
+
   // the names, in the bottom corners
   g.font = `400 34px ${FONT}`; g.fillStyle = FG;
   g.fillText('sinaida', PAD, H - 110);

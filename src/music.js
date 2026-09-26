@@ -178,6 +178,7 @@ export class Music {
     this._out = this.corridorIn;                      // where the instruments play into right now
     this._v = this._vc; this._lane = 'corridor';
     this._hr = 72; this._alarmIn = 40 + Math.random() * 40;
+    this._resolved = false; this._chordAmps = []; this._chordOscs = [];
     this._timer = setInterval(() => this._schedule(), TICK_MS);
     this._schedule();
   }
@@ -252,6 +253,62 @@ export class Music {
   }
   stop() { clearInterval(this._timer); }
 
+  // ── the finale ───────────────────────────────────────────────────────────
+  // phrase schedulers stop starting new notes; the tonic major add9 of
+  // whichever key was playing swells in on a soft organ/pad and holds
+  resolve(seconds = 3) {
+    if (this._resolved) return;
+    this._resolved = true;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const tr = (this.gram ? this._vr : this._vc)?.tr ?? 0;
+    const root = midi((this.gram ? 69 : 62) + tr);          // the tonic of whichever world was playing
+    const chord = [0, 4, 7, 14].map(iv => root * Math.pow(2, iv / 12));   // major add9
+    this.lightBus.gain.setTargetAtTime(1, t, seconds * 0.4);
+    this.corridorBus.gain.setTargetAtTime(0, t, seconds * 0.5);
+    this.roomBus.gain.setTargetAtTime(0, t, seconds * 0.5);
+    this._chordAmps = chord.map((f, k) => {
+      const amp = ctx.createGain();
+      amp.gain.setValueAtTime(0.0001, t);
+      amp.gain.exponentialRampToValueAtTime(0.055 - k * 0.008, t + seconds);
+      amp.connect(this.lightBus);
+      for (const [type, cents] of [['sine', 0], ['triangle', 3], ['sine', -4]]) {
+        const o = ctx.createOscillator(); o.type = type; o.frequency.value = f * Math.pow(2, cents / 1200);
+        o.connect(amp); o.start(t);
+        this._chordOscs.push(o);
+      }
+      return amp;
+    });
+  }
+  // everything fades to silence
+  release(seconds = 4) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    this.mix.gain.cancelScheduledValues(t);
+    this.mix.gain.setValueAtTime(this.mix.gain.value, t);
+    this.mix.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+  }
+  // normal scheduling resumes
+  unresolve() {
+    const ctx = this.ctx, t = ctx.currentTime;
+    this.mix.gain.cancelScheduledValues(t);
+    this.mix.gain.setValueAtTime(this.mix.gain.value, t);
+    this.mix.gain.setTargetAtTime(1, t, 1.5);
+    if (!this._resolved) return;
+    this._resolved = false;
+    this.lightBus.gain.setTargetAtTime(0, t, 1.5);
+    this._mixLevels(2.5);
+    this._chordAmps.forEach(amp => {
+      amp.gain.cancelScheduledValues(t); amp.gain.setValueAtTime(amp.gain.value, t);
+      amp.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    });
+    this._chordOscs.forEach(o => { try { o.stop(t + 1.6); } catch (e) { /* already stopped */ } });
+    this._chordAmps = []; this._chordOscs = [];
+    // resync the clocks so the next phrase starts promptly, not all at once
+    this._t.corridor = Math.max(this._t.corridor, t + 0.3);
+    this._t.room = Math.max(this._t.room, t + 0.3);
+    this._t.beep = Math.max(this._t.beep, t + 0.3);
+    this._piece.corridorUntil = 0; this._piece.roomUntil = 0;
+  }
+
   // corridor / room / light balance
   _mixLevels(tc) {
     const t = this.ctx.currentTime, lit = this._bright > 0;
@@ -263,7 +320,7 @@ export class Music {
   // ── the scheduler ───────────────────────────────────────────────────────
   _schedule() {
     const until = this.ctx.currentTime + LOOKAHEAD;
-    if (this.ctx.state !== 'running') return;
+    if (this.ctx.state !== 'running' || this._resolved) return;
     while (this._t.corridor < until) this._corridorPhrase();
     while (this._t.room < until) this._roomBar();
     while (this._t.beep < until) this._monitor();

@@ -512,6 +512,7 @@ export class SoulPath {
   // The view turns a little toward open floor, and a couple of steps away an
   // arch of roses grows out of it with light pouring through.
   _beginFinale() {
+    this.roses.shed(); this.audio?.finale?.();
     const P = this.player;
     // doors and the hospital's furniture stand in the way too
     const segDist = (x, z, a, b) => {
@@ -538,7 +539,6 @@ export class SoulPath {
     // the view turns to the entrance itself (_updateFinale): the tunnel
     // keeps to the middle of the corridor, the visitor may not
     this.finale = { arch, spot, from: P.yaw, t: 0, side: null };
-    this.audio?.doorLight?.(9);
     this.post?.burst?.(0.4);
   }
 
@@ -564,14 +564,14 @@ export class SoulPath {
   _endWalk() {
     this._carded = true;
     this.player.locked = true;
-    this.audio?.chime?.();
+    this.audio?.silence?.();
     showCard({
       questions: this.asked,
       strings: {
         heading: t('cardHeading'), empty: t('cardEmpty'), boot: t('cardBoot'),
         save: t('cardSave'), back: t('cardBack'), again: t('walkAgain'),
       },
-      onBack: () => { this.player.locked = false; this._carded = false; },
+      onBack: () => { this.player.locked = false; this._carded = false; this.audio?.unsilence?.(); },
       onAgain: () => location.reload(),
     });
   }
