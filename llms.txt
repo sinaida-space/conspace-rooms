@@ -1,0 +1,18 @@
+# CONSPACE ROOMS
+
+> A walk-through web installation by Sinaida (Sinaida Krivchenko, https://sinaida.eu) and UVALISS (Alisa Feer, https://uvaliss.ru). Eighteen works from UVALISS's SOULS series hang in an endless, procedurally generated labyrinth that the browser builds as you walk. The first screen only asks for a language (Russian or English); the piece itself starts after it.
+
+The labyrinth follows the arc of the SOULS series, from trauma to accepting oneself: Soviet hospital corridors of fear, then a grandmother's flat full of memory, then pale rooms that dissolve into light. Portals move the visitor from one stage to the next. Every visit builds a new labyrinth, seeded by the date and time. A rose in the corner of the screen grows with every work seen; with all eighteen an arch of roses ends the walk with a card of the questions the souls asked. Music is generated live. Controls: keyboard and mouse, on-screen buttons and drag on touch screens, or hand gestures through the webcam (processed only in the browser). No analytics, no accounts.
+
+## Pages
+
+- [The piece](https://conspace-rooms.vercel.app/): language choice, then the welcome screen and the walk
+- [Technical information](https://conspace-rooms.vercel.app/tech.html): requirements, how it is made, licenses, gallery mode
+- [Privacy](https://conspace-rooms.vercel.app/privacy.html)
+- [Gallery mode](https://conspace-rooms.vercel.app/gallery): installation mode for a projector and a webcam
+- [Source code](https://github.com/sinaida-space/conspace-rooms)
+
+## Credits
+
+- Experience design and code: Sinaida, https://sinaida.eu, Instagram @sin.ai.da
+- Artworks (the SOULS series): UVALISS (Alisa Feer), https://uvaliss.ru, Instagram @uvaliss

@@ -52,6 +52,14 @@ body::after {
   font-size: 0.85em; color: var(--dim); margin-bottom: 1em;
   min-height: 5.5em; white-space: pre-wrap;
 }
+/* the first screen says what this is, for people and for machines */
+.gate-intro { margin-bottom: 1.6em; }
+.gate-title {
+  font-size: clamp(1.6rem, 6vw, 2.4rem); font-weight: 400; letter-spacing: 0.12em; margin-bottom: 0.6em;
+  text-shadow: 0 0 8px rgba(57, 255, 106, 0.6), 0 0 24px rgba(57, 255, 106, 0.25);
+}
+.gate-intro p { font-size: 0.88em; color: var(--dim); line-height: 1.6; margin-bottom: 0.7em; max-width: 58ch; }
+.gate-intro a { color: inherit; }
 .lang-actions { display: flex; flex-wrap: wrap; gap: 1em; }
 .lang-actions .btn-enter { flex: 1 1 10em; }
 #lang-boot {
