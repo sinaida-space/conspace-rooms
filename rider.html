@@ -4,7 +4,10 @@
 <meta charset="utf-8">
 <script>
   // Old GitHub Pages link: forward to the Vercel home, keeping the page, ?lang and #hash.
-  if (location.hostname.endsWith('github.io')) {
+  // ?mirror keeps the visitor on GitHub Pages (for networks where Vercel is blocked) and is remembered.
+  var mirror = /[?&]mirror\b/.test(location.search);
+  try { if (mirror) localStorage.setItem('mirror', '1'); mirror = mirror || localStorage.getItem('mirror') === '1'; } catch (e) {}
+  if (location.hostname.endsWith('github.io') && !mirror) {
     location.replace('https://conspace-rooms.vercel.app' +
       location.pathname.replace(/^\/conspace-rooms/, '') + location.search + location.hash);
   }
@@ -33,7 +36,7 @@
   <h2>Кто что предоставляет</h2>
   <p><strong>Художники</strong> дают:</p>
   <ul>
-    <li>сайт: <a href="gallery">/gallery</a>, бесплатно для показа;</li>
+    <li>сайт: <a href="gallery.html">/gallery</a>, бесплатно для показа;</li>
     <li>работы серии SOULS: формат и&nbsp;число согласуются с&nbsp;UVALISS;</li>
     <li>удалённую помощь с&nbsp;настройкой и&nbsp;калибровкой;</li>
     <li>макет панели с&nbsp;жестами, по&nbsp;запросу.</li>
@@ -48,7 +51,7 @@
   </ul>
 
   <h2>Схема</h2>
-  <p>Схематичный план: зал с&nbsp;проекцией слева, зал с&nbsp;работами UVALISS справа.</p>
+  <p>Схематичный план: сверху зал с&nbsp;проекцией, снизу зал с&nbsp;работами UVALISS.</p>
   <figure>
     <svg viewBox="0 0 400 620" role="img" aria-labelledby="planTitleRu" xmlns="http://www.w3.org/2000/svg">
       <title id="planTitleRu">Схема: комната с проекцией сверху, комната с работами UVALISS снизу, между ними дверь</title>
@@ -107,9 +110,9 @@
         <text x="245" y="88" font-size="15">камера</text>
         <text x="200" y="150" text-anchor="middle" font-size="15">проектор (потолок)</text>
         <text x="70" y="197" font-size="15">панель жестов</text>
-        <text x="125" y="224" font-size="15">мягкий свет</text>
+        <text x="138" y="225" font-size="15">мягкий свет</text>
         <text x="200" y="283" text-anchor="middle" font-size="15">зона посетителей</text>
-        <text x="278" y="349" font-size="13">⚠ предупреждение</text>
+        <text x="258" y="395" font-size="13">⚠ предупреждение</text>
         <text x="110" y="452" font-size="14">точечный свет</text>
         <text x="110" y="480" font-size="15">работы UVALISS</text>
       </g>
@@ -194,7 +197,7 @@
   <h2>Who provides what</h2>
   <p><strong>The artists</strong> provide:</p>
   <ul>
-    <li>the site: <a href="gallery">/gallery</a>, free to&nbsp;use for&nbsp;the show;</li>
+    <li>the site: <a href="gallery.html">/gallery</a>, free to&nbsp;use for&nbsp;the show;</li>
     <li>the artworks: format and&nbsp;number agreed with&nbsp;UVALISS;</li>
     <li>remote help with&nbsp;setup and&nbsp;calibration;</li>
     <li>a&nbsp;gesture panel layout, on&nbsp;request.</li>
@@ -209,7 +212,7 @@
   </ul>
 
   <h2>Floor plan</h2>
-  <p>A&nbsp;schematic plan: the projection room on&nbsp;the left, the UVALISS room on&nbsp;the right.</p>
+  <p>A&nbsp;schematic plan: the projection room on&nbsp;top, the UVALISS room below.</p>
   <figure>
     <svg viewBox="0 0 400 620" role="img" aria-labelledby="planTitleEn" xmlns="http://www.w3.org/2000/svg">
       <title id="planTitleEn">Floor plan: the projection room on top, the UVALISS room below, joined by a doorway</title>
@@ -268,9 +271,9 @@
         <text x="245" y="88" font-size="15">camera</text>
         <text x="200" y="150" text-anchor="middle" font-size="15">projector (ceiling)</text>
         <text x="70" y="197" font-size="15">gesture panel</text>
-        <text x="125" y="224" font-size="15">soft light</text>
+        <text x="138" y="225" font-size="15">soft light</text>
         <text x="200" y="283" text-anchor="middle" font-size="15">visitor zone</text>
-        <text x="278" y="349" font-size="14">⚠ warning</text>
+        <text x="258" y="395" font-size="13">⚠ warning</text>
         <text x="110" y="452" font-size="14">spot light</text>
         <text x="110" y="480" font-size="15">UVALISS works</text>
       </g>
