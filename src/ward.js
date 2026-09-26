@@ -4,6 +4,7 @@ import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, hash2i, mulberry32, isLampCell } from './world.js';
 import { ORIGIN } from './zones.js';
 import { roundedBox } from './geom.js';
+import { t, getLang } from './i18n.js';
 
 // ── conspace-rooms · ward.js ────────────────────────────────────────────────
 // What the hospital left behind. In the fear stage a few rooms hold a small
@@ -118,6 +119,9 @@ export function wardPlan(cx, cz, reserved, withModels = true) {
     rot: Math.atan2(nx, nz) + wobble + skew, flip: r() < 0.5, tip,
     sheet: kind.type === 'bed' && r() < 0.65, stain: r() < 0.75, stainR: 0.6 + r() * 0.5, stainA: r() * 6.28,
   };
+  // a small oilcloth tag, initials and a time nobody explains: about a third
+  // of the beds and standing drips carry one, never a drip that has fallen
+  anchor.tag = (kind.type === 'bed' || (kind.type === 'drip' && !tip)) && r() < 1 / 3;
   if (kind.type === 'drip' && tip) {             // fallen along the wall, over two cells
     anchor.x += s.ai * CELL / 2; anchor.z += s.aj * CELL / 2;
     anchor.rot = Math.atan2(nx, nz);
@@ -441,6 +445,25 @@ function signTexture(text) {
   return new THREE.CanvasTexture(c);
 }
 
+// A small oilcloth tag on a string, tied to a bed's foot rail or a drip
+// stand: initials in violet ink, and a time nobody explains.
+function tagTexture() {
+  const [c, g] = canvas(96, 64);
+  g.fillStyle = '#c9ad63'; g.fillRect(0, 0, 96, 64);
+  speckle(g, 96, 64, 220, a => `rgba(90,66,26,${a * 0.18})`);
+  const edge = g.createRadialGradient(48, 32, 18, 48, 32, 54);
+  edge.addColorStop(0, 'rgba(0,0,0,0)'); edge.addColorStop(1, 'rgba(60,40,10,0.4)');
+  g.fillStyle = edge; g.fillRect(0, 0, 96, 64);
+  g.fillStyle = '#241d12';                                              // the punched hole
+  g.beginPath(); g.arc(48, 11, 3.5, 0, 7); g.fill();
+  g.fillStyle = 'rgba(40,36,92,0.85)'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = 'italic 20px Georgia, "Times New Roman", serif';
+  g.fillText(t('eggInitials'), 48, 30);
+  g.font = 'italic 15px Georgia, "Times New Roman", serif';
+  g.fillText('12:24', 48, 48);
+  return new THREE.CanvasTexture(c);
+}
+
 // Rust and old damp on the floor under a piece of furniture: a ragged dark
 // blot, darker at its heart, drawn once.
 function stainTexture() {
@@ -496,6 +519,19 @@ export function createWardKit(atmo, quality) {
         st.position.set(anchor.x, 0.004, anchor.z); st.rotation.y = anchor.stainA;
         st.userData.keepMaterial = true;
         group.add(st);
+      }
+      if (anchor.tag) {
+        const mat = texMat('tag:' + getLang(), tagTexture);
+        const c = Math.cos(anchor.rot), s = Math.sin(anchor.rot);
+        // bed: tied to the foot rail, off to one side · drip: hung on the pole
+        const [lx, ly, lz] = anchor.type === 'bed' ? [0.94, 0.6, 0.18] : [0, 1.2, 0];
+        const tx = anchor.x + lx * c + lz * s, tz = anchor.z - lx * s + lz * c;
+        const tag = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.04), mat);
+        tag.position.set(tx, ly, tz);
+        tag.rotation.y = anchor.rot;
+        tag.userData.keepMaterial = true;
+        group.add(tag);
+        geos.push(part(new THREE.TorusGeometry(0.01, 0.0015, 4, 10), 0xcfc79a, 0.2, tx, ly + 0.022, tz, Math.PI / 2, anchor.rot, 0));
       }
       for (const it of plan.items) {
         if (it.type === 'history' || it.type === 'xray') {

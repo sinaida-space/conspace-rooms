@@ -230,6 +230,10 @@ const STRINGS = {
       'What part of~you only exists because someone else is~watching?',
       'You will forget this labyrinth. What makes you so~sure you won’t forget yourself the same~way?',
     ],
+    eggInitials: 'J. N.',
+    eggBlockA: 'J',
+    eggBlockB: 'N',
+    eggMonth: 'DECEMBER',
   },
   ru: {
     docTitle: 'CONSPACE ROOMS · Sinaida × UVALISS',
@@ -458,6 +462,10 @@ const STRINGS = {
       'Какая часть тебя существует только потому, что на~тебя кто-то~смотрит?',
       'Этот лабиринт забудется. Откуда уверенность, что так~же не~забудешь~себя?',
     ],
+    eggInitials: 'И. Н.',
+    eggBlockA: 'И',
+    eggBlockB: 'Н',
+    eggMonth: 'ДЕКАБРЬ',
   },
 };
 
