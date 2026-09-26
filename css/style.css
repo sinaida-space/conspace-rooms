@@ -4,8 +4,8 @@
   font-weight: 400; font-style: normal; font-display: swap;
 }
 :root {
-  --tri-violet: #7260a9;   /* triad of the green accent, 255° */
-  --tri-coral: #a6644e;    /* triad of the green accent, 15° */
+  --tri-violet: #7f6db7;   /* triad of the green accent, 255° */
+  --tri-coral: #a86650;    /* triad of the green accent, 15° */
   --bg: #010805;
   --fg: #baffc9;
   --dim: #3f8a5a;
@@ -62,12 +62,12 @@ body::after {
 }
 .gate-intro p { font-size: 0.88em; color: var(--dim); line-height: 1.6; margin-bottom: 0.7em; max-width: 58ch; }
 .gate-intro a { color: inherit; }
-/* the two languages as two separate blocks, each in a triad colour of the green */
-.gate-lang { border-left: 2px solid currentColor; padding-left: 0.9em; margin-bottom: 1em; }
-.gate-lang p { color: inherit; margin-bottom: 0; }
-.gate-lang-tag { display: block; font-size: 0.72em; letter-spacing: 0.14em; margin-bottom: 0.35em; opacity: 0.85; }
-.gate-ru { color: var(--tri-violet); }
-.gate-en { color: var(--tri-coral); }
+/* the two languages as two blocks, each marked by a small tag in a triad colour of the green */
+.gate-lang { margin-bottom: 1em; }
+.gate-lang p { margin-bottom: 0; }
+.gate-lang-tag { display: inline-block; font-size: 0.72em; letter-spacing: 0.14em; padding: 0.15em 0.5em; margin-bottom: 0.45em; color: var(--bg); }
+.gate-ru .gate-lang-tag { background: var(--tri-violet); }
+.gate-en .gate-lang-tag { background: var(--tri-coral); }
 .lang-actions { display: flex; flex-wrap: wrap; gap: 1em; }
 .lang-actions .btn-enter { flex: 1 1 10em; }
 #lang-boot {
