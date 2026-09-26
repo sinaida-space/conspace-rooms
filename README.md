@@ -26,8 +26,10 @@ tubes, rugs on the walls, a television left on in an empty room, beds and drip
 stands the hospital left behind. Liminal-space stillness with a green terminal
 screen for a front door. Candles are the map, a rare door gives way for a moment
 if you stand still in front of it, every work hums its own note, and the music is
-generated as you walk: lo-fi piano and a ward monitor in the corridors, an old
-gramophone in grandmother's room.
+generated as you walk: in the corridors lo-fi piano with a ward monitor, a 70s
+Soviet estrada ballad on an electric organ and 80s Soviet synth take turns, and
+a radio sometimes breaks through with the time signal; in grandmother's room a
+gramophone plays a waltz, a tango on a bayan or a romance on a guitar.
 
 ## Why it exists
 
