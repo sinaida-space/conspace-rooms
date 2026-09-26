@@ -50,50 +50,74 @@
   <h2>Схема</h2>
   <p>Схематичный план: зал с&nbsp;проекцией слева, зал с&nbsp;работами UVALISS справа.</p>
   <figure>
-    <svg viewBox="0 0 800 420" role="img" aria-labelledby="planTitleRu" xmlns="http://www.w3.org/2000/svg">
-      <title id="planTitleRu">Схема: комната с проекцией слева, комната с работами UVALISS справа</title>
+    <svg viewBox="0 0 400 620" role="img" aria-labelledby="planTitleRu" xmlns="http://www.w3.org/2000/svg">
+      <title id="planTitleRu">Схема: комната с проекцией сверху, комната с работами UVALISS снизу, между ними дверь</title>
       <g fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="30" y="30" width="460" height="360"/>
-        <rect x="530" y="30" width="240" height="360"/>
-        <rect x="150" y="60" width="220" height="50"/>
-        <rect x="118" y="70" width="18" height="18"/>
-        <rect x="404" y="70" width="18" height="18"/>
-        <rect x="140" y="230" width="240" height="70" stroke-dasharray="6 6"/>
-        <rect x="42" y="240" width="20" height="50"/>
-        <rect x="545" y="70" width="18" height="50"/>
-        <rect x="545" y="160" width="18" height="50"/>
-        <rect x="545" y="250" width="18" height="50"/>
-        <path d="M215 375 Q235 360 255 375"/>
-        <path d="M255 375 Q275 360 295 375"/>
+        <!-- room 1: walls, with a doorway gap at the bottom -->
+        <path d="M20 360 V15 H380 V360"/>
+        <path d="M20 360 H150"/>
+        <path d="M250 360 H380"/>
+        <!-- room 2: walls, with a doorway gap at the top -->
+        <path d="M20 420 H150"/>
+        <path d="M250 420 H380"/>
+        <path d="M20 420 V600 H380 V420"/>
+        <!-- doorway jambs -->
+        <line x1="150" y1="360" x2="150" y2="420" stroke-dasharray="3 3"/>
+        <line x1="250" y1="360" x2="250" y2="420" stroke-dasharray="3 3"/>
+        <!-- room badges -->
+        <circle cx="32" cy="30" r="10"/>
+        <circle cx="32" cy="436" r="10"/>
+        <!-- screen and speakers -->
+        <rect x="110" y="32" width="180" height="42"/>
+        <rect x="70" y="40" width="18" height="18"/>
+        <rect x="312" y="40" width="18" height="18"/>
+        <!-- projector -->
+        <rect x="182" y="112" width="36" height="14"/>
+        <path d="M200 126 L120 74" stroke-dasharray="4 4"/>
+        <path d="M200 126 L280 74" stroke-dasharray="4 4"/>
+        <!-- gesture panel on the left wall -->
+        <rect x="24" y="165" width="16" height="42"/>
+        <line x1="40" y1="186" x2="66" y2="186"/>
+        <!-- visitor zone -->
+        <rect x="70" y="235" width="260" height="90" stroke-dasharray="6 6"/>
+        <!-- entrance curtain -->
+        <path d="M130 345 Q150 330 170 345"/>
+        <path d="M230 345 Q250 330 270 345"/>
+        <!-- artworks and hanging system, room 2 -->
+        <rect x="30" y="455" width="16" height="45"/>
+        <rect x="30" y="530" width="16" height="45"/>
+        <rect x="354" y="455" width="16" height="45"/>
       </g>
-      <circle cx="260" cy="132" r="7" fill="currentColor"/>
-      <circle cx="260" cy="200" r="6" fill="currentColor"/>
-      <circle cx="554" cy="55" r="5" fill="currentColor"/>
-      <circle cx="554" cy="145" r="5" fill="currentColor"/>
-      <circle cx="554" cy="235" r="5" fill="currentColor"/>
-      <g stroke="currentColor" stroke-width="2">
-        <line x1="260" y1="188" x2="260" y2="180"/>
-        <line x1="248" y1="200" x2="240" y2="200"/>
-        <line x1="272" y1="200" x2="280" y2="200"/>
+      <circle cx="200" cy="90" r="6" fill="currentColor"/>
+      <line x1="206" y1="90" x2="240" y2="84" stroke="currentColor" stroke-width="2"/>
+      <g fill="currentColor">
+        <circle cx="110" cy="220" r="6"/>
+        <line x1="110" y1="208" x2="110" y2="200" stroke="currentColor" stroke-width="2"/>
+        <line x1="98" y1="220" x2="90" y2="220" stroke="currentColor" stroke-width="2"/>
+        <line x1="122" y1="220" x2="130" y2="220" stroke="currentColor" stroke-width="2"/>
       </g>
-      <g fill="currentColor" font-size="18" font-family="inherit">
-        <text x="260" y="53" text-anchor="middle">экран</text>
-        <text x="260" y="155" text-anchor="middle" font-size="16">камера</text>
-        <text x="260" y="102" text-anchor="middle" font-size="16">динамики</text>
-        <text x="260" y="270" text-anchor="middle" font-size="16">зона посетителей</text>
-        <text x="300" y="204" font-size="16">мягкий свет</text>
-        <text x="70" y="270" font-size="16">панель жестов</text>
-        <text x="255" y="400" text-anchor="middle" font-size="16">вход, шторы</text>
-        <text x="580" y="98" font-size="16">работы UVALISS</text>
-        <text x="580" y="150" font-size="16">точечный свет</text>
-        <text x="45" y="415" font-size="16">Комната 1</text>
-        <text x="545" y="415" font-size="16">Комната 2</text>
+      <circle cx="38" cy="443" r="5" fill="currentColor"/>
+      <circle cx="38" cy="518" r="5" fill="currentColor"/>
+      <circle cx="362" cy="443" r="5" fill="currentColor"/>
+      <g fill="currentColor" font-family="inherit">
+        <text x="32" y="35" text-anchor="middle" font-size="15">1</text>
+        <text x="32" y="441" text-anchor="middle" font-size="15">2</text>
+        <text x="200" y="26" text-anchor="middle" font-size="13">динамики</text>
+        <text x="200" y="58" text-anchor="middle" font-size="15">экран</text>
+        <text x="245" y="88" font-size="15">камера</text>
+        <text x="200" y="150" text-anchor="middle" font-size="15">проектор (потолок)</text>
+        <text x="70" y="197" font-size="15">панель жестов</text>
+        <text x="125" y="224" font-size="15">мягкий свет</text>
+        <text x="200" y="283" text-anchor="middle" font-size="15">зона посетителей</text>
+        <text x="278" y="349" font-size="13">⚠ предупреждение</text>
+        <text x="110" y="452" font-size="14">точечный свет</text>
+        <text x="110" y="480" font-size="15">работы UVALISS</text>
       </g>
     </svg>
   </figure>
 
   <h2>Комната 1: проекция</h2>
-  <p>Отдельный закрытый зал, не&nbsp;менее 4×5&nbsp;м, потолок от&nbsp;3&nbsp;м. Полная темнота. Стены и&nbsp;потолок тёмные, затянуты плотной чёрной огнестойкой тканью (молтон, от&nbsp;300&nbsp;г/м²); пол тёмный. Одна стена&nbsp;— экран: матовая белая или&nbsp;светло-серая, ровная поверхность. Изображение 16:9, от&nbsp;3&nbsp;м в&nbsp;ширину. Вход через шлюз или&nbsp;двойную штору, чтобы дневной свет не&nbsp;попадал внутрь.</p>
+  <p>Отдельный закрытый зал, не&nbsp;менее 4×5&nbsp;м, потолок от&nbsp;3&nbsp;м. Полная темнота. Стены и&nbsp;потолок тёмные, затянуты плотной чёрной огнестойкой тканью (молтон, от&nbsp;300&nbsp;г/м²); пол тёмный. Одна стена служит экраном: матовая белая или&nbsp;светло-серая, ровная поверхность. Изображение 16:9, от&nbsp;3&nbsp;м в&nbsp;ширину. Вход через шлюз или&nbsp;двойную штору, чтобы дневной свет не&nbsp;попадал внутрь.</p>
 
   <h2>Проектор</h2>
   <dl>
@@ -111,11 +135,11 @@
   <p>Дискретная видеокарта (например, NVIDIA RTX&nbsp;3060 или&nbsp;новее) или&nbsp;Apple M1 или&nbsp;новее, 16&nbsp;ГБ памяти, свежий Chrome, выход HDMI. Автозапуск при&nbsp;включении питания, спящий режим отключён.</p>
   <p>Команда для запуска в&nbsp;режиме киоска:</p>
   <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required --use-fake-ui-for-media-stream "https://conspace-rooms.vercel.app/gallery"</code></pre>
-  <p>Полные подробности галерейного режима смотрите в&nbsp;<a href="tech.html?lang=ru">технической информации</a>.</p>
+  <p>Полные подробности галерейного режима смотрите в&nbsp;<a href="tech.html?lang=ru">спецификациях</a>.</p>
 
   <h2>Веб-камера</h2>
   <p>USB, 1080p, 30&nbsp;fps, угол обзора около 80–90°. Камера спрятана, виден только объектив (чёрный короб или&nbsp;за&nbsp;тканью), по&nbsp;центру над&nbsp;изображением или&nbsp;под&nbsp;ним, направлена на&nbsp;зону посетителей в&nbsp;1,5–3&nbsp;м, на&nbsp;высоте, которая видит руки стоящего и&nbsp;сидящего гостя. Если кабель длиннее 3&nbsp;м, нужен активный USB-удлинитель.</p>
-  <p>Свет: мягкий тёплый свет на&nbsp;зоне посетителей, не&nbsp;доходящий до&nbsp;экрана. Без него камера не&nbsp;видит рук.</p>
+  <p>Свет: мягкий тёплый свет на&nbsp;зоне посетителей, не&nbsp;доходящий до&nbsp;экрана. Без него камера не&nbsp;видит&nbsp;рук.</p>
 
   <h2>Жесты на стене</h2>
   <p>Панель у&nbsp;зоны посетителей, с&nbsp;мягкой подсветкой, со&nbsp;списком жестов на&nbsp;русском и&nbsp;английском. Макет можем подготовить по&nbsp;запросу.</p>
@@ -144,7 +168,7 @@
   <p>Персонал предупреждает гостей, что они могут выйти в&nbsp;любой момент.</p>
 
   <h2>Посетители</h2>
-  <p>Один человек управляет, ещё 4–6&nbsp;могут наблюдать одновременно. 16+. Зона жестов должна быть доступна из&nbsp;инвалидного кресла: камера видит руки сидящего гостя. Фото и&nbsp;видео разрешены, но&nbsp;без вспышки.</p>
+  <p>Один человек управляет, ещё 4–6&nbsp;могут наблюдать одновременно. 16+. Зона жестов должна быть доступна из&nbsp;инвалидного кресла: камера видит руки сидящего гостя. Фото и&nbsp;видео разрешены, но&nbsp;без&nbsp;вспышки.</p>
 
   <h2>Монтаж и каждый день</h2>
   <p>Монтаж: 1–2&nbsp;дня на&nbsp;подготовку зала (ткань, свет, крепления), 1&nbsp;день на&nbsp;технику и&nbsp;видеозвонок с&nbsp;Синаидой для калибровки. На&nbsp;демонтаж нужен 1&nbsp;день.</p>
@@ -187,44 +211,68 @@
   <h2>Floor plan</h2>
   <p>A&nbsp;schematic plan: the projection room on&nbsp;the left, the UVALISS room on&nbsp;the right.</p>
   <figure>
-    <svg viewBox="0 0 800 420" role="img" aria-labelledby="planTitleEn" xmlns="http://www.w3.org/2000/svg">
-      <title id="planTitleEn">Floor plan: the projection room on the left, the UVALISS room on the right</title>
+    <svg viewBox="0 0 400 620" role="img" aria-labelledby="planTitleEn" xmlns="http://www.w3.org/2000/svg">
+      <title id="planTitleEn">Floor plan: the projection room on top, the UVALISS room below, joined by a doorway</title>
       <g fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="30" y="30" width="460" height="360"/>
-        <rect x="530" y="30" width="240" height="360"/>
-        <rect x="150" y="60" width="220" height="50"/>
-        <rect x="118" y="70" width="18" height="18"/>
-        <rect x="404" y="70" width="18" height="18"/>
-        <rect x="140" y="230" width="240" height="70" stroke-dasharray="6 6"/>
-        <rect x="42" y="240" width="20" height="50"/>
-        <rect x="545" y="70" width="18" height="50"/>
-        <rect x="545" y="160" width="18" height="50"/>
-        <rect x="545" y="250" width="18" height="50"/>
-        <path d="M215 375 Q235 360 255 375"/>
-        <path d="M255 375 Q275 360 295 375"/>
+        <!-- room 1: walls, with a doorway gap at the bottom -->
+        <path d="M20 360 V15 H380 V360"/>
+        <path d="M20 360 H150"/>
+        <path d="M250 360 H380"/>
+        <!-- room 2: walls, with a doorway gap at the top -->
+        <path d="M20 420 H150"/>
+        <path d="M250 420 H380"/>
+        <path d="M20 420 V600 H380 V420"/>
+        <!-- doorway jambs -->
+        <line x1="150" y1="360" x2="150" y2="420" stroke-dasharray="3 3"/>
+        <line x1="250" y1="360" x2="250" y2="420" stroke-dasharray="3 3"/>
+        <!-- room badges -->
+        <circle cx="32" cy="30" r="10"/>
+        <circle cx="32" cy="436" r="10"/>
+        <!-- screen and speakers -->
+        <rect x="110" y="32" width="180" height="42"/>
+        <rect x="70" y="40" width="18" height="18"/>
+        <rect x="312" y="40" width="18" height="18"/>
+        <!-- projector -->
+        <rect x="182" y="112" width="36" height="14"/>
+        <path d="M200 126 L120 74" stroke-dasharray="4 4"/>
+        <path d="M200 126 L280 74" stroke-dasharray="4 4"/>
+        <!-- gesture panel on the left wall -->
+        <rect x="24" y="165" width="16" height="42"/>
+        <line x1="40" y1="186" x2="66" y2="186"/>
+        <!-- visitor zone -->
+        <rect x="70" y="235" width="260" height="90" stroke-dasharray="6 6"/>
+        <!-- entrance curtain -->
+        <path d="M130 345 Q150 330 170 345"/>
+        <path d="M230 345 Q250 330 270 345"/>
+        <!-- artworks and hanging system, room 2 -->
+        <rect x="30" y="455" width="16" height="45"/>
+        <rect x="30" y="530" width="16" height="45"/>
+        <rect x="354" y="455" width="16" height="45"/>
       </g>
-      <circle cx="260" cy="132" r="7" fill="currentColor"/>
-      <circle cx="260" cy="200" r="6" fill="currentColor"/>
-      <circle cx="554" cy="55" r="5" fill="currentColor"/>
-      <circle cx="554" cy="145" r="5" fill="currentColor"/>
-      <circle cx="554" cy="235" r="5" fill="currentColor"/>
-      <g stroke="currentColor" stroke-width="2">
-        <line x1="260" y1="188" x2="260" y2="180"/>
-        <line x1="248" y1="200" x2="240" y2="200"/>
-        <line x1="272" y1="200" x2="280" y2="200"/>
+      <circle cx="200" cy="90" r="6" fill="currentColor"/>
+      <line x1="206" y1="90" x2="240" y2="84" stroke="currentColor" stroke-width="2"/>
+      <g fill="currentColor">
+        <circle cx="110" cy="220" r="6"/>
+        <line x1="110" y1="208" x2="110" y2="200" stroke="currentColor" stroke-width="2"/>
+        <line x1="98" y1="220" x2="90" y2="220" stroke="currentColor" stroke-width="2"/>
+        <line x1="122" y1="220" x2="130" y2="220" stroke="currentColor" stroke-width="2"/>
       </g>
-      <g fill="currentColor" font-size="18" font-family="inherit">
-        <text x="260" y="53" text-anchor="middle">screen</text>
-        <text x="260" y="155" text-anchor="middle" font-size="16">camera</text>
-        <text x="260" y="102" text-anchor="middle" font-size="16">speakers</text>
-        <text x="260" y="270" text-anchor="middle" font-size="16">visitor zone</text>
-        <text x="300" y="204" font-size="16">soft light</text>
-        <text x="70" y="270" font-size="16">gesture panel</text>
-        <text x="255" y="400" text-anchor="middle" font-size="16">entrance, curtain</text>
-        <text x="580" y="98" font-size="16">UVALISS works</text>
-        <text x="580" y="150" font-size="16">spot light</text>
-        <text x="45" y="415" font-size="16">Room 1</text>
-        <text x="545" y="415" font-size="16">Room 2</text>
+      <circle cx="38" cy="443" r="5" fill="currentColor"/>
+      <circle cx="38" cy="518" r="5" fill="currentColor"/>
+      <circle cx="362" cy="443" r="5" fill="currentColor"/>
+      <g fill="currentColor" font-family="inherit">
+        <text x="32" y="35" text-anchor="middle" font-size="15">1</text>
+        <text x="32" y="441" text-anchor="middle" font-size="15">2</text>
+        <text x="200" y="26" text-anchor="middle" font-size="13">speakers</text>
+        <text x="200" y="58" text-anchor="middle" font-size="15">screen</text>
+        <text x="245" y="88" font-size="15">camera</text>
+        <text x="200" y="150" text-anchor="middle" font-size="15">projector (ceiling)</text>
+        <text x="70" y="197" font-size="15">gesture panel</text>
+        <text x="125" y="224" font-size="15">soft light</text>
+        <text x="200" y="283" text-anchor="middle" font-size="15">visitor zone</text>
+        <text x="278" y="349" font-size="14">⚠ warning</text>
+        <text x="110" y="452" font-size="14">spot light</text>
+        <text x="110" y="480" font-size="15">UVALISS works</text>
       </g>
     </svg>
   </figure>
@@ -248,7 +296,7 @@
   <p>A&nbsp;discrete GPU (for&nbsp;example, NVIDIA RTX&nbsp;3060 or&nbsp;better) or&nbsp;Apple M1 or&nbsp;newer, 16&nbsp;GB RAM, a&nbsp;recent Chrome, HDMI out. It&nbsp;should auto-start on&nbsp;power, with sleep turned off.</p>
   <p>Kiosk command:</p>
   <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required --use-fake-ui-for-media-stream "https://conspace-rooms.vercel.app/gallery"</code></pre>
-  <p>See the <a href="tech.html?lang=en">tech specs</a> for&nbsp;the full gallery-mode details.</p>
+  <p>See the <a href="tech.html?lang=en">specs</a> for&nbsp;the full gallery-mode details.</p>
 
   <h2>Webcam</h2>
   <p>USB, 1080p, 30&nbsp;fps, a&nbsp;field of&nbsp;view around 80–90°. Hidden, with only the lens visible (a&nbsp;black box or&nbsp;behind the fabric), centred above or&nbsp;below the image, facing the visitor zone 1.5–3&nbsp;m away, at&nbsp;a&nbsp;height that sees the hands of&nbsp;a&nbsp;standing and&nbsp;a&nbsp;seated visitor. A&nbsp;cable longer than 3&nbsp;m needs an&nbsp;active USB extension.</p>
@@ -276,7 +324,7 @@
   <h2>Warning before the entrance</h2>
   <p>Mandatory: at&nbsp;the entrance to&nbsp;Room&nbsp;1, a&nbsp;clearly visible sign in&nbsp;the local language and&nbsp;English. Text to&nbsp;print:</p>
   <div class="warning">
-    <p lang="en">Warning. Inside: flashing and&nbsp;flickering light, loud sudden sounds, darkness, and&nbsp;an&nbsp;unsettling atmosphere: Soviet hospital corridors, images of&nbsp;fear and&nbsp;memory. Not recommended for&nbsp;people with&nbsp;photosensitive epilepsy or&nbsp;sensitivity to&nbsp;flashing light. 16+.</p>
+    <p lang="en">Warning. Inside: flashing and&nbsp;flickering light, loud sudden sounds, darkness, and&nbsp;an&nbsp;unsettling atmosphere: hospital corridors, images of&nbsp;fear and&nbsp;memory. Not recommended for&nbsp;people with&nbsp;photosensitive epilepsy or&nbsp;sensitivity to&nbsp;flashing light. 16+.</p>
   </div>
   <p>Staff tell visitors they can leave at&nbsp;any moment.</p>
 

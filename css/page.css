@@ -17,7 +17,7 @@ html[lang="ru"] section[lang="en"], html[lang="en"] section[lang="ru"] { display
 
 /* Rider page: floor-plan diagram and the entry warning block. */
 .doc figure { margin: 0 0 1.2em; }
-.doc figure svg { max-width: 100%; height: auto; display: block; margin: 0 auto; color: var(--dim); }
+.doc figure svg { max-width: min(520px, 100%); height: auto; display: block; margin: 0 auto; color: var(--dim); }
 .doc .warning { border: 1px solid var(--accent); padding: 1em 1.2em; margin-bottom: 0.8em; }
 .doc .warning p { color: var(--fg); margin-bottom: 0; }
 
