@@ -4,6 +4,7 @@ import { InputRouter } from './input.js';
 import { UI, detectCapabilities } from './ui.js';
 import { t, applyStatic, setLang, langFromUrl } from './i18n.js';
 import { mixZone, SoulStage } from './zones.js';
+import { createClip, clipSupported } from './clip.js';
 
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 scrollTo(0, 0);
@@ -150,6 +151,7 @@ async function boot() {
     if (audio) audio.motion(speed);
     if (post) post.render(scene, camera, dt, elapsed, speed);
     else renderer.render(scene, camera);
+    window.__app.clip?.frame();   // copy the frame while the drawing buffer still holds it
   };
   renderer.setAnimationLoop(frame);
   window.__app.frame = frame;   // dev hook: step the world by hand (headless checks, hidden tabs)
@@ -218,7 +220,15 @@ async function boot() {
     ui.showToast(t('camKeys'));
   }
 
+  if (!GALLERY && clipSupported()) {
+    window.__app.clip = createClip({
+      source: renderer.domElement, audio,
+      getCount: () => window.__app.soul?.seen.size ?? 0, total: window.__app.artworks?.list?.length || 18,
+      strings: { rec: t('clipRec'), save: t('clipSave'), roses: t('clipRoses') },
+    });
+  }
   if (!GALLERY) ui.showExperienceControls({
+    onClip: window.__app.clip ? () => window.__app.clip.recording || window.__app.clip.start() : null,
     onFinish: () => {
       if (player) player.locked = true;
       hands?.stop(); // release the camera and the detection loop, not just the view

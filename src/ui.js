@@ -299,7 +299,7 @@ export class UI {
   }
 
   // Fullscreen / main-screen / finish toolbar, shown once the mode is chosen.
-  showExperienceControls({ onFinish } = {}) {
+  showExperienceControls({ onFinish, onClip } = {}) {
     const toolbar = $('hud-toolbar');
     if (!toolbar) return;
     toolbar.classList.remove('hidden');
@@ -330,6 +330,11 @@ export class UI {
     });
 
     $('btn-finish').addEventListener('click', () => onFinish?.());
+
+    if (onClip) {
+      $('btn-clip').classList.remove('hidden');
+      $('btn-clip').addEventListener('click', () => onClip());
+    }
   }
 
   // Terminal-styled yes/no dialog. Resolves true on Yes/Enter, false on
