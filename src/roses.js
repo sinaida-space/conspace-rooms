@@ -89,42 +89,82 @@ export function createRoseCounter(total = 18) {
 // arch stands at z = 0 facing +Z (the visitor), the tunnel runs to z = -LENGTH.
 const HALF = 1.0, POST_H = 1.95, ARCHES = 8, GAP = 0.75, LENGTH = GAP * (ARCHES - 1);
 
-// A rose seen from above, drawn once: rings of petals from the dark heart out
-// to the lit rims, each with a shadowed edge. Used as a sprite, so it always
-// faces the eye and never shows a flat side.
+// A velvet rose seen from above, drawn once at 256 px: five rings of cupped
+// petals, each dark and deep at its base and catching the light along its
+// rim the way velvet does, a soft shadow under every petal, a tight spiral
+// at the heart, and a fine grain of pile over all of it. Used as a sprite,
+// so it always faces the eye.
 function roseTexture() {
-  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
   const g = c.getContext('2d');
-  g.translate(64, 64);
-  for (let ring = 0; ring < 6; ring++) {
-    const r = 58 - ring * 9, n = 5 + (ring % 2), turn = ring * 0.7;
+  g.translate(S / 2, S / 2);
+  const petal = (r, w) => {                          // a cupped petal pointing along +y
+    g.beginPath();
+    g.moveTo(0, r * 0.12);
+    g.bezierCurveTo(-r * w, r * 0.18, -r * (w + 0.1), r * 0.9, 0, r);
+    g.bezierCurveTo(r * (w + 0.1), r * 0.9, r * w, r * 0.18, 0, r * 0.12);
+    g.closePath();
+  };
+  const rings = [[120, 5, 0.62, 0.0], [102, 5, 0.6, 0.63], [84, 5, 0.58, 0.2], [66, 4, 0.56, 0.9], [50, 4, 0.52, 0.35], [36, 3, 0.5, 1.2]];
+  rings.forEach(([r, n, w, turn], ring) => {
+    const deep = ring / (rings.length - 1);           // inner rings sit deeper in shadow
     for (let k = 0; k < n; k++) {
-      const a = turn + k / n * Math.PI * 2;
-      g.save(); g.rotate(a);
-      const grad = g.createRadialGradient(0, r * 0.35, 1, 0, r * 0.35, r * 0.75);
-      grad.addColorStop(0, ring > 3 ? '#4a0206' : '#7d0a10');
-      grad.addColorStop(0.7, ring > 3 ? '#8e0d14' : '#c3141c');
-      grad.addColorStop(1, '#ff5a64');
-      g.fillStyle = grad;
-      g.beginPath(); g.ellipse(0, r * 0.42, r * 0.42, r * 0.5, 0, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = 'rgba(40, 0, 4, 0.55)'; g.lineWidth = 1.5; g.stroke();
+      g.save();
+      g.rotate(turn + k / n * Math.PI * 2 + (Math.sin(k * 7.3 + ring) * 0.12));
+      g.shadowColor = 'rgba(10, 0, 2, 0.75)'; g.shadowBlur = 10; g.shadowOffsetY = 3;
+      petal(r, w);
+      const grad = g.createLinearGradient(0, r * 0.12, 0, r);
+      grad.addColorStop(0, `rgb(${30 - deep * 14}, 0, ${4})`);          // the base, in the dark of the cup
+      grad.addColorStop(0.45, `rgb(${110 - deep * 30}, 6, ${16})`);
+      grad.addColorStop(0.82, `rgb(${168 - deep * 30}, 14, ${28})`);
+      grad.addColorStop(1, `rgb(${214 - deep * 30}, ${50 - deep * 10}, ${62 - deep * 10})`);  // the velvet rim
+      g.fillStyle = grad; g.fill();
+      g.shadowColor = 'transparent';
+      // sheen along the rim, and the curl where the petal turns back
+      g.strokeStyle = `rgba(255, 120, 132, ${0.28 - deep * 0.12})`; g.lineWidth = 2.2;
+      g.beginPath(); g.moveTo(-r * w * 0.85, r * 0.78); g.quadraticCurveTo(0, r * 1.04, r * w * 0.85, r * 0.78); g.stroke();
+      g.strokeStyle = 'rgba(25, 0, 4, 0.55)'; g.lineWidth = 1.2; petal(r, w); g.stroke();
       g.restore();
     }
+  });
+  // the heart: petals still wrapped tight, in a spiral
+  for (let k = 0; k < 9; k++) {
+    const a = k * 2.4, r = 6 + k * 2.4;
+    g.save(); g.rotate(a);
+    g.strokeStyle = `rgba(${60 + k * 12}, 0, 8, 0.95)`; g.lineWidth = 4;
+    g.beginPath(); g.arc(0, 0, r, 0.2, 2.6); g.stroke();
+    g.strokeStyle = 'rgba(240, 90, 104, 0.35)'; g.lineWidth = 1.2;
+    g.beginPath(); g.arc(0, 0, r + 1.6, 0.4, 2.2); g.stroke();
+    g.restore();
   }
-  g.fillStyle = '#2a0003'; g.beginPath(); g.arc(0, 0, 5, 0, Math.PI * 2); g.fill();    // the tight heart
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  g.fillStyle = '#140002'; g.beginPath(); g.arc(0, 0, 4, 0, Math.PI * 2); g.fill();
+  // the pile: a fine grain of light and dark specks, only on the petals
+  g.globalCompositeOperation = 'source-atop';
+  for (let i = 0; i < 5000; i++) {
+    const x = (Math.random() - 0.5) * S, y = (Math.random() - 0.5) * S;
+    g.fillStyle = Math.random() < 0.5 ? `rgba(0, 0, 0, ${Math.random() * 0.18})` : `rgba(255, 150, 160, ${Math.random() * 0.08})`;
+    g.fillRect(x, y, 1.4, 1.4);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;
 }
 function leafTexture() {
-  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
   const g = c.getContext('2d');
-  g.translate(32, 32); g.rotate(-0.7);
-  const grad = g.createLinearGradient(-26, 0, 26, 0);
-  grad.addColorStop(0, '#173d24'); grad.addColorStop(1, '#3f8a5a');
-  g.fillStyle = grad;
-  g.beginPath(); g.moveTo(-28, 0); g.quadraticCurveTo(0, -17, 28, 0); g.quadraticCurveTo(0, 17, -28, 0); g.fill();
-  g.strokeStyle = 'rgba(160, 220, 170, 0.5)'; g.lineWidth = 1.4;
-  g.beginPath(); g.moveTo(-26, 0); g.lineTo(26, 0); g.stroke();
+  g.translate(S / 2, S / 2); g.rotate(-0.7);
+  // a serrated rose leaf: saw-toothed edge, a midrib and side veins
+  g.beginPath(); g.moveTo(-56, 0);
+  for (let k = 0; k <= 16; k++) { const x = -56 + k * 7, h = Math.sin(k / 16 * Math.PI) * 30; g.lineTo(x, -h + (k % 2 ? 3 : 0)); }
+  for (let k = 16; k >= 0; k--) { const x = -56 + k * 7, h = Math.sin(k / 16 * Math.PI) * 30; g.lineTo(x, h - (k % 2 ? 3 : 0)); }
+  g.closePath();
+  const grad = g.createLinearGradient(0, -30, 0, 30);
+  grad.addColorStop(0, '#2f6a40'); grad.addColorStop(0.5, '#1c4a2a'); grad.addColorStop(1, '#0f2a18');
+  g.fillStyle = grad; g.fill();
+  g.strokeStyle = 'rgba(8, 24, 12, 0.7)'; g.lineWidth = 1.5; g.stroke();
+  g.strokeStyle = 'rgba(150, 210, 160, 0.45)'; g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(-54, 0); g.lineTo(56, 0); g.stroke();
+  g.lineWidth = 0.9;
+  for (let k = 1; k < 7; k++) { const x = -48 + k * 14; for (const sgn of [-1, 1]) { g.beginPath(); g.moveTo(x, 0); g.quadraticCurveTo(x + 6, sgn * 10, x + 12, sgn * 20); g.stroke(); } }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
@@ -213,13 +253,13 @@ export function buildRoseArch(text) {
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     geo.setDrawRange(0, 0);
-    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size, sizeAttenuation: true, vertexColors: true, alphaTest: 0.45, fog: true }));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size, sizeAttenuation: true, vertexColors: true, alphaTest: 0.35, fog: true }));
     pts.frustumCulled = false;
     g.add(pts);
     return pts;
   };
   const leafPts = cloud(leaves, leafTexture(), 0.2, () => { const k = 0.7 + Math.random() * 0.5; return [k, k, k]; });
-  const rosePts = cloud(roses, roseTexture(), 0.24, () => { const k = 0.75 + Math.random() * 0.45; return [k, k * (0.85 + Math.random() * 0.2), k]; });
+  const rosePts = cloud(roses, roseTexture(), 0.27, () => { const k = 0.75 + Math.random() * 0.45; return [k, k * (0.85 + Math.random() * 0.2), k]; });
 
   // light: the far arch glows in its own shape, and shafts pour back through the tunnel
   const glowU = { uK: { value: 0 } };
