@@ -4,7 +4,10 @@
 <meta charset="utf-8">
 <script>
   // Old GitHub Pages link: forward to the Vercel home, keeping the page, ?lang and #hash.
-  if (location.hostname.endsWith('github.io')) {
+  // ?mirror keeps the visitor on GitHub Pages (for networks where Vercel is blocked) and is remembered.
+  var mirror = /[?&]mirror\b/.test(location.search);
+  try { if (mirror) localStorage.setItem('mirror', '1'); mirror = mirror || localStorage.getItem('mirror') === '1'; } catch (e) {}
+  if (location.hostname.endsWith('github.io') && !mirror) {
     location.replace('https://conspace-rooms.vercel.app' +
       location.pathname.replace(/^\/conspace-rooms/, '') + location.search + location.hash);
   }
@@ -53,7 +56,7 @@
   <p>Если выбрать режим «Жесты», браузер отдельно спросит разрешение на&nbsp;камеру. Кадры обрабатываются прямо на&nbsp;устройстве, чтобы отслеживать положение рук. Ничего не&nbsp;записывается, не&nbsp;сохраняется и&nbsp;не&nbsp;передаётся. Если отказать или отозвать доступ, включится клавиатура или сенсорное управление.</p>
 
   <h2>Галерейный режим</h2>
-  <p>Страница <a href="gallery">/gallery</a> нужна для показа на&nbsp;выставке. Там камера включается сразу, без выбора режима: её подключает тот, кто устанавливает работу. Кадры обрабатываются на&nbsp;этом компьютере: программа замечает, есть ли перед экраном лицо и&nbsp;руки, чтобы начать прогулку, и&nbsp;следит за&nbsp;руками для управления. Она не&nbsp;узнаёт, кто это, ничего не&nbsp;записывает, не&nbsp;сохраняет и&nbsp;не&nbsp;передаёт. На&nbsp;заставке об&nbsp;этом написано для посетителей.</p>
+  <p>Страница <a href="gallery.html">/gallery</a> нужна для показа на&nbsp;выставке. Там камера включается сразу, без выбора режима: её подключает тот, кто устанавливает работу. Кадры обрабатываются на&nbsp;этом компьютере: программа замечает, есть ли перед экраном лицо и&nbsp;руки, чтобы начать прогулку, и&nbsp;следит за&nbsp;руками для управления. Она не&nbsp;узнаёт, кто это, ничего не&nbsp;записывает, не&nbsp;сохраняет и&nbsp;не&nbsp;передаёт. На&nbsp;заставке об&nbsp;этом написано для посетителей.</p>
 
   <h2>Карточка с&nbsp;вопросами</h2>
   <p>Картинка с&nbsp;вопросами в&nbsp;конце прогулки рисуется прямо в&nbsp;браузере. Кнопка «Сохранить картинку» скачивает её на&nbsp;твоё устройство или открывает системное меню «Поделиться». К&nbsp;нам она не&nbsp;попадает.</p>
@@ -103,7 +106,7 @@
   <p>If&nbsp;you choose gesture mode, your browser asks for camera permission separately. Frames are processed on&nbsp;your device to&nbsp;track hand position. Nothing from the camera is&nbsp;recorded, saved, or&nbsp;sent anywhere. Declining or&nbsp;revoking access switches the experience to&nbsp;keyboard or&nbsp;touch controls.</p>
 
   <h2>Gallery mode</h2>
-  <p>The page <a href="gallery?lang=en">/gallery</a> is&nbsp;for exhibitions. There the camera starts right away, without a&nbsp;mode to&nbsp;choose: whoever installs the piece connects&nbsp;it. Frames are processed on&nbsp;that computer: the program notices whether a&nbsp;face and hands are in&nbsp;front of&nbsp;the screen, to&nbsp;start the walk, and follows the hands for control. It&nbsp;does not recognise who anyone&nbsp;is, and it&nbsp;records, saves and sends nothing. The attract screen tells visitors this.</p>
+  <p>The page <a href="gallery.html?lang=en">/gallery</a> is&nbsp;for exhibitions. There the camera starts right away, without a&nbsp;mode to&nbsp;choose: whoever installs the piece connects&nbsp;it. Frames are processed on&nbsp;that computer: the program notices whether a&nbsp;face and hands are in&nbsp;front of&nbsp;the screen, to&nbsp;start the walk, and follows the hands for control. It&nbsp;does not recognise who anyone&nbsp;is, and it&nbsp;records, saves and sends nothing. The attract screen tells visitors this.</p>
 
   <h2>The card of&nbsp;questions</h2>
   <p>The picture of&nbsp;questions at&nbsp;the end of&nbsp;a&nbsp;walk is&nbsp;drawn in&nbsp;your browser. “Save image” downloads it&nbsp;to&nbsp;your device or&nbsp;opens your system’s share sheet. It&nbsp;never reaches&nbsp;us.</p>

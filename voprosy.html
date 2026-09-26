@@ -4,7 +4,10 @@
 <meta charset="utf-8">
 <script>
   // Old GitHub Pages link: forward to the Vercel home, keeping the page, ?lang and #hash.
-  if (location.hostname.endsWith('github.io')) {
+  // ?mirror keeps the visitor on GitHub Pages (for networks where Vercel is blocked) and is remembered.
+  var mirror = /[?&]mirror\b/.test(location.search);
+  try { if (mirror) localStorage.setItem('mirror', '1'); mirror = mirror || localStorage.getItem('mirror') === '1'; } catch (e) {}
+  if (location.hostname.endsWith('github.io') && !mirror) {
     location.replace('https://conspace-rooms.vercel.app' +
       location.pathname.replace(/^\/conspace-rooms/, '').replace(/\.html$/, '') + location.search + location.hash);
   }

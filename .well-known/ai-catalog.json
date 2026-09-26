@@ -42,7 +42,7 @@
     },
     {
       "identifier": "urn:air:conspace-rooms.vercel.app:site:tech",
-      "displayName": "CONSPACE ROOMS technical information and gallery mode (Markdown)",
+      "displayName": "CONSPACE ROOMS specs and gallery mode (Markdown)",
       "type": "text/markdown",
       "url": "https://conspace-rooms.vercel.app/tech.md",
       "representativeQueries": [

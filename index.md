@@ -30,4 +30,4 @@ No analytics, no accounts, no cookies beyond two local settings. In gesture mode
 
 ## More
 
-- [Technical information](https://conspace-rooms.vercel.app/tech.html) · [Privacy](https://conspace-rooms.vercel.app/privacy.html) · [Source code](https://github.com/sinaida-space/conspace-rooms) · [llms.txt](https://conspace-rooms.vercel.app/llms.txt)
+- [Specs](https://conspace-rooms.vercel.app/tech.html) · [Privacy](https://conspace-rooms.vercel.app/privacy.html) · [Source code](https://github.com/sinaida-space/conspace-rooms) · [llms.txt](https://conspace-rooms.vercel.app/llms.txt)

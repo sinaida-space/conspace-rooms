@@ -4,13 +4,16 @@
 <meta charset="utf-8">
 <script>
   // Old GitHub Pages link: forward to the Vercel home, keeping the page, ?lang and #hash.
-  if (location.hostname.endsWith('github.io')) {
+  // ?mirror keeps the visitor on GitHub Pages (for networks where Vercel is blocked) and is remembered.
+  var mirror = /[?&]mirror\b/.test(location.search);
+  try { if (mirror) localStorage.setItem('mirror', '1'); mirror = mirror || localStorage.getItem('mirror') === '1'; } catch (e) {}
+  if (location.hostname.endsWith('github.io') && !mirror) {
     location.replace('https://conspace-rooms.vercel.app' +
       location.pathname.replace(/^\/conspace-rooms/, '') + location.search + location.hash);
   }
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tech specs · CONSPACE ROOMS</title>
+<title>Specs · CONSPACE ROOMS</title>
 <meta name="theme-color" content="#010805">
 <link rel="icon" href="assets/icons/favicon.ico" sizes="any">
 <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
@@ -23,7 +26,7 @@
 <p class="lang-switch"><a href="?lang=ru" lang="ru">RU</a> · <a href="?lang=en" lang="en">EN</a></p>
 
 <section lang="ru">
-  <h1>CONSPACE ROOMS: техническая информация</h1>
+  <h1>CONSPACE ROOMS: спецификации</h1>
   <p class="updated">Обновлено 25&nbsp;сентября 2026</p>
 
   <h2>Что это</h2>
@@ -47,7 +50,7 @@
   </dl>
 
   <h2>Галерейный режим</h2>
-  <p>Для показа в&nbsp;пространстве: проектор или экран, компьютер и&nbsp;веб-камера у&nbsp;экрана. Откройте <a href="gallery">conspace-rooms.vercel.app/gallery</a>. Здесь нет стартовых экранов и&nbsp;кнопок. Камера замечает лицо: человек постоял перед экраном около секунды, и&nbsp;прогулка начинается, управление жестами. Если перед экраном никого нет 40&nbsp;секунд, возвращается заставка, а&nbsp;следующий посетитель попадает в&nbsp;новый лабиринт. Итоговая карточка с&nbsp;вопросами держится 25&nbsp;секунд.</p>
+  <p>Для показа в&nbsp;пространстве: проектор или экран, компьютер и&nbsp;веб-камера у&nbsp;экрана. Откройте <a href="gallery.html">conspace-rooms.vercel.app/gallery</a>. Здесь нет стартовых экранов и&nbsp;кнопок. Камера замечает лицо: человек постоял перед экраном около секунды, и&nbsp;прогулка начинается, управление жестами. Если перед экраном никого нет 40&nbsp;секунд, возвращается заставка, а&nbsp;следующий посетитель попадает в&nbsp;новый лабиринт. Итоговая карточка с&nbsp;вопросами держится 25&nbsp;секунд.</p>
   <p>Параметры в&nbsp;адресе:</p>
   <dl>
     <dt>lang</dt><dd>ru или en, по&nbsp;умолчанию ru.</dd>
@@ -100,7 +103,7 @@
 </section>
 
 <section lang="en">
-  <h1>CONSPACE ROOMS: tech specs</h1>
+  <h1>CONSPACE ROOMS: specs</h1>
   <p class="updated">Updated 25&nbsp;September 2026</p>
 
   <h2>What it is</h2>
@@ -124,7 +127,7 @@
   </dl>
 
   <h2>Gallery mode</h2>
-  <p>For a&nbsp;space: a&nbsp;projector or&nbsp;a&nbsp;screen, a&nbsp;computer and&nbsp;a&nbsp;webcam by&nbsp;the screen. Open <a href="gallery?lang=en">conspace-rooms.vercel.app/gallery</a>. There are no start screens and no buttons. The camera notices a&nbsp;face: someone stands in&nbsp;front of&nbsp;the screen for about a&nbsp;second and the walk begins, steered by&nbsp;hands. When nobody has been in&nbsp;front for 40&nbsp;seconds, the attract screen comes back and the next visitor gets a&nbsp;new labyrinth. The closing card of&nbsp;questions stays up for 25&nbsp;seconds.</p>
+  <p>For a&nbsp;space: a&nbsp;projector or&nbsp;a&nbsp;screen, a&nbsp;computer and&nbsp;a&nbsp;webcam by&nbsp;the screen. Open <a href="gallery.html?lang=en">conspace-rooms.vercel.app/gallery</a>. There are no start screens and no buttons. The camera notices a&nbsp;face: someone stands in&nbsp;front of&nbsp;the screen for about a&nbsp;second and the walk begins, steered by&nbsp;hands. When nobody has been in&nbsp;front for 40&nbsp;seconds, the attract screen comes back and the next visitor gets a&nbsp;new labyrinth. The closing card of&nbsp;questions stays up for 25&nbsp;seconds.</p>
   <p>URL parameters:</p>
   <dl>
     <dt>lang</dt><dd>ru or&nbsp;en, Russian by&nbsp;default.</dd>
