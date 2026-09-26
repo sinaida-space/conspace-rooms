@@ -108,11 +108,56 @@ pins one labyrinth for testing.
 
 ## Gallery mode
 
-`/gallery` runs the piece as an installation: no start screens or buttons, the
-webcam watches for a face, the walk starts when someone stands in front of the
-screen and resets to a new labyrinth when nobody has been there for a while.
-Parameters (`lang`, `idle`, `card`, `volume`, `seed`) and the Chrome kiosk flags
-are on the tech page (`tech.html`); the code is in `src/gallery.js`.
+`/gallery` runs the piece as an installation for a projector or a screen with a
+webcam. There are no start screens, menus or buttons and the cursor is hidden.
+An attract screen waits until the webcam sees a face for about a second; then the
+walk starts and the visitor steers with their hands. When nobody has been in front
+of the camera for a while (or the closing card has been up long enough), the
+attract screen comes back and the page reloads into a new labyrinth for the next
+visitor. The code is in `src/gallery.js`.
+
+### Setting it up
+
+1. A computer with a recent Chrome, a projector or screen, a webcam placed by the
+   screen facing the visitor at about chest height, and speakers or headphones.
+2. Light the visitor's face and hands from the front; the hand tracker needs to see
+   both hands clearly at a step or two from the camera.
+3. Start Chrome in kiosk mode so it opens full screen, plays sound and uses the
+   camera without anyone clicking:
+
+   ```
+   chrome --kiosk --autoplay-policy=no-user-gesture-required --use-fake-ui-for-media-stream "https://conspace-rooms.vercel.app/gallery?lang=ru"
+   ```
+
+   On macOS: `/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome` with
+   the same flags. Without kiosk mode, allow the camera once when Chrome asks (it
+   remembers the site) and press `F` for full screen; the first key press or click
+   also wakes the sound.
+4. Test it: step in front of the camera, the walk should start; step away and after
+   the idle time the attract screen should return.
+
+### URL parameters
+
+| Parameter | Default | What it does |
+|-----------|---------|--------------|
+| `lang`    | `ru`    | `ru` or `en` |
+| `idle`    | `40`    | seconds with nobody in front before the walk resets (5–600) |
+| `card`    | `25`    | seconds the closing card of questions stays up (5–300) |
+| `volume`  | `0.9`   | master volume, 0 to 1 |
+| `seed`    | time    | an integer for one fixed labyrinth instead of a new one per visitor |
+
+Example: `/gallery?lang=en&idle=60&card=30&volume=0.7`
+
+### Keys
+
+| Key | What it does |
+|-----|--------------|
+| `F` | toggle full screen (when not in kiosk mode) |
+| any key | enter with keyboard controls, if the camera is not available |
+
+The cheats in [docs/CHEATS.md](docs/CHEATS.md) work here too. As in the ordinary
+gesture mode, the camera image is processed only in the browser: nothing is
+recorded or sent anywhere.
 
 ## Languages
 

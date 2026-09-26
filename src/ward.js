@@ -465,7 +465,7 @@ export function createWardKit(atmo, quality) {
   const texMat = (key, make) => {
     let m = texMats.get(key);
     if (!m) {
-      m = atmo.prop({ map: make() });
+      m = atmo.prop({ map: make(), rust: key.startsWith('sign:') ? 0.35 : 0 });   // paper stays paper; enamel rusts a little
       m.polygonOffset = true; m.polygonOffsetFactor = -2; m.polygonOffsetUnits = -2;
       texMats.set(key, m);
     }
@@ -520,7 +520,7 @@ export function createWardKit(atmo, quality) {
         place(lens, plan.lamp.x, CEIL_H, plan.lamp.z, plan.lamp.rot, 0, plan.lamp.sag || 0);
         const seed = Math.floor(plan.lamp.seed);
         let lm = lensMats.get(seed % 4);
-        if (!lm) { lm = atmo.prop({ color: 0xdce8ec, glow: 0.9, seed: seed % 4 * 17.3 }); lensMats.set(seed % 4, lm); }
+        if (!lm) { lm = atmo.prop({ color: 0xdce8ec, glow: 0.9, seed: seed % 4 * 17.3, rust: 0 }); lensMats.set(seed % 4, lm); }
         const mesh = new THREE.Mesh(mergeGeometries(lens), lm);
         mesh.userData.keepMaterial = true;
         group.add(mesh);

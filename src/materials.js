@@ -656,6 +656,7 @@ uniform float uHasMap;
 uniform vec3  uColor;
 uniform float uGlow;       // light of its own (a lamp lens), trembling
 uniform float uSeed;
+uniform float uRust;       // how much time has eaten it: rust, streaks, scratches, grime
 varying vec2 vUv0;
 varying vec4 vCol;
 void main(){
@@ -667,12 +668,29 @@ void main(){
   float alpha = 1.0;
   if (uHasMap > 0.5) { vec4 tx = texture2D(uMap, vUv0); base *= tx.rgb; alpha = tx.a; }
   if (alpha < 0.5) discard;
+  float rusted = 0.0;
+  if (uRust > 0.0) {
+    // project along the surface's own facing so patches never smear
+    vec3 an = abs(N);
+    vec2 q = an.y > max(an.x, an.z) ? vWorldPos.xz : (an.x > an.z ? vWorldPos.zy : vWorldPos.xy);
+    float n = fbm(q * 7.0, 4), fine = vnoise(q * 38.0);
+    float low = 1.0 - smoothstep(0.0, 1.2, vWorldPos.y);                  // rust gathers low down, where the damp is
+    float metal = mix(0.2, 1.0, smoothstep(0.1, 0.4, vCol.a));             // cloth and paper (no gloss) only stain
+    rusted = smoothstep(0.54 - 0.2 * low, 0.8, n + fine * 0.12) * uRust * metal;
+    vec3 rustCol = mix(vec3(0.28, 0.12, 0.05), vec3(0.56, 0.28, 0.1), fine);
+    base = mix(base, rustCol, rusted * 0.85);
+    float streak = smoothstep(0.72, 0.95, vnoise(vec2(q.x * 24.0, q.y * 1.4))) * uRust * 0.5 * metal;   // running down
+    base = mix(base, base * 0.55 + vec3(0.07, 0.03, 0.0), streak);
+    float scratch = smoothstep(0.93, 0.99, vnoise(vec2(q.x * 60.0 + q.y * 8.0, q.y * 3.0)));   // worn bright
+    base += vec3(0.1) * scratch * uRust * (1.0 - rusted);
+    base *= 1.0 - 0.28 * uRust * smoothstep(0.4, 0.8, fbm(q * 2.3 + 7.0, 3));                  // grime
+  }
   vec3 V = normalize(cameraPosition - vWorldPos);
   vec3 d, s;
   fixtureLightSpec(vWorldPos, N, V, L, 48.0, d, s);
   vec3 cl = candleLight(vWorldPos, N);
   float ao = mix(0.5, 1.0, smoothstep(0.0, 0.3, vWorldPos.y));    // contact shade on the floor
-  vec3 lit = base * (d + 0.05 * L + z.y * FILL_MEM * 1.4 + cl) * ao + s * vCol.a * ao;
+  vec3 lit = base * (d + 0.05 * L + z.y * FILL_MEM * 1.4 + cl) * ao + s * vCol.a * ao * (1.0 - rusted);   // rust has no shine
   if (uGlow > 0.0) {
     float fl = step(0.12, vnoise(vec2(uTime * 7.0, uSeed)));        // now and then it dies for a blink
     lit += base * uGlow * (0.75 + 0.25 * fl);
@@ -726,10 +744,10 @@ export function createMaterials(quality) {
 
   // A material for props: { map, color, vertexColors, glow, seed }. Shares the
   // world's uniforms, so fixtures, candles, flicker and stage reach it too.
-  const prop = ({ map = null, color = 0xffffff, vertexColors = false, glow = 0, seed = 0 } = {}) => new THREE.ShaderMaterial({
+  const prop = ({ map = null, color = 0xffffff, vertexColors = false, glow = 0, seed = 0, rust = 0.8 } = {}) => new THREE.ShaderMaterial({
     uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), shared, {
       uMap: { value: map }, uHasMap: { value: map ? 1 : 0 }, uColor: { value: new THREE.Color(color) },
-      uGlow: { value: glow }, uSeed: { value: seed },
+      uGlow: { value: glow }, uSeed: { value: seed }, uRust: { value: rust },
     }),
     vertexShader: VERT_PROP,
     fragmentShader: FRAG_PROP,
