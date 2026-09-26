@@ -70,6 +70,7 @@ uniform float uTime, uSpeed, uViewH, uLen;
 uniform vec3 uE;              // arch entrance, on the floor
 uniform vec3 uDir;            // into the tunnel, horizontal
 uniform vec3 uSide;           // across the tunnel, horizontal
+uniform vec3 uCorner, uCorner0;  // the on-screen corner now, and at stream()
 attribute float aBirth;
 attribute vec4 aRand;         // four independent randoms per particle
 float h(float x){ return fract(sin(x * 91.345) * 47453.21); }
@@ -84,7 +85,10 @@ vec3 flow(float mt, out float k){
   vec3 M = uE + uDir * mix(0.4, 1.6, aRand.y) + up * mix(1.1, 1.9, aRand.z) + uSide * (aRand.w - 0.5) * 0.9;
   if (mt < T) {
     float s = mt / T;
-    vec3 C = position;
+    // the start follows the on-screen corner while the view turns; the cubic
+    // weights it by (1 - s)^3, so the longer a particle has flown, the less
+    // it is pulled along. uCorner stops moving once the last one is born.
+    vec3 C = position + (uCorner - uCorner0);
     vec3 P1 = mix(C, uE + up * 1.5, 0.35) + up * 0.35;
     vec3 P2 = uE - uDir * 0.6 + up * 1.5;
     vec3 base = bez(C, P1, P2, M, s);
@@ -167,10 +171,10 @@ void main(){
   vec3 p = flow(mt, k);
   vec4 mv = viewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mv;
-  float size = mix(0.004, 0.009, aRand.x);
+  float size = mix(0.005, 0.011, aRand.x);
   gl_PointSize = min(20.0, size * projectionMatrix[1][1] * uViewH * 0.5 / max(0.05, -mv.z));
   float tw = 0.6 + 0.4 * sin(uTime * mix(2.0, 6.0, aRand.y) + aRand.z * 30.0);
-  vA = smoothstep(0.0, 0.4, age) * tw * mix(0.35, 0.9, aRand.w) * mix(0.7, 1.4, k)
+  vA = smoothstep(0.0, 0.4, age) * tw * mix(0.45, 1.0, aRand.w) * mix(0.8, 1.5, k)
      * smoothstep(0.08, 0.3, -mv.z) * smoothstep(24.0, 10.0, -mv.z);
 }`;
 
@@ -178,9 +182,11 @@ const DUST_FRAG = /* glsl */`
 varying float vA;
 void main(){
   float r = length(gl_PointCoord - 0.5);
-  float a = smoothstep(0.5, 0.0, r) * vA;
+  float a = min(1.0, smoothstep(0.5, 0.0, r) * vA);
   if (a < 0.01) discard;
-  gl_FragColor = vec4(vec3(1.0, 0.76, 0.34) * a, a);            // honey gold
+  // emissive "over": glows like additive on the dark, and still tints the
+  // white far glow gold instead of vanishing into it
+  gl_FragColor = vec4(vec3(1.0, 0.74, 0.3) * a * 1.15, a);      // honey gold
 }`;
 
 // one petal, pointing up, in the rose's reds
@@ -216,6 +222,7 @@ export function createPetals(scene, camera, quality) {
   const flowU = {
     ...shared, uLen: { value: 1 },
     uE: { value: new THREE.Vector3() }, uDir: { value: new THREE.Vector3(0, 0, -1) }, uSide: { value: new THREE.Vector3(1, 0, 0) },
+    uCorner: { value: new THREE.Vector3() }, uCorner0: { value: new THREE.Vector3() },
   };
 
   // sparkles: a ring of two handfuls, so a second call does not cut the first
@@ -249,7 +256,8 @@ export function createPetals(scene, camera, quality) {
   });
   const dMat = new THREE.ShaderMaterial({
     vertexShader: DUST_VERT, fragmentShader: DUST_FRAG, uniforms: flowU,
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    transparent: true, depthWrite: false,
+    blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
   });
   const petals = new THREE.Points(pGeo, pMat), dust = new THREE.Points(dGeo, dMat);
 
@@ -258,7 +266,7 @@ export function createPetals(scene, camera, quality) {
     o.frustumCulled = false; o.renderOrder = order; o.visible = false; scene.add(o);
   });
 
-  let now = 0, head = 0, sparkEnd = -1;
+  let now = 0, head = 0, sparkEnd = -1, followEnd = -1;
   const _c = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3(), _f = new THREE.Vector3();
 
   // the corner point in world space, and the camera's axes, right now
@@ -312,6 +320,8 @@ export function createPetals(scene, camera, quality) {
       flowU.uDir.value.set(dx / l, 0, dz / l);
       flowU.uSide.value.set(-dz / l, 0, dx / l);
       flowU.uLen.value = target.length;
+      flowU.uCorner0.value.copy(_c); flowU.uCorner.value.copy(_c);
+      followEnd = now + EMIT + 0.1;                 // the last one is born by then
       seed(pGeo, nPetal);
       seed(dGeo, nDust);
       petals.visible = dust.visible = true;
@@ -322,6 +332,7 @@ export function createPetals(scene, camera, quality) {
       shared.uTime.value = time;
       shared.uViewH.value = innerHeight * Math.min(quality.p.pixelRatio, devicePixelRatio || 1);
       if (sparkles.visible && time > sparkEnd) sparkles.visible = false;
+      if (time < followEnd) { corner(); flowU.uCorner.value.copy(_c); }   // uniform only, no buffers
     },
 
     dispose() {
