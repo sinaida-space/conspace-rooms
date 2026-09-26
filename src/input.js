@@ -79,6 +79,8 @@ export class InputRouter {
       if (![...e.touches].some(t => t.identifier === id)) stop();
     });
     canvas.addEventListener('touchcancel', stop);
+    addEventListener('blur', stop);                     // a call or an app switch never leaves you walking
+    document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
   }
 }
 

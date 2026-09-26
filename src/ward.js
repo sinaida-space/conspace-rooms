@@ -106,15 +106,28 @@ export function wardPlan(cx, cz, reserved, withModels = true) {
   }
   const nx = -s.di, nz = -s.dj;                                       // into the room
   const wallX = cxm + s.di * CELL / 2, wallZ = czm + s.dj * CELL / 2;
-  const off = kind.depth / 2 + 0.06;
-  const wobble = kind.type === 'wheelchair' ? (r() - 0.5) * 0.6 : kind.type === 'drip' ? r() * 6.28 : 0;
+  // Nothing stands straight in a dream: beds and couches are pulled askew
+  // from the wall, a wheelchair lies on its side, a drip stand has fallen.
+  const long = kind.type === 'bed' ? 2.0 : kind.type === 'gurney' ? 1.9 : 1;
+  const skew = (kind.type === 'bed' || kind.type === 'gurney') && r() < 0.55 ? (r() < 0.5 ? -1 : 1) * (0.12 + r() * 0.2) : 0;
+  const tip = kind.type === 'wheelchair' ? r() < 0.35 : kind.type === 'drip' ? s.two && r() < 0.4 : false;
+  const off = kind.depth / 2 + 0.06 + Math.abs(Math.sin(skew)) * long / 2;
+  const wobble = kind.type === 'wheelchair' && !tip ? (r() - 0.5) * 0.6 : kind.type === 'drip' && !tip ? r() * 6.28 : 0;
   const anchor = {
     type: kind.type, x: wallX + nx * off, z: wallZ + nz * off,
-    rot: Math.atan2(nx, nz) + wobble, flip: r() < 0.5,
+    rot: Math.atan2(nx, nz) + wobble + skew, flip: r() < 0.5, tip,
+    sheet: kind.type === 'bed' && r() < 0.65, stain: r() < 0.75, stainR: 0.6 + r() * 0.5, stainA: r() * 6.28,
   };
-  if (kind.type === 'wheelchair') {              // turned a little: keep the cells beside it clear
-    cells.add(cellKey(s.gi + s.ai, s.gj + s.aj)); cells.add(cellKey(s.gi - s.ai, s.gj - s.aj));
+  if (kind.type === 'drip' && tip) {             // fallen along the wall, over two cells
+    anchor.x += s.ai * CELL / 2; anchor.z += s.aj * CELL / 2;
+    anchor.rot = Math.atan2(nx, nz);
+    cells.add(cellKey(s.gi + s.ai, s.gj + s.aj));
   }
+  if (kind.type === 'wheelchair') {              // turned a little, or lying: keep the cells around it clear
+    cells.add(cellKey(s.gi + s.ai, s.gj + s.aj)); cells.add(cellKey(s.gi - s.ai, s.gj - s.aj));
+    if (tip) cells.add(cellKey(s.gi + nx, s.gj + nz));
+  }
+  if (skew) for (let k = 0; k < kind.cells; k++) cells.add(cellKey(s.gi + nx + s.ai * k, s.gj + nz + s.aj * k));
 
   // small things in free cells around it, one per cell
   const near = [];
@@ -128,7 +141,7 @@ export function wardPlan(cx, cz, reserved, withModels = true) {
   for (let k = 0; k < n; k++) {
     const [gi, gj] = near[k];
     cells.add(cellKey(gi, gj));
-    items.push({ type: SMALL[Math.floor(r() * SMALL.length)], x: centre(gi) + (r() - 0.5) * 0.4, z: centre(gj) + (r() - 0.5) * 0.4, rot: r() * 6.28, v: r() });
+    items.push({ type: SMALL[Math.floor(r() * SMALL.length)], x: centre(gi) + (r() - 0.5) * 0.4, z: centre(gj) + (r() - 0.5) * 0.4, rot: r() * 6.28, v: r(), tilt: (r() - 0.5) * 0.12 });
   }
 
   // an enamel plaque above it, on its own wall
@@ -148,12 +161,14 @@ export function wardPlan(cx, cz, reserved, withModels = true) {
       for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) if (isLampCell(gi + a, gj + b)) return false;
       return true;
     };
-    if (clear(hx, hz) && clear(mx, mz)) lamp = { x: mx, z: mz, rot: Math.atan2(-nz, nx) + Math.PI, seed: r() * 100 };
+    if (clear(hx, hz) && clear(mx, mz)) lamp = { x: mx, z: mz, rot: Math.atan2(-nz, nx) + Math.PI + (r() - 0.5) * 0.5, seed: r() * 100, sag: r() < 0.5 ? 0.25 + r() * 0.3 : 0 };
   }
 
   // the furniture takes part in collision: an oriented box
   const dims = { bed: [2.0, 0.92], gurney: [1.9, 0.64], screen: [1.35, 0.4], wheelchair: [1.05, 0.8], drip: [0.36, 0.36] }[kind.type];
-  const boxes = [orientedBox(anchor.x, anchor.z, dims[0], dims[1], anchor.rot)];
+  let boxes = [orientedBox(anchor.x, anchor.z, dims[0], dims[1], anchor.rot)];
+  if (tip && kind.type === 'drip') boxes = [orientedBox(anchor.x, anchor.z, 1.9, 0.5, anchor.rot)];
+  if (tip && kind.type === 'wheelchair') boxes = [orientedBox(anchor.x + Math.sin(anchor.rot) * 0.5, anchor.z + Math.cos(anchor.rot) * 0.5, 1.1, 1.1, anchor.rot)];
 
   return { anchor, items, sign, lamp, cells, boxes };
 }
@@ -324,6 +339,25 @@ const ANCHOR_DRAW = {
   },
 };
 
+// A sheet thrown over a bed and left: it sags between the rails, hangs down
+// the sides, creased; a flattened pillow at one end. Bed frame: 2.0 × 0.9 m,
+// long side along local X, springs at about knee height.
+function sheetParts() {
+  const g = new THREE.PlaneGeometry(2.25, 1.35, 30, 18).rotateX(-Math.PI / 2);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), z = p.getZ(i);
+    const overZ = Math.max(0, Math.abs(z) - 0.45), overX = Math.max(0, Math.abs(x) - 0.98);
+    const crease = Math.sin(x * 9 + z * 4) * Math.sin(z * 13 - x * 2) * 0.025 + Math.sin(x * 3.1 + 1) * 0.015;
+    const y = Math.max(0.06, 0.49 + crease - overZ * 1.7 - overX * 1.7);
+    if (overZ) z = Math.sign(z) * (0.46 + overZ * 0.2);
+    if (overX) x = Math.sign(x) * (0.99 + overX * 0.2);
+    p.setXYZ(i, x, y, z);
+  }
+  g.computeVertexNormals();
+  return [part(g, 0xcbc4ae, 0.04), part(roundedBox(0.55, 0.12, 0.38, 0.05), 0xd3ccb9, 0.04, 0.68, 0.55, 0.02, 0, 0.18, 0.06)];
+}
+
 // Operating lamp: mount at the ceiling (origin), arm down and out, head along -X.
 function lampParts() {
   const prof = [[0.001, 0.12], [0.1, 0.115], [0.22, 0.09], [0.32, 0.045], [0.38, 0.0], [0.372, -0.018]].map(([a, b]) => new THREE.Vector2(a, b));
@@ -407,9 +441,25 @@ function signTexture(text) {
   return new THREE.CanvasTexture(c);
 }
 
+// Rust and old damp on the floor under a piece of furniture: a ragged dark
+// blot, darker at its heart, drawn once.
+function stainTexture() {
+  const [c, g] = canvas(256, 256);
+  for (let k = 0; k < 14; k++) {
+    const a = Math.random() * 6.28, d = Math.random() * 60, r = 30 + Math.random() * 60;
+    const x = 128 + Math.cos(a) * d, y = 128 + Math.sin(a) * d;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(58, 34, 18, 0.5)'); grad.addColorStop(0.6, 'rgba(70, 44, 24, 0.22)'); grad.addColorStop(1, 'rgba(70, 44, 24, 0)');
+    g.fillStyle = grad; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 // ── the kit: materials, models, and building one chunk's island ────────────
 export function createWardKit(atmo, quality) {
   const bodyMat = atmo.prop({ vertexColors: true });
+  let stainMat = null;
   const lensMats = new Map();
   const texMats = new Map();
   const texMat = (key, make) => {
@@ -433,7 +483,20 @@ export function createWardKit(atmo, quality) {
     build(group, plan) {
       const geos = [];
       const { anchor } = plan;
-      if (ANCHOR_DRAW[anchor.type]) geos.push(...place(ANCHOR_DRAW[anchor.type](), anchor.x, 0, anchor.z, anchor.rot));
+      if (anchor.type === 'drip' && anchor.tip) {           // fallen along the wall
+        const parts = ANCHOR_DRAW.drip();
+        for (const p of parts) p.translate(0, -0.93, 0);
+        geos.push(...place(parts, anchor.x, 0.26, anchor.z, anchor.rot, 0, -Math.PI / 2 + 0.06));
+      } else if (ANCHOR_DRAW[anchor.type]) geos.push(...place(ANCHOR_DRAW[anchor.type](), anchor.x, 0, anchor.z, anchor.rot));
+      if (anchor.sheet) geos.push(...place(sheetParts(), anchor.x, 0, anchor.z, anchor.rot + (anchor.flip ? Math.PI : 0)));
+      if (anchor.stain) {
+        stainMat ??= new THREE.MeshBasicMaterial({ map: stainTexture(), transparent: true, depthWrite: false, fog: true,
+          polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+        const st = new THREE.Mesh(new THREE.PlaneGeometry(anchor.stainR * 2, anchor.stainR * 2).rotateX(-Math.PI / 2), stainMat);
+        st.position.set(anchor.x, 0.004, anchor.z); st.rotation.y = anchor.stainA;
+        st.userData.keepMaterial = true;
+        group.add(st);
+      }
       for (const it of plan.items) {
         if (it.type === 'history' || it.type === 'xray') {
           const xr = it.type === 'xray';
@@ -449,12 +512,12 @@ export function createWardKit(atmo, quality) {
           group.add(mesh);
           continue;
         }
-        geos.push(...place(SMALL_DRAW[it.type](it.v), it.x, 0, it.z, it.rot));
+        geos.push(...place(SMALL_DRAW[it.type](it.v), it.x, 0, it.z, it.rot, it.tilt || 0, (it.tilt || 0) * 0.5));
       }
       if (plan.lamp) {
         const { body, lens } = lampParts();
-        geos.push(...place(body, plan.lamp.x, CEIL_H, plan.lamp.z, plan.lamp.rot));
-        place(lens, plan.lamp.x, CEIL_H, plan.lamp.z, plan.lamp.rot);
+        geos.push(...place(body, plan.lamp.x, CEIL_H, plan.lamp.z, plan.lamp.rot, 0, plan.lamp.sag || 0));   // some hang low and askew
+        place(lens, plan.lamp.x, CEIL_H, plan.lamp.z, plan.lamp.rot, 0, plan.lamp.sag || 0);
         const seed = Math.floor(plan.lamp.seed);
         let lm = lensMats.get(seed % 4);
         if (!lm) { lm = atmo.prop({ color: 0xdce8ec, glow: 0.9, seed: seed % 4 * 17.3 }); lensMats.set(seed % 4, lm); }
@@ -482,8 +545,8 @@ export function createWardKit(atmo, quality) {
           if (!m || group.userData.gone) return;
           const src = m[anchor.type];
           const mesh = new THREE.Mesh(src.geometry, src.material);
-          mesh.position.set(anchor.x, 0, anchor.z);
-          mesh.rotation.y = anchor.rot + (anchor.flip ? Math.PI : 0);
+          mesh.position.set(anchor.x, anchor.tip ? 0.41 : 0, anchor.z);                  // a wheelchair on its side
+          mesh.rotation.set(anchor.tip ? Math.PI / 2 : 0, anchor.rot + (anchor.flip && !anchor.tip ? Math.PI : 0), 0, 'YXZ');
           mesh.userData.keep = true;                   // shared by every island
           group.add(mesh);
         };
@@ -510,7 +573,7 @@ async function loadModels(atmo) {
     geo.translate(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
     const map = src.material.map;
     if (map) { map.colorSpace = THREE.NoColorSpace; map.needsUpdate = true; }
-    return { geometry: geo, material: atmo.prop({ map }) };
+    return { geometry: geo, material: atmo.prop({ map, color: 0xb3aa98 }) };   // years of grime
   };
   const [bed, wheelchair] = await Promise.all([one('old_bed_frame'), one('wheelchair_01')]);
   return { bed, wheelchair };
