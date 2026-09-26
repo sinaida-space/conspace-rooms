@@ -10,6 +10,7 @@ import { artworkSlots } from './artworks.js';
 import { createWardKit, wardPlan, reserveSlot, reserveAround, cellKey } from './ward.js';
 import { createRoseCounter, buildRoseArch, findArchSpot } from './roses.js';
 import { showCard } from './card.js';
+import { createPetals } from './petals.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
 // Everything that makes the labyrinth respond to the visitor on the way from
@@ -250,6 +251,7 @@ export class SoulPath {
     this.asked = [];                // what the souls asked, in order, for the card
     this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
     this.roses = createRoseCounter(this.total);
+    this.petals = createPetals(scene, camera, quality);
     this.roses.set(0, t('rosesLabel', { n: 0, total: this.total }));
     this.finale = null;
     this.chunkStuff = new Map();    // chunk key -> { group, writings[], doors[], kitchen }
@@ -536,6 +538,7 @@ export class SoulPath {
     arch.group.position.set(spot.x, 0, spot.z);
     arch.group.rotation.y = Math.atan2(-spot.dir[0], -spot.dir[1]);   // its face toward the visitor
     this.scene.add(arch.group);
+    this.petals.stream({ x: spot.x, z: spot.z, dir: spot.dir, length: arch.length });
     // the view turns to the entrance itself (_updateFinale): the tunnel
     // keeps to the middle of the corridor, the visitor may not
     this.finale = { arch, spot, from: P.yaw, t: 0, side: null };
@@ -1051,6 +1054,7 @@ export class SoulPath {
   // ── per-frame ───────────────────────────────────────────────────────────
   update(dt, time, zone) {
     this._sync();
+    this.petals.update(dt, time);
     const P = this.player, cam = this.camera;
     const memoryStage = this.stage.stage === 1;   // grandmother's room only exists here
     const speed = P.vel.length();
