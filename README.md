@@ -4,6 +4,19 @@
 
 **Live:** https://conspace-rooms.vercel.app/ (RU / EN)
 
+## Links
+
+| | Main site (Vercel) | Mirror (GitHub Pages) |
+|---|---|---|
+| **The labyrinth** | [conspace-rooms.vercel.app](https://conspace-rooms.vercel.app/) | [sinaida-space.github.io/conspace-rooms](https://sinaida-space.github.io/conspace-rooms/?mirror) |
+| **Gallery mode** | [/gallery](https://conspace-rooms.vercel.app/gallery) | [/gallery.html](https://sinaida-space.github.io/conspace-rooms/gallery.html) |
+| **Gallery rider** | [/rider.html](https://conspace-rooms.vercel.app/rider.html?lang=en) | [/rider.html](https://sinaida-space.github.io/conspace-rooms/rider.html?lang=en&mirror) |
+| **Specs** | [/tech.html](https://conspace-rooms.vercel.app/tech.html?lang=en) | [/tech.html](https://sinaida-space.github.io/conspace-rooms/tech.html?lang=en&mirror) |
+
+Add `?lang=ru` or `?lang=en` to any page for the language. The mirror is for
+networks where Vercel does not open: `?mirror` keeps you on GitHub Pages and the
+browser remembers it. Gesture control still needs jsDelivr and Google.
+
 A walk-through web installation by [Sinaida](https://sinaida.eu/) and
 [UVALISS](https://uvaliss.ru/) (Alisa Feer). Eighteen works from the SOULS series
 by UVALISS hang in a labyrinth of half-lit rooms that the browser builds as you
@@ -82,9 +95,11 @@ Every push to `main` redeploys production.
 All asset and module paths are relative, so the site works unmodified under a
 subpath or at a domain root.
 
-The old GitHub Pages address (https://sinaida-space.github.io/conspace-rooms/)
+The GitHub Pages address (https://sinaida-space.github.io/conspace-rooms/)
 stays on and forwards every page to Vercel: a small script at the top of each
 HTML page redirects any `github.io` host, keeping the path, `?lang` and hash.
+`?mirror` switches the redirect off and is remembered in `localStorage`, so the
+Pages copy works as a mirror; `gallery.html` never redirects.
 
 ## Soul path
 
