@@ -178,18 +178,117 @@ function textures() {
 const lathe = (pts, seg = 28) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
 
 // ── build one room's props into `group`, centred on (x, z) ──────────────────
-export function buildKitchen(group, x, z) {
+// ── the abazhur ─────────────────────────────────────────────────────────────
+// Grandmother's lampshade: a wide bell of wine-red velvet gathered into soft
+// pleats, a scalloped hem bound in gold braid, a long gold fringe, and a
+// lining that glows warm around the bulb. The velvet is drawn once on a
+// canvas (pleats catching the light on their ridges, a fine pile) and given
+// a sheen so it shimmers at grazing angles the way velvet does.
+// Every grandmother's room is a little different: its own velvet, its own
+// oilcloth, the furniture turned another way and the things on the table
+// where she left them. Chosen by a hash of the room's position.
+const SHADES = [                       // velvet: fold, body, ridge; fringe; lining glow
+  { v: ['#2c0409', '#6e0d1a', '#9c1c2a'], fringe: 0xb8893e, glow: 0xc86a2a, sheen: 0xff9a8a },   // wine
+  { v: ['#04180e', '#0f4a2c', '#2a7a4e'], fringe: 0xc9a24e, glow: 0xa8a040, sheen: 0x9affc0 },   // emerald
+  { v: ['#2a1a02', '#8a5a10', '#c99a32'], fringe: 0xe6d3a8, glow: 0xe0902a, sheen: 0xffe0a0 },   // mustard
+  { v: ['#2e0c14', '#8a4050', '#c07a86'], fringe: 0xefe2cf, glow: 0xd07a70, sheen: 0xffc8d0 },   // dusty rose
+  { v: ['#040818', '#12245a', '#2f4a8e'], fringe: 0xb8893e, glow: 0x8a6aa0, sheen: 0xa8c0ff },   // midnight
+  { v: ['#3a1002', '#b04a0c', '#e87f2a'], fringe: 0xc8342a, glow: 0xf0902a, sheen: 0xffc080 },   // orange silk
+];
+const CLOTH_TINTS = [0xffffff, 0xd8f0e0, 0xf6e6c0, 0xe8d0d0, 0xd0dcf0];
+function roomRand(x, z) {
+  let h = Math.imul(Math.round(x * 10) | 0, 0x27d4eb2d) ^ Math.imul(Math.round(z * 10) | 0, 0x85ebca6b) ^ 0x5bd1e995;
+  return () => { h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d); h = Math.imul(h ^ (h >>> 12), 0x297a2d39); h ^= h >>> 15; return (h >>> 0) / 4294967296; };
+}
+
+function velvetTexture(pal = SHADES[0].v) {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 256;
+  const g = c.getContext('2d');
+  const pleats = 24, w = c.width / pleats;
+  for (let k = 0; k < pleats; k++) {                   // each pleat: shadow in the fold, light on the ridge
+    const grad = g.createLinearGradient(k * w, 0, (k + 1) * w, 0);
+    grad.addColorStop(0, pal[0]); grad.addColorStop(0.35, pal[1]); grad.addColorStop(0.55, pal[2]);
+    grad.addColorStop(0.7, pal[1]); grad.addColorStop(1, pal[0]);
+    g.fillStyle = grad; g.fillRect(k * w, 0, w + 1, c.height);
+  }
+  const v = g.createLinearGradient(0, 0, 0, c.height);  // darker at the top, where the light does not reach
+  v.addColorStop(0, 'rgba(10, 0, 2, 0.55)'); v.addColorStop(0.6, 'rgba(10, 0, 2, 0)'); v.addColorStop(1, 'rgba(255, 120, 60, 0.12)');
+  g.fillStyle = v; g.fillRect(0, 0, c.width, c.height);
+  for (let i = 0; i < 16000; i++) {                    // the pile
+    g.fillStyle = Math.random() < 0.5 ? `rgba(0, 0, 0, ${Math.random() * 0.2})` : `rgba(255, 150, 150, ${Math.random() * 0.07})`;
+    g.fillRect(Math.random() * c.width, Math.random() * c.height, 1.5, 1.5);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+}
+function liningTexture() {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 256;
+  const g = c.getContext('2d');
+  const v = g.createLinearGradient(0, 0, 0, c.height);   // hottest near the bulb, amber toward the hem
+  v.addColorStop(0, '#fff0c8'); v.addColorStop(0.45, '#f3b26a'); v.addColorStop(1, '#b8582a');
+  g.fillStyle = v; g.fillRect(0, 0, c.width, c.height);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+// Built per room: the chunk that owns the room frees it (soulpath.js).
+function lampshade(shade = SHADES[0], wide = 1) {
+  // the bell's profile, top to hem, then pleats and a scalloped hem
+  const prof = [[0.1, 0.3], [0.13, 0.285], [0.2, 0.24], [0.29, 0.16], [0.37, 0.07], [0.42, 0.0], [0.445, -0.05], [0.45, -0.08]]
+    .map(([r, y]) => new THREE.Vector2(r * (0.35 + 0.65 * wide) + (r > 0.12 ? 0 : 0), y * (1.25 - 0.25 * wide)));
+  const geo = new THREE.LatheGeometry(prof, 96);
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), zz = p.getZ(i), a = Math.atan2(zz, x), r = Math.hypot(x, zz);
+    const fold = 1 + 0.028 * Math.abs(Math.sin(a * 12)) * Math.min(1, r / 0.2);   // soft pleats, gathered at the top
+    const hem = y < -0.04 ? 0.035 * Math.abs(Math.sin(a * 8)) : 0;               // scallops
+    p.setXYZ(i, x * fold, y + hem, zz * fold);
+  }
+  geo.computeVertexNormals();
+  const velvet = new THREE.MeshPhysicalMaterial({
+    map: velvetTexture(shade.v), roughness: 0.85, sheen: 1, sheenColor: new THREE.Color(shade.sheen), sheenRoughness: 0.45,
+    emissive: 0x3a0508, emissiveIntensity: 0.5, side: THREE.FrontSide,
+  });
+  const lining = new THREE.MeshStandardMaterial({ map: liningTexture(), emissive: shade.glow, emissiveIntensity: 0.55, roughness: 1, side: THREE.BackSide });
+  const gold = new THREE.MeshStandardMaterial({ color: shade.fringe, roughness: 0.45, metalness: 0.45 });
+  const R = 0.45 * (0.35 + 0.65 * wide), HEM = -0.08 * (1.25 - 0.25 * wide);
+  const braid = new THREE.TorusGeometry(R + 0.002, 0.011, 6, 96).rotateX(Math.PI / 2).translate(0, HEM + 0.03, 0);
+  const cap = new THREE.TorusGeometry(0.1, 0.012, 6, 32).rotateX(Math.PI / 2).translate(0, 0.3, 0);
+  // the fringe: strands of gold thread hanging from the hem, uneven
+  const strand = new THREE.CylinderGeometry(0.0022, 0.0014, 1, 3).translate(0, -0.5, 0);
+  const matrices = [];
+  for (let k = 0; k < 220; k++) {
+    const a = k / 220 * Math.PI * 2, len = 0.1 + Math.random() * 0.05;
+    const hemY = HEM + 0.035 * Math.abs(Math.sin(a * 8));
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(Math.cos(a) * (R + 0.002), hemY, Math.sin(a) * (R + 0.002)),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler((Math.random() - 0.5) * 0.08, 0, (Math.random() - 0.5) * 0.08)), new THREE.Vector3(1, len, 1));
+    matrices.push(m);
+  }
+  return {
+    parts: [[geo, velvet], [geo, lining], [braid, gold], [cap, gold]],
+    fringe: { geo: strand, mat: gold, matrices },
+  };
+}
+
+export function buildKitchen(parent, X, Z) {
+  // everything is laid out around the room's centre in a group of its own,
+  // turned a quarter at a time, so every room stands a different way round
+  const rnd = roomRand(X, Z);
+  const group = new THREE.Group();
+  group.position.set(X + (rnd() - 0.5) * 0.5, 0, Z + (rnd() - 0.5) * 0.5);
+  group.rotation.y = Math.floor(rnd() * 4) * Math.PI / 2;
+  parent.add(group);
+  const x = 0, z = 0;
+  const shadeLook = SHADES[Math.floor(rnd() * SHADES.length)];
   const T = textures();
   const std = (opts) => new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0, ...opts });
   const wood = std({ map: T.wood, roughness: 0.55 });
-  const cloth = std({ map: T.cloth, roughness: 0.38 });              // oilcloth has a soft sheen
+  const cloth = std({ map: T.cloth, roughness: 0.38, color: CLOTH_TINTS[Math.floor(rnd() * CLOTH_TINTS.length)] });   // oilcloth has a soft sheen
   const enamel = std({ map: T.porcelain, roughness: 0.22 });
   const glazeWhite = std({ color: 0xefe8d8, roughness: 0.2 });
   const enamelRed = std({ color: 0x9a1b1b, roughness: 0.3 });
   const brass = std({ color: 0x6b4a22, roughness: 0.35, metalness: 0.8 });
   const wax = std({ color: 0xe6dac0, roughness: 0.6 });
   const plastic = std({ map: T.plastic, roughness: 0.5 });
-  const fabric = std({ color: 0xc08a3e, roughness: 0.9, side: THREE.DoubleSide, emissive: 0x5a2a0c, emissiveIntensity: 0.25 });
 
   const flames = [], screens = [];
   const add = (geo, mat, px, py, pz, cast = true) => {
@@ -241,7 +340,7 @@ export function buildKitchen(group, x, z) {
 
   // ── porcelain teapot: lathe body with a real wall, gold bands and roses, a
   // curved spout, an ear-shaped handle, a lid with a knob ──
-  const tp = { x: 0.12, z: 0.05, y: TOP + 0.025 };
+  const tp = { x: 0.02 + rnd() * 0.24, z: -0.06 + rnd() * 0.18, y: TOP + 0.025 };   // where she left the teapot
   add(lathe([[0, 0], [0.05, 0], [0.058, 0.006], [0.085, 0.02], [0.1, 0.052], [0.098, 0.088], [0.082, 0.114], [0.054, 0.128], [0.046, 0.13], [0.046, 0.136], [0.04, 0.136], [0.04, 0.128], [0, 0.126]], 40), enamel, tp.x, tp.y, tp.z);
   add(lathe([[0, 0.0], [0.043, 0.0], [0.044, 0.004], [0.036, 0.016], [0.018, 0.024], [0.01, 0.026], [0.013, 0.034], [0.01, 0.044], [0, 0.046]], 32), glazeWhite, tp.x, tp.y + 0.134, tp.z);
   const spoutCurve = new THREE.CatmullRomCurve3([
@@ -261,7 +360,7 @@ export function buildKitchen(group, x, z) {
 
   // ── cup on a saucer: a thin porcelain wall with a lip, a foot ring, a well
   // in the saucer, an ear handle ──
-  const cp = { x: -0.28, z: 0.2, y: TOP + 0.025 };
+  const cp = { x: -0.34 + rnd() * 0.12, z: 0.12 + rnd() * 0.14, y: TOP + 0.025 };
   add(lathe([[0, 0], [0.02, 0], [0.024, 0.003], [0.034, 0.004], [0.06, 0.008], [0.072, 0.014], [0.075, 0.017], [0.072, 0.017], [0.058, 0.011], [0.032, 0.008], [0.024, 0.008], [0, 0.007]], 48), enamel, cp.x, cp.y, cp.z);
   add(lathe([[0, 0.008], [0.022, 0.008], [0.024, 0.012], [0.03, 0.016], [0.04, 0.03], [0.045, 0.055], [0.047, 0.073], [0.048, 0.076], [0.046, 0.077], [0.044, 0.074], [0.042, 0.055], [0.037, 0.03], [0.026, 0.018], [0, 0.017]], 48), enamel, cp.x, cp.y, cp.z);
   const cupHandle = new THREE.Mesh(new THREE.TubeGeometry(earCurve(x + cp.x - 0.044, cp.y + 0.048, z + cp.z, 0.022, 0.018), 28, 0.0045, 8, false), glazeWhite);
@@ -272,7 +371,7 @@ export function buildKitchen(group, x, z) {
   blob(0.2, 0.2, cp.x, TOP + 0.026, cp.z, 0.55);
 
   // ── candelabra: turned brass base and stem, four curved arms, five candles ──
-  const cb = { x: -0.3, z: -0.16, y: TOP + 0.025 };
+  const cb = { x: -0.36 + rnd() * 0.14, z: -0.22 + rnd() * 0.1, y: TOP + 0.025 };
   add(lathe([[0, 0], [0.07, 0], [0.07, 0.01], [0.03, 0.03], [0.015, 0.05], [0, 0.05]]), brass, cb.x, cb.y, cb.z);
   add(new THREE.CylinderGeometry(0.011, 0.014, 0.24, 10), brass, cb.x, cb.y + 0.17, cb.z);
   const cups = [[0, 0, 0.3]];
@@ -323,16 +422,21 @@ export function buildKitchen(group, x, z) {
   }
   blob(1.3, 0.8, tv.x, 0.013, tv.z, 0.85);
 
-  // ── fabric lampshade low over the table ──
-  const shade = add(new THREE.CylinderGeometry(0.16, 0.34, 0.24, 28, 1, true), fabric, 0, 2.2, 0, false);
-  shade.receiveShadow = false;
-  add(new THREE.SphereGeometry(0.035, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffb070, fog: false }), 0, 2.14, 0, false);
-  add(new THREE.CylinderGeometry(0.005, 0.005, CEIL_H - 2.32, 4), plastic, 0, (CEIL_H + 2.32) / 2, 0, false);
+  // ── the abazhur: a velvet lampshade low over the table ──
+  const L = lampshade(shadeLook, 0.8 + rnd() * 0.4);
+  for (const [geo, mat] of L.parts) add(geo, mat, 0, 2.2, 0, false).receiveShadow = false;
+  const fringe = new THREE.InstancedMesh(L.fringe.geo, L.fringe.mat, L.fringe.matrices.length);
+  L.fringe.matrices.forEach((m, i) => fringe.setMatrixAt(i, m));
+  fringe.position.set(x, 2.2, z); fringe.castShadow = false;
+  group.add(fringe);
+  add(new THREE.SphereGeometry(0.04, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffc27a, fog: false }), 0, 2.2, 0, false);   // the bulb, inside
+  add(new THREE.CylinderGeometry(0.005, 0.005, CEIL_H - 2.52, 4), plastic, 0, (CEIL_H + 2.52) / 2, 0, false);
 
   return {
     flames, screens,
-    lamp: new THREE.Vector3(x, 2.1, z),
-    tv: new THREE.Vector3(x + tv.x - 0.08, 0.76, z + tv.z - 0.5),
+    // in the world's frame: the light rig and the souls read these
+    lamp: (group.updateWorldMatrix(true, false), group.localToWorld(new THREE.Vector3(x, 2.1, z))),
+    tv: group.localToWorld(new THREE.Vector3(x + tv.x - 0.08, 0.76, z + tv.z - 0.5)),
   };
 }
 
