@@ -22,3 +22,11 @@ html[lang="ru"] section[lang="en"], html[lang="en"] section[lang="ru"] { display
 .doc .warning p { color: var(--fg); margin-bottom: 0; }
 
 /* Je suis le spectre d'une rose que tu portais hier au bal. */
+/* the curator's summary at the top of the rider: one framed screen, read before anything else */
+.doc dl.glance { border: 1px solid var(--dim); padding: 1em 1.2em; }
+/* press kit: stills in a grid, each with its download link */
+.press-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 1.2em; margin: 1em 0 1.6em; }
+.press-grid figure { margin: 0; }
+.press-grid img, .press-grid video { display: block; width: 100%; height: auto; }
+.press-grid figcaption { font-size: 0.85em; color: var(--dim); margin-top: 0.4em; }
+.doc blockquote { margin: 0 0 1em; padding-left: 1em; border-left: 2px solid var(--dim); }

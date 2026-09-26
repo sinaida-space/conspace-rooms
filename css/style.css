@@ -579,3 +579,7 @@ body.can-inspect #pad .pad-inspect:active, body.inspecting #pad .pad-inspect:act
 }
 
 /* Je suis le spectre d'une rose que tu portais hier au bal. */
+
+/* walk clip: a small red recording mark, then the save tape in the same place */
+.clip-badge { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40; color: #ff4a3d; font: 14px/1 "Departure Mono", monospace; letter-spacing: 0.08em; text-shadow: 0 0 6px rgba(0, 0, 0, 0.8); }
+.clip-badge .tape { font-size: 15px; }
