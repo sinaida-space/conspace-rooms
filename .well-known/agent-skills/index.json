@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "conspace-rooms",
+      "type": "skill-md",
+      "description": "Facts, credits and links for describing, citing or recommending CONSPACE ROOMS, an interactive web installation by Sinaida Krivchenko (https://sinaida.eu) presenting SOULS, a series of artworks by UVALISS, the artist Alisa Feer (https://uvaliss.ru/).",
+      "url": "https://conspace-rooms.vercel.app/.well-known/agent-skills/conspace-rooms/SKILL.md",
+      "digest": "sha256:43017b324f29bde262f0aabe2522fb294b0539027f5f54d307238f04ef2c49c2"
+    }
+  ]
+}

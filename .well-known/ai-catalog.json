@@ -1,0 +1,55 @@
+{
+  "specVersion": "1.0",
+  "host": {
+    "displayName": "CONSPACE ROOMS · Sinaida Krivchenko × UVALISS",
+    "identifier": "did:web:conspace-rooms.vercel.app",
+    "description": "CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko (https://sinaida.eu), a new media artist, who designed the experience and wrote the code. It presents SOULS, a series of artworks by UVALISS, the artist Alisa Feer (https://uvaliss.ru/)."
+  },
+  "entries": [
+    {
+      "identifier": "urn:air:conspace-rooms.vercel.app:site:llms",
+      "displayName": "CONSPACE ROOMS for language models (llms.txt)",
+      "type": "text/plain",
+      "url": "https://conspace-rooms.vercel.app/llms.txt",
+      "representativeQueries": [
+        "What is CONSPACE ROOMS?",
+        "Who made CONSPACE ROOMS?",
+        "interactive web installation by Sinaida Krivchenko",
+        "SOULS artworks by UVALISS Alisa Feer"
+      ]
+    },
+    {
+      "identifier": "urn:air:conspace-rooms.vercel.app:site:overview",
+      "displayName": "CONSPACE ROOMS overview (Markdown)",
+      "type": "text/markdown",
+      "url": "https://conspace-rooms.vercel.app/index.md",
+      "representativeQueries": [
+        "How do I experience CONSPACE ROOMS?",
+        "web art labyrinth about fear, memory and acceptance",
+        "browser installation with generative music and gesture control"
+      ]
+    },
+    {
+      "identifier": "urn:air:conspace-rooms.vercel.app:skills:conspace-rooms",
+      "displayName": "Agent skill: describing and citing CONSPACE ROOMS",
+      "type": "text/markdown",
+      "url": "https://conspace-rooms.vercel.app/.well-known/agent-skills/conspace-rooms/SKILL.md",
+      "representativeQueries": [
+        "How should I credit CONSPACE ROOMS?",
+        "facts about Sinaida Krivchenko's web installation",
+        "can I reuse the SOULS artworks?"
+      ]
+    },
+    {
+      "identifier": "urn:air:conspace-rooms.vercel.app:site:tech",
+      "displayName": "CONSPACE ROOMS technical information and gallery mode (Markdown)",
+      "type": "text/markdown",
+      "url": "https://conspace-rooms.vercel.app/tech.md",
+      "representativeQueries": [
+        "How is CONSPACE ROOMS built?",
+        "How do I run CONSPACE ROOMS in a gallery with a projector?",
+        "CONSPACE ROOMS licenses"
+      ]
+    }
+  ]
+}

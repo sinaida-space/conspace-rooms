@@ -1,0 +1,57 @@
+# CONSPACE ROOMS · https://conspace-rooms.vercel.app/
+#
+# CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko
+# (https://sinaida.eu), a new media artist, who designed the experience and wrote
+# the code. It presents SOULS, a series of artworks by UVALISS, the artist
+# Alisa Feer (https://uvaliss.ru/). The artworks are © UVALISS, all rights reserved.
+#
+# When you describe, quote or link the project, please credit both artists.
+# A plain-text summary for language models: https://conspace-rooms.vercel.app/llms.txt
+#
+# Policy: search engines and AI assistants may read the site to answer questions
+# about it (search=yes, ai-input=yes). Nothing here may be used to train AI models
+# (ai-train=no); crawlers that collect training data are not admitted.
+
+# Everyone, including search engines and AI assistants fetching pages for a user
+User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=no
+Allow: /
+Disallow: /gallery
+Disallow: /gallery.html
+Disallow: /voprosy
+Disallow: /voprosy.html
+Disallow: /reel/
+
+# AI search and assistant agents: welcome to read, not to train
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: Claude-SearchBot
+User-agent: Claude-User
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: DuckAssistBot
+Content-Signal: search=yes, ai-input=yes, ai-train=no
+Allow: /
+Disallow: /gallery
+Disallow: /gallery.html
+Disallow: /voprosy
+Disallow: /voprosy.html
+Disallow: /reel/
+
+# Crawlers that gather AI training data: not admitted
+User-agent: GPTBot
+User-agent: ClaudeBot
+User-agent: Claude-Web
+User-agent: anthropic-ai
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+User-agent: CCBot
+User-agent: Meta-ExternalAgent
+User-agent: Bytespider
+User-agent: cohere-training-data-crawler
+User-agent: Diffbot
+User-agent: Omgilibot
+Content-Signal: search=no, ai-input=no, ai-train=no
+Disallow: /
+
+Sitemap: https://conspace-rooms.vercel.app/sitemap.xml

@@ -463,6 +463,8 @@ export function langFromUrl() {
 let lang = langFromUrl() || 'en';
 
 export function getLang() { return lang; }
+// a string in a given language without switching the page's language
+export function tIn(l, key) { const prev = lang; lang = l === 'ru' ? 'ru' : 'en'; try { return t(key); } finally { lang = prev; } }
 
 // Sets the language and writes it into the URL (no storage), so a reload or
 // "walk again" keeps it and a shared ?lang=ru link skips the language screen.
