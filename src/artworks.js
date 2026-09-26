@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CONSPACE_SEED, chunkRooms, solidAtGlobal, CELL } from './world.js';
+import { CONSPACE_SEED, chunkRooms, solidAtGlobal, CELL, CHUNK } from './world.js';
 import { t, getLang } from './i18n.js';
 
 // ── conspace-rooms · artworks.js ────────────────────────────────────────────
@@ -85,6 +85,21 @@ function inCorridor(slot) {
   return true;
 }
 
+// The part of a wall run a work may use: two cells clear of the chunk's
+// edges, where doors and portals stand, and long enough for the frame, the
+// placard and air on both sides. Returns a narrowed copy of the slot, or null.
+const PLACARD_W = 0.46, PLACARD_GAP = 0.10, FRAME_BORDER = 0.06, MARGIN = 0.45;
+const SPAN_NEEDED = 1.35 + FRAME_BORDER * 2 + PLACARD_GAP + PLACARD_W + MARGIN * 2;   // the widest work
+function usableSpan(slot, cx, cz) {
+  const { position: p, normal: n, length } = slot;
+  const alongZ = n.x !== 0, c = alongZ ? p.z : p.x, base = (alongZ ? cz : cx) * CHUNK * CELL;
+  const start = Math.max(c - length * CELL / 2, base + 2 * CELL);
+  const end = Math.min(c + length * CELL / 2, base + (CHUNK - 2) * CELL);
+  if (end - start < SPAN_NEEDED) return null;
+  const mid = (start + end) / 2;
+  return { ...slot, position: { x: alongZ ? p.x : mid, y: p.y, z: alongZ ? mid : p.z }, length: (end - start) / CELL };
+}
+
 // Which wall slots (if any) get an artwork in this chunk, and which deck
 // index each one draws. Pure function of (cx, cz) + the chunk's own slots.
 function chunkArtworkPlan(cx, cz, slots, deck) {
@@ -92,8 +107,9 @@ function chunkArtworkPlan(cx, cz, slots, deck) {
   const rand = mulberry32(hash2i(DECK_SEED, cx, cz));
   let target = 0;
   for (let r = 0; r < rooms; r += 2 + rand()) target++; // ~1 per 2–3 rooms
+  target = Math.max(target, 2 + (rand() < 0.4 ? 1 : 0));   // fewer walls qualify now (corridors, clear spans): hang more on those that do
 
-  const candidates = slots.filter(s => s.length >= 2 && inCorridor(s));
+  const candidates = slots.map(s => usableSpan(s, cx, cz)).filter(s => s && inCorridor(s));
   for (let i = candidates.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
@@ -292,10 +308,12 @@ export class Artworks {
 
     const wallOffset = 0.011;
     const sub = new THREE.Group();
+    // the frame and its placard together sit in the middle of the span
+    const shift = -(PLACARD_GAP + PLACARD_W) / 2, tx = slot.normal.z, tz = -slot.normal.x;
     sub.position.set(
-      slot.position.x + slot.normal.x * wallOffset,
+      slot.position.x + slot.normal.x * wallOffset + tx * shift,
       EYE_Y,
-      slot.position.z + slot.normal.z * wallOffset
+      slot.position.z + slot.normal.z * wallOffset + tz * shift
     );
     sub.rotation.y = Math.atan2(slot.normal.x, slot.normal.z);
     sub.userData.artworkId = art.id;
@@ -304,15 +322,15 @@ export class Artworks {
     const canvasMesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: texture }));
     sub.add(canvasMesh);
 
-    const border = 0.06, depth = 0.05;
+    const border = FRAME_BORDER, depth = 0.05;
     const frameMesh = new THREE.Mesh(new THREE.BoxGeometry(width + border * 2, height + border * 2, depth), this.frameMat);
     frameMesh.position.z = -depth * 0.5 - 0.005;
     sub.add(frameMesh);
 
     const placardTex = this._getPlacard(art);
-    const pw = 0.46, ph = 0.27;
+    const pw = PLACARD_W, ph = 0.27;
     const placard = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshBasicMaterial({ map: placardTex }));
-    placard.position.set(width / 2 + border + 0.10 + pw / 2, PLACARD_Y - EYE_Y, 0.002);
+    placard.position.set(width / 2 + border + PLACARD_GAP + pw / 2, PLACARD_Y - EYE_Y, 0.002);
     sub.add(placard);
 
     this.active.push({

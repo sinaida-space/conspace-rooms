@@ -380,7 +380,8 @@ export class SoulPath {
     const rpo = mulberry32(hash2i(SEED_POSTER, cx, cz));
     stuff.posters = [];
     if (rpo() < 0.45) {
-      const long = this.world.getWallSlots(cx, cz).filter(sl => sl.length >= 4);
+      const hung = new Set(artworkSlots(cx, cz, this.world.getWallSlots(cx, cz)).map(sl => sl.cellKey));
+      const long = this.world.getWallSlots(cx, cz).filter(sl => sl.length >= 4 && !hung.has(sl.cellKey));   // never on a work's wall
       if (long.length) {
         const sl = long[Math.floor(rpo() * long.length)];
         const off = (rpo() < 0.5 ? -1 : 1) * (sl.length * CELL / 2 - 0.7);
