@@ -447,7 +447,7 @@ body:has(#pad) #artwork-prompt { bottom: calc(max(16px, env(safe-area-inset-bott
 /* the rose in the top-left corner: one leaf, bud or flower per few works seen */
 #roses {
   position: fixed; left: max(12px, env(safe-area-inset-left)); top: max(8px, env(safe-area-inset-top)); z-index: 8;
-  width: 58px; height: 88px; pointer-events: auto; opacity: 0; transition: opacity 1s ease;
+  width: 75px; height: 114px; pointer-events: auto; opacity: 0; transition: opacity 1s ease;
 }
 #roses.visible { opacity: 1; }
 .roses svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 1.2px rgba(1, 8, 5, 0.95)) drop-shadow(0 0 3px rgba(1, 8, 5, 0.5)); }   /* reads on whitewash too */

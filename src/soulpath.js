@@ -295,6 +295,14 @@ export class SoulPath {
       this._fiveTimes = this._fiveTimes.filter(tm => now - tm < 3000).concat(now);
       if (this._fiveTimes.length >= 5) { this._fiveTimes = []; this._jumpToRoom(); }
     });
+    // five presses of 7: stand before the last work, every other one already seen
+    this._sevenTimes = [];
+    addEventListener('keydown', e => {
+      if ((e.code !== 'Digit7' && e.code !== 'Numpad7') || e.repeat) return;
+      const now = performance.now();
+      this._sevenTimes = this._sevenTimes.filter(tm => now - tm < 3000).concat(now);
+      if (this._sevenTimes.length >= 5) { this._sevenTimes = []; this._jumpToLastWork(); }
+    });
 
     // doors take part in collision: wrap World's wall query once
     const orig = world.wallSegmentsNear.bind(world);
@@ -844,6 +852,29 @@ export class SoulPath {
     P.yaw = Math.atan2(-(best.x - P.pos.x), -(best.z - P.pos.y));
     P.pitch = -0.25;
     this._prevPos = { x: P.pos.x, z: P.pos.y };      // not a walk through anything
+    this.world.update(P.pos.x, P.pos.y);
+    this.post?.burst(1.4);
+  }
+
+  // Cheat 77777: the nearest hanging work becomes the last one. Every other
+  // work counts as seen (the rose shows 17), and the visitor stands before it.
+  _jumpToLastWork() {
+    const P = this.player;
+    if (this.finale || P.locked) return;
+    let best = null, bd = Infinity;
+    for (const a of this.artworks.active) {
+      const d = Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y);
+      if (d < bd) { bd = d; best = a; }
+    }
+    if (!best) return;
+    this.seen.clear();
+    for (const a of this.artworks.list) if (a.id !== best.art.id) this.seen.add(a.id);
+    const n = best.normal;
+    P.pos.set(best.centerWorld.x + n.x * 2.2, best.centerWorld.z + n.z * 2.2);
+    P.vel.set(0, 0);
+    P.yaw = Math.atan2(n.x, n.z);                      // facing the work
+    P.pitch = 0;
+    this._prevPos = { x: P.pos.x, z: P.pos.y };
     this.world.update(P.pos.x, P.pos.y);
     this.post?.burst(1.4);
   }
