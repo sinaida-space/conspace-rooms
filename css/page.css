@@ -15,4 +15,10 @@ body.doc { padding: 6vh 16px 10vh; max-width: 72ch; margin: 0 auto; }
 html[lang="ru"] section[lang="en"], html[lang="en"] section[lang="ru"] { display: none; }
 @media (max-width: 480px) { .doc dl { grid-template-columns: 1fr; } .doc dd { margin-bottom: 0.5em; } }
 
+/* Rider page: floor-plan diagram and the entry warning block. */
+.doc figure { margin: 0 0 1.2em; }
+.doc figure svg { max-width: 100%; height: auto; display: block; margin: 0 auto; color: var(--dim); }
+.doc .warning { border: 1px solid var(--accent); padding: 1em 1.2em; margin-bottom: 0.8em; }
+.doc .warning p { color: var(--fg); margin-bottom: 0; }
+
 /* Je suis le spectre d'une rose que tu portais hier au bal. */

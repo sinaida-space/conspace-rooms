@@ -19,6 +19,14 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://conspace-rooms.vercel.app/tech.html?lang=en"/>
   </url>
   <url>
+    <loc>https://conspace-rooms.vercel.app/rider.html</loc>
+    <lastmod>2026-09-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://conspace-rooms.vercel.app/rider.html?lang=ru"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://conspace-rooms.vercel.app/rider.html?lang=en"/>
+  </url>
+  <url>
     <loc>https://conspace-rooms.vercel.app/privacy.html</loc>
     <lastmod>2026-09-26</lastmod>
     <changefreq>yearly</changefreq>

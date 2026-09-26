@@ -10,6 +10,7 @@ The labyrinth follows the arc of the SOULS series, from trauma to accepting ones
 
 - [The piece](https://conspace-rooms.vercel.app/): language choice, then the welcome screen and the walk
 - [Technical information](https://conspace-rooms.vercel.app/tech.html): requirements, how it is made, licenses, gallery mode
+- [Gallery rider](https://conspace-rooms.vercel.app/rider.html): technical rider for galleries showing the installation
 - [Privacy](https://conspace-rooms.vercel.app/privacy.html)
 - [Gallery mode](https://conspace-rooms.vercel.app/gallery): installation mode for a projector and a webcam
 - [Source code](https://github.com/sinaida-space/conspace-rooms)

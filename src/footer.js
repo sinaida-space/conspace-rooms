@@ -11,6 +11,7 @@ const COPY = {
     navigate: 'Navigate',
     home: 'Enter the labyrinth',
     tech: 'Tech specs and~credits',
+    rider: 'For galleries',
     privacy: 'Privacy policy',
     other: 'Русская версия',
     more: 'More',
@@ -23,6 +24,7 @@ const COPY = {
     navigate: 'Навигация',
     home: 'Войти в~лабиринт',
     tech: 'Техническая информация',
+    rider: 'Для~галерей',
     privacy: 'Конфиденциальность',
     other: 'English version',
     more: 'Ещё',
@@ -50,6 +52,7 @@ export function renderFooter(lang, target = document.getElementById('site-footer
       <h2>${c.navigate}</h2>
       <a href="index.html?lang=${l}">${c.home}</a>
       <a href="tech.html?lang=${l}">${c.tech}</a>
+      <a href="rider.html?lang=${l}">${c.rider}</a>
       <a href="privacy.html?lang=${l}">${c.privacy}</a>
       <a href="${here}?lang=${other}" lang="${other}">${c.other}</a>
     </nav>
