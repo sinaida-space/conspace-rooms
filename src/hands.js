@@ -1,6 +1,6 @@
 // MediaPipe hand tracking → HandInput. Loaded lazily, only after the user
 // explicitly chooses gesture mode (opt-in). All landmark processing stays in
-// the browser; the model files are fetched from jsDelivr/Google CDN.
+// the browser; the runtime and model files are served from vendor/mediapipe.
 //
 // iOS/iPadOS Safari constraints (do not regress these — see issue #13):
 //   - the <video> element MUST be attached to document.body. iOS Safari
@@ -24,9 +24,10 @@
 //   both palms open (stop) → freezes turning/walking; moving the two open
 //                            palms apart/together zooms in/out (zoomDelta)
 //   thumb-index pinch (either hand) → inspect
-const CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
-const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
-const FACE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite';
+// vendored (vendor/mediapipe/README.md): a gallery runs without any CDN
+const CDN = new URL('../vendor/mediapipe', import.meta.url).href;
+const MODEL_URL = `${CDN}/hand_landmarker.task`;
+const FACE_MODEL_URL = `${CDN}/blaze_face_short_range.tflite`;
 const FACE_EVERY_MS = 250;   // presence needs no more than a few looks a second
 
 const NO_FRAMES_TIMEOUT_MS = 6000;
