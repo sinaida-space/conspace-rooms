@@ -57,6 +57,8 @@ export class Player {
   }
 
   setHand(state) { this.hand = state; }
+  // a finger dragged on a touch screen: x turns, -y walks (input.js attachTouch)
+  setDrive(v) { this.drive = v; }
 
   // Mouse-wheel / two-finger touch pinch ('dive' events) drive the same FOV
   // zoom as the gesture zoom below — negative delta (scroll up / spread
@@ -106,8 +108,8 @@ export class Player {
     } else {
       // arrow-left/right turn the camera directly (independent of pointer-lock
       // mouse look, which stays optional) — A/D remain strafe below.
-      const turn = (this.keys.ArrowRight ? 1 : 0) - (this.keys.ArrowLeft ? 1 : 0);
-      if (turn) this.yaw -= turn * YAW_RATE * dt;
+      const turn = (this.keys.ArrowRight ? 1 : 0) - (this.keys.ArrowLeft ? 1 : 0) + (this.drive?.x || 0);
+      if (turn) this.yaw -= Math.max(-1, Math.min(1, turn)) * YAW_RATE * dt;
     }
 
     // ── gesture zoom: only while both palms are open ("stop"), spreading or
@@ -124,7 +126,8 @@ export class Player {
       walk = this.hand.bothFists ? 1 : 0; // both hands as fists walks forward; anything else stops
       strafe = 0;
     } else {
-      walk = (this.keys.KeyW || this.keys.ArrowUp ? 1 : 0) - (this.keys.KeyS || this.keys.ArrowDown ? 1 : 0);
+      walk = (this.keys.KeyW || this.keys.ArrowUp ? 1 : 0) - (this.keys.KeyS || this.keys.ArrowDown ? 1 : 0) - (this.drive?.y || 0);
+      walk = Math.max(-1, Math.min(1, walk));
       strafe = (this.keys.KeyD ? 1 : 0) - (this.keys.KeyA ? 1 : 0);
     }
 
@@ -141,7 +144,7 @@ export class Player {
     // run: Shift on the keyboard; holding the pad's ▲ for 1.5 s speeds up by
     // itself; both hand fists held long do the same
     this._walkT = walk > 0 ? (this._walkT || 0) + dt : 0;
-    const running = this.keys.ShiftLeft || this.keys.ShiftRight || ((this.keys.Pad || this.hand.present) && this._walkT > 1.5);
+    const running = this.keys.ShiftLeft || this.keys.ShiftRight || ((this.keys.Pad || this.hand.present || (this.drive && this.drive.y < -0.9)) && this._walkT > 1.5);
     const top = running ? RUN_SPEED : MAX_SPEED;
     const target = new THREE.Vector2(tx * top, tz * top);
 

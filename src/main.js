@@ -185,9 +185,11 @@ async function boot() {
     muted = !muted;
     audio.setMuted(muted);
     muteBtn.classList.toggle('muted', muted);
+    muteBtn.querySelector('span').textContent = t(muted ? 'soundOff' : 'soundOn');
   });
 
   router.on('dive', delta => { if (player) player.zoom(delta); });
+  router.on('drive', v => { if (player) player.setDrive(v); });
   router.attachKeyboardMouse(canvas);
   if (caps.touch) router.attachTouch(canvas);   // pinch zoom only; walking is on the pad
   const showButtons = () => {

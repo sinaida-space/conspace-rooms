@@ -304,6 +304,14 @@ export class UI {
     if (!toolbar) return;
     toolbar.classList.remove('hidden');
 
+    // the menu opens on its tape and folds away after any choice or a tap elsewhere
+    const menuBtn = $('btn-menu'), menu = $('hud-menu');
+    const setMenu = open => { menu.classList.toggle('hidden', !open); menuBtn.setAttribute('aria-expanded', String(open)); };
+    menuBtn.addEventListener('click', e => { e.stopPropagation(); setMenu(menu.classList.contains('hidden')); });
+    menu.addEventListener('click', () => setMenu(false));
+    addEventListener('pointerdown', e => { if (!toolbar.contains(e.target)) setMenu(false); });
+    addEventListener('keydown', e => { if (e.key === 'Escape') setMenu(false); });
+
     const fsBtn = $('btn-fullscreen');
     const syncFsLabel = () => {
       const active = !!document.fullscreenElement;

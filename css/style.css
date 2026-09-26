@@ -517,4 +517,65 @@ body.gallery #final-card .fc-actions { display: none; }   /* nobody clicks in a 
 #attract .expect { display: inline-block; text-align: left; margin-bottom: 1.6em; }
 .attract-note { color: var(--dim); font-size: 0.9em; }
 
+/* ── masking tape ─────────────────────────────────────────────────────────
+   Controls are strips of paper tape stuck on the screen like labels on an
+   old television or a switch in a stairwell: pale, a little crooked, torn
+   at the ends, lettered in dark ink. Nothing here looks like a game. */
+.tape, #hud-toolbar .tape, #pad button, #hud-toolbar button {
+  --tilt: -1.2deg;
+  font-family: var(--font-dos); font-size: 0.95rem; letter-spacing: 0.02em; text-transform: lowercase;
+  color: #2b2823; text-shadow: none;
+  background:
+    repeating-linear-gradient(97deg, rgba(120, 100, 60, 0.07) 0 2px, transparent 2px 7px),
+    linear-gradient(180deg, rgba(238, 226, 196, 0.93), rgba(222, 207, 170, 0.93));
+  border: 0; border-radius: 0; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  padding: 0.45em 1.1em;
+  clip-path: polygon(0 8%, 3% 0, 6% 10%, 9% 2%, 100% 0, 97% 14%, 100% 30%, 96% 48%, 100% 66%, 97% 84%, 100% 100%, 6% 100%, 3% 90%, 0 100%, 2% 70%, 0 50%, 3% 30%);
+  transform: rotate(var(--tilt)); cursor: pointer;
+}
+.tape:hover, #hud-toolbar button:hover, #hud-toolbar button:focus-visible { background: linear-gradient(180deg, rgba(248, 238, 210, 0.98), rgba(232, 218, 182, 0.98)); color: #111; border: 0; }
+#hud-toolbar { right: max(16px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); flex-direction: column; align-items: flex-end; gap: 0.35em; flex-wrap: nowrap; }
+#hud-menu { display: flex; flex-direction: column; align-items: flex-end; gap: 0.45em; margin-top: 0.3em; }
+#hud-menu.hidden { display: none !important; }
+#hud-menu .tape:nth-child(1) { --tilt: 1.4deg; }
+#hud-menu .tape:nth-child(2) { --tilt: -0.8deg; }
+#hud-menu .tape:nth-child(3) { --tilt: 2deg; }
+#hud-menu .tape:nth-child(4) { --tilt: -1.8deg; }
+#btn-mute.tape { position: static; width: auto; height: auto; border-radius: 0; font-size: 0.95rem; }
+#btn-mute.muted { color: #6d6556; }
+
+/* the pad: tape squares, barely there until touched */
+#pad .pad-arrows { opacity: 0.2; transition: opacity 0.3s ease; }
+#pad .pad-arrows:has(button.held), #pad .pad-arrows:hover { opacity: 0.85; }
+#pad .pad-arrows button { padding: 0; font-size: 1em; }
+#pad .pad-arrows button:nth-child(2) { --tilt: 2deg; }
+#pad .pad-arrows button:nth-child(3) { --tilt: -0.6deg; }
+#pad .pad-arrows button:nth-child(4) { --tilt: 1.6deg; }
+#pad button.held { background: linear-gradient(180deg, #f7ecd0, #e3d3a8); color: #000; }
+#pad .pad-inspect { --tilt: 1.8deg; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
+body.can-inspect #pad .pad-inspect, body.inspecting #pad .pad-inspect { color: #1d1a16; border: 0; box-shadow: 0 0 0 1px rgba(57, 255, 106, 0.0), 0 1px 3px rgba(0, 0, 0, 0.35); }
+body.can-inspect #pad .pad-inspect:active, body.inspecting #pad .pad-inspect:active { background: linear-gradient(180deg, #f7ecd0, #e3d3a8); color: #000; }
+
+/* the key legend: small tapes, faded */
+#control-hud span, #hand-legend span {
+  border: 0; color: #2b2823; font-size: 0.85em;
+  background: linear-gradient(180deg, rgba(238, 226, 196, 0.8), rgba(222, 207, 170, 0.8));
+  clip-path: polygon(0 10%, 4% 0, 100% 0, 97% 50%, 100% 100%, 4% 100%, 0 90%, 2% 50%);
+  transform: rotate(-0.8deg);
+}
+#control-hud span:nth-child(even), #hand-legend span:nth-child(even) { transform: rotate(1deg); }
+#control-hud.visible, #hand-legend.visible { opacity: 0.55; }
+
+/* where a finger went down to drive: a pencil ring and its thumb */
+#drag-ring {
+  position: fixed; z-index: 7; width: 128px; height: 128px; margin: -64px 0 0 -64px;
+  border: 1.5px dashed rgba(238, 226, 196, 0.45); border-radius: 50%;
+  pointer-events: none; opacity: 0; transition: opacity 0.2s ease;
+}
+#drag-ring.on { opacity: 1; }
+#drag-ring i {
+  position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; border-radius: 50%;
+  background: rgba(238, 226, 196, 0.55); transform: translate(-50%, -50%);
+}
+
 /* Je suis le spectre d'une rose que tu portais hier au bal. */

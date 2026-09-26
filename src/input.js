@@ -1,8 +1,9 @@
 // Input router: every mode emits the same events.
 //   steer {x:-1..1, y:-1..1} · dive (±amount) · pick · halt
+//   drive {x, y}: a finger held and dragged on a touch screen (see attachTouch)
 export class InputRouter {
   constructor() {
-    this._h = { steer: [], dive: [], pick: [], halt: [] };
+    this._h = { steer: [], dive: [], pick: [], halt: [], drive: [] };
     this.mode = 'keys';
   }
   on(ev, cb) { this._h[ev].push(cb); }
@@ -32,13 +33,29 @@ export class InputRouter {
     canvas.addEventListener('click', () => { if (!finger && (canvas.dragDist || 0) < 6) this.emit('pick'); });
   }
 
-  // Touch on the canvas: two-finger pinch zooms. Walking and inspecting live
-  // on the on-screen pad.
+  // Touch on the canvas: hold a finger anywhere and drag, and you move the way
+  // you drag: up walks forward, down walks back, sideways turns, further
+  // means faster. A small ring marks where the finger went down. Two fingers
+  // pinch to zoom instead.
   attachTouch(canvas) {
-    let pinchD = null;
+    const R = 64;                                       // px of drag for full speed
+    const ring = document.createElement('div');
+    ring.id = 'drag-ring'; ring.innerHTML = '<i></i>';
+    document.body.appendChild(ring);
+    const dot = ring.firstChild;
+    let pinchD = null, id = null, ox = 0, oy = 0;
+    const stop = () => { id = null; ring.classList.remove('on'); this.emit('drive', { x: 0, y: 0 }); };
     canvas.addEventListener('touchstart', e => {
-      if (e.touches.length === 2) pinchD = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      if (e.touches.length === 2) {
+        stop();
+        pinchD = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      } else if (e.touches.length === 1) {
+        const t = e.touches[0];
+        id = t.identifier; ox = t.clientX; oy = t.clientY;
+        ring.style.left = ox + 'px'; ring.style.top = oy + 'px';
+        dot.style.transform = 'translate(-50%, -50%)';
+        ring.classList.add('on');
+      }
     }, { passive: true });
     canvas.addEventListener('touchmove', e => {
       e.preventDefault();
@@ -46,11 +63,22 @@ export class InputRouter {
         const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         this.emit('dive', (d - pinchD) * -0.02);
         pinchD = d;
+        return;
       }
+      const t = [...e.touches].find(t => t.identifier === id);
+      if (!t) return;
+      let dx = t.clientX - ox, dy = t.clientY - oy;
+      const l = Math.hypot(dx, dy);
+      if (l > R) { dx *= R / l; dy *= R / l; }
+      dot.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      const dead = v => (Math.abs(v) < 0.18 ? 0 : v);   // a trembling thumb stays still
+      this.emit('drive', { x: dead(dx / R), y: dead(dy / R) });
     }, { passive: false });
     canvas.addEventListener('touchend', e => {
       if (e.touches.length < 2) pinchD = null;
+      if (![...e.touches].some(t => t.identifier === id)) stop();
     });
+    canvas.addEventListener('touchcancel', stop);
   }
 }
 
