@@ -8,7 +8,7 @@ import { baroqueFrame } from './frames.js';
 import { buildDoorway, buildLightRays } from './doorway.js';
 import { artworkSlots } from './artworks.js';
 import { createWardKit, wardPlan, reserveSlot, reserveAround, cellKey } from './ward.js';
-import { createRoseCounter, buildRoseArch, findArchSpot } from './roses.js';
+import { createRoseCounter, buildRoseArch, findArchSpot, GRAIN_OPEN_MS } from './roses.js';
 import { showCard } from './card.js';
 import { createPetals } from './petals.js';
 
@@ -1070,6 +1070,7 @@ export class SoulPath {
     }
     if (this.artworks.inspecting) this.seen.add(this.artworks.inspecting.art.id);
     if (this.seen.size !== this._seenShown) {
+      if (this._seenShown === 0 && this.seen.size > 0) setTimeout(() => this.petals.sparkle(), GRAIN_OPEN_MS); // the grain opens: sparkles spill from the corner
       this._seenShown = this.seen.size;
       this.roses.set(this.seen.size, t('rosesLabel', { n: this.seen.size, total: this.total }));
     }
