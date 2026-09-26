@@ -4,8 +4,8 @@
   font-weight: 400; font-style: normal; font-display: swap;
 }
 :root {
-  --tri-violet: #a490df;   /* triad of the green accent, 255° */
-  --tri-coral: #dc876a;    /* triad of the green accent, 15° */
+  --tri-violet: #7260a9;   /* triad of the green accent, 255° */
+  --tri-coral: #a6644e;    /* triad of the green accent, 15° */
   --bg: #010805;
   --fg: #baffc9;
   --dim: #3f8a5a;
