@@ -130,7 +130,7 @@ function clockPlan(cx, cz, reserved) {
   }
   if (!sites.length) return null;
   const s = sites[Math.floor(re() * sites.length)];
-  return { x: centreOf(s.gi) + s.nx * 0.32, z: centreOf(s.gj) + s.nz * 0.32, rot: Math.atan2(s.nx, s.nz) };
+  return { x: centreOf(s.gi) - s.nx * 0.38, z: centreOf(s.gj) - s.nz * 0.38, rot: Math.atan2(s.nx, s.nz) };   // back 2 cm off the wall face (CELL/2 − depth/2)
 }
 
 // ── small helpers ───────────────────────────────────────────────────────────
