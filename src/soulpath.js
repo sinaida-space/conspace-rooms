@@ -512,7 +512,20 @@ export class SoulPath {
   // arch of roses grows out of it with light pouring through.
   _beginFinale() {
     const P = this.player;
-    let spot = findArchSpot(P.pos.x, P.pos.y, P.yaw);
+    // doors and the hospital's furniture stand in the way too
+    const segDist = (x, z, a, b) => {
+      const ex = b.x - a.x, ez = b.z - a.z, l = ex * ex + ez * ez || 1;
+      const u = Math.max(0, Math.min(1, ((x - a.x) * ex + (z - a.z) * ez) / l));
+      return Math.hypot(x - a.x - ex * u, z - a.z - ez * u);
+    };
+    const blocked = (x, z) => {
+      for (const st of this.chunkStuff.values()) {
+        for (const d of st.doors) for (const sg of [d.seg, ...d.walls]) if (segDist(x, z, sg.a, sg.b) < 0.6) return true;
+        for (const b of st.ward?.plan.boxes || []) if (Math.hypot(b.x - x, b.z - z) < b.r + 0.3) return true;
+      }
+      return false;
+    };
+    let spot = findArchSpot(P.pos.x, P.pos.y, P.yaw, blocked);
     if (!spot) {                                        // nowhere better: straight ahead
       const dx = -Math.sin(P.yaw), dz = -Math.cos(P.yaw);
       spot = { x: P.pos.x + dx * 2.2, z: P.pos.y + dz * 2.2, dir: [dx, dz], yaw: P.yaw };
@@ -521,9 +534,9 @@ export class SoulPath {
     arch.group.position.set(spot.x, 0, spot.z);
     arch.group.rotation.y = Math.atan2(-spot.dir[0], -spot.dir[1]);   // its face toward the visitor
     this.scene.add(arch.group);
-    let turn = spot.yaw - P.yaw;
-    turn = Math.atan2(Math.sin(turn), Math.cos(turn));                 // the short way round
-    this.finale = { arch, spot, from: P.yaw, turn, t: 0, side: null };
+    // the view turns to the entrance itself (_updateFinale): the tunnel
+    // keeps to the middle of the corridor, the visitor may not
+    this.finale = { arch, spot, from: P.yaw, t: 0, side: null };
     this.audio?.doorLight?.(9);
     this.post?.burst?.(0.4);
   }
@@ -533,11 +546,15 @@ export class SoulPath {
     if (f.t < 1) {
       f.t = Math.min(1, f.t + dt / 1.6);
       const e = f.t * f.t * (3 - 2 * f.t);
-      P.yaw = f.from + f.turn * e;
+      // aim from where the visitor is now: collision may have nudged them
+      let turn = Math.atan2(-(f.spot.x - P.pos.x), -(f.spot.z - P.pos.y)) - f.from;
+      turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+      P.yaw = f.from + turn * e;
     }
     f.arch.update(dt, time);
-    // walking through: the visitor's side of the arch flips while inside its span
-    const [dx, dz] = f.spot.dir, rx = P.pos.x - f.spot.x, rz = P.pos.y - f.spot.z;
+    // walking through: the visitor's side of the far arch flips while inside its span
+    // through the far end of the tunnel, not just its entrance
+    const [dx, dz] = f.spot.dir, rx = P.pos.x - (f.spot.x + dx * f.arch.length), rz = P.pos.y - (f.spot.z + dz * f.arch.length);
     const side = -(rx * dx + rz * dz), across = Math.abs(rx * -dz + rz * dx);
     if (f.side !== null && f.side > 0 && side <= 0 && across < f.arch.halfWidth && !this._carded) this._endWalk();
     f.side = side;
@@ -870,7 +887,7 @@ export class SoulPath {
     this.seen.clear();
     for (const a of this.artworks.list) if (a.id !== best.art.id) this.seen.add(a.id);
     const n = best.normal;
-    P.pos.set(best.centerWorld.x + n.x * 2.2, best.centerWorld.z + n.z * 2.2);
+    P.pos.set(best.centerWorld.x + n.x * 1.7, best.centerWorld.z + n.z * 1.7);   // across the corridor
     P.vel.set(0, 0);
     P.yaw = Math.atan2(n.x, n.z);                      // facing the work
     P.pitch = 0;
@@ -1080,6 +1097,7 @@ export class SoulPath {
     for (const s of this.chunkStuff.values()) for (const d of s.doors) {
       if (d.phase === 'done') continue;
       if (d.phase === 'wait') {
+        if (this.finale) continue;                     // the way on is open now: doors keep still
         const near = Math.hypot(d.x - P.pos.x, d.z - P.pos.y) < 2.8;
         d.waitT = near && speed < 0.08 && !P.locked ? d.waitT + dt : Math.max(0, d.waitT - dt * 2);
         d.leaf.material.color.setScalar(0.8 + 0.2 * Math.min(1, d.waitT / DOOR_WAIT));

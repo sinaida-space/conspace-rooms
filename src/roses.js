@@ -9,8 +9,9 @@ import { buildLightRays } from './doorway.js';
 // opens a bud into a flower. With all eighteen the bush is whole and glows.
 //
 // Then the labyrinth answers: the view turns a little, and a couple of steps
-// away an arch of roses grows out of the floor with light pouring through it.
-// Walking through it ends the walk with the card of questions (card.js).
+// away a tunnel of rose arches rises out of the floor with light pouring
+// from its far end. Walking through it ends the walk with the card of
+// questions (card.js).
 
 // ── the counter ─────────────────────────────────────────────────────────────
 // One SVG, drawn once; the count only reveals parts of it.
@@ -81,102 +82,181 @@ export function createRoseCounter(total = 18) {
   return api;
 }
 
-// ── the arch ────────────────────────────────────────────────────────────────
-// Two iron posts and a half-round top, wound with a vine and heavy with red
-// roses, light pouring through the opening. Built facing +Z (toward the
-// visitor), origin on the floor at the centre of the opening.
-const ARCH_HALF = 0.8, POST_H = 1.9, ROSE_RED = 0xc3141c;
+// ── the tunnel ──────────────────────────────────────────────────────────────
+// Eight iron arches in a row make a rose tunnel down a corridor, tied
+// by rails along the top, wound with a vine and heavy with roses. Light pours
+// from its far end toward the visitor. Built in its own frame: the entrance
+// arch stands at z = 0 facing +Z (the visitor), the tunnel runs to z = -LENGTH.
+const HALF = 1.0, POST_H = 1.95, ARCHES = 8, GAP = 0.75, LENGTH = GAP * (ARCHES - 1);
 
-function roseGeometry() {
-  // a small cabbage rose: a squashed ball of petals, cheap enough to instance
-  const g = new THREE.IcosahedronGeometry(0.07, 1);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), r = 1 + 0.18 * Math.sin(x * 90 + y * 70 + z * 50);
-    p.setXYZ(i, x * r, y * r * 0.7, z * r);
+// A rose seen from above, drawn once: rings of petals from the dark heart out
+// to the lit rims, each with a shadowed edge. Used as a sprite, so it always
+// faces the eye and never shows a flat side.
+function roseTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.translate(64, 64);
+  for (let ring = 0; ring < 6; ring++) {
+    const r = 58 - ring * 9, n = 5 + (ring % 2), turn = ring * 0.7;
+    for (let k = 0; k < n; k++) {
+      const a = turn + k / n * Math.PI * 2;
+      g.save(); g.rotate(a);
+      const grad = g.createRadialGradient(0, r * 0.35, 1, 0, r * 0.35, r * 0.75);
+      grad.addColorStop(0, ring > 3 ? '#4a0206' : '#7d0a10');
+      grad.addColorStop(0.7, ring > 3 ? '#8e0d14' : '#c3141c');
+      grad.addColorStop(1, '#ff5a64');
+      g.fillStyle = grad;
+      g.beginPath(); g.ellipse(0, r * 0.42, r * 0.42, r * 0.5, 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = 'rgba(40, 0, 4, 0.55)'; g.lineWidth = 1.5; g.stroke();
+      g.restore();
+    }
   }
-  g.computeVertexNormals();
-  return g;
+  g.fillStyle = '#2a0003'; g.beginPath(); g.arc(0, 0, 5, 0, Math.PI * 2); g.fill();    // the tight heart
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+function leafTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.translate(32, 32); g.rotate(-0.7);
+  const grad = g.createLinearGradient(-26, 0, 26, 0);
+  grad.addColorStop(0, '#173d24'); grad.addColorStop(1, '#3f8a5a');
+  g.fillStyle = grad;
+  g.beginPath(); g.moveTo(-28, 0); g.quadraticCurveTo(0, -17, 28, 0); g.quadraticCurveTo(0, 17, -28, 0); g.fill();
+  g.strokeStyle = 'rgba(160, 220, 170, 0.5)'; g.lineWidth = 1.4;
+  g.beginPath(); g.moveTo(-26, 0); g.lineTo(26, 0); g.stroke();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
-function archText(text) {
+function tunnelText(text) {
   const c = document.createElement('canvas'); c.width = 1024; c.height = 128;
-  const g = c.getContext('2d');
+  const g = c.getContext('2d');                      // transparent: only the letters show
   g.textAlign = 'center'; g.textBaseline = 'middle';
   let size = 64;
   do { g.font = `400 ${size}px "Departure Mono", ui-monospace, monospace`; size -= 2; } while (g.measureText(text).width > 940 && size > 20);
   g.lineJoin = 'round';
-  g.lineWidth = 14; g.strokeStyle = 'rgba(4, 14, 8, 0.92)';        // a dark rim: it must read against the light
+  g.lineWidth = 12; g.strokeStyle = 'rgba(4, 14, 8, 0.92)';        // a dark rim: it must read against the light
   g.strokeText(text, 512, 66);
-  g.shadowColor = 'rgba(255, 200, 190, 0.8)'; g.shadowBlur = 12;
   g.fillStyle = '#fff6ea';
   g.fillText(text, 512, 66);
-  const tex = new THREE.CanvasTexture(c);
-  return tex;
+  return new THREE.CanvasTexture(c);
 }
+
+// the outline of one arch opening, for the glow at the far end
+function archShape(half, postH) {
+  const sh = new THREE.Shape();
+  sh.moveTo(-half, 0); sh.lineTo(-half, postH);
+  sh.absarc(0, postH, half, Math.PI, 0, true);
+  sh.lineTo(half, 0); sh.lineTo(-half, 0);
+  return sh;
+}
+
+const GLOW_VERT = /* glsl */`varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const GLOW_FRAG = /* glsl */`
+uniform float uK; varying vec2 vP;
+void main(){
+  float d = length((vP - vec2(0.0, 1.3)) / vec2(0.95, 1.6));
+  gl_FragColor = vec4(vec3(1.0, 0.96, 0.88) * uK * (0.35 + 0.65 * smoothstep(1.1, 0.0, d)), 1.0);
+}`;
 
 export function buildRoseArch(text) {
   const g = new THREE.Group();
   const iron = new THREE.MeshBasicMaterial({ color: 0x151816, fog: true });
   const vine = new THREE.MeshBasicMaterial({ color: 0x1f4a2e, fog: true });
-  // frame: posts and the half ring on top
-  for (const s of [-1, 1]) {
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, POST_H, 8), iron);
-    post.position.set(s * ARCH_HALF, POST_H / 2, 0); g.add(post);
+  const arches = [];
+  const archPath = z => {                             // up one post, over, down the other
+    const pts = [];
+    for (let k = 0; k <= 10; k++) pts.push(new THREE.Vector3(-HALF, k / 10 * POST_H, z));
+    for (let k = 1; k < 20; k++) { const a = Math.PI - k / 20 * Math.PI; pts.push(new THREE.Vector3(Math.cos(a) * HALF, POST_H + Math.sin(a) * HALF, z)); }
+    for (let k = 10; k >= 0; k--) pts.push(new THREE.Vector3(HALF, k / 10 * POST_H, z));
+    return new THREE.CatmullRomCurve3(pts);
+  };
+  const paths = [];
+  for (let a = 0; a < ARCHES; a++) {
+    const z = -a * GAP, ag = new THREE.Group();
+    for (const sx of [-1, 1]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, POST_H, 8), iron); post.position.set(sx * HALF, POST_H / 2, z); ag.add(post); }
+    const top = new THREE.Mesh(new THREE.TorusGeometry(HALF, 0.022, 6, 32, Math.PI), iron); top.position.set(0, POST_H, z); ag.add(top);
+    const path = archPath(z); paths.push(path);
+    const wind = [];
+    for (let k = 0; k <= 160; k++) { const u = k / 160, p = path.getPointAt(u), w = u * 48 + a; wind.push(p.add(new THREE.Vector3(Math.cos(w) * 0.045, 0, Math.sin(w) * 0.045))); }
+    ag.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(wind), 260, 0.011, 5, false), vine));
+    g.add(ag); arches.push(ag);
   }
-  const top = new THREE.Mesh(new THREE.TorusGeometry(ARCH_HALF, 0.025, 6, 32, Math.PI), iron);
-  top.position.y = POST_H; g.add(top);
-  // the path of the vine: up one post, over the top, down the other
-  const pts = [];
-  for (let k = 0; k <= 12; k++) pts.push(new THREE.Vector3(-ARCH_HALF, k / 12 * POST_H, 0));
-  for (let k = 1; k < 24; k++) { const a = Math.PI - k / 24 * Math.PI; pts.push(new THREE.Vector3(Math.cos(a) * ARCH_HALF, POST_H + Math.sin(a) * ARCH_HALF, 0)); }
-  for (let k = 12; k >= 0; k--) pts.push(new THREE.Vector3(ARCH_HALF, k / 12 * POST_H, 0));
-  const path = new THREE.CatmullRomCurve3(pts);
-  const wind = [];
-  for (let k = 0; k <= 220; k++) {                  // the vine spirals around the frame
-    const u = k / 220, p = path.getPointAt(u), a = u * 60;
-    wind.push(p.clone().add(new THREE.Vector3(Math.cos(a) * 0.05, 0, Math.sin(a) * 0.05)));
+  for (const [x, y] of [[-HALF, POST_H], [HALF, POST_H], [0, POST_H + HALF]]) {   // rails along the top
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, LENGTH, 6), iron);
+    rail.rotation.x = Math.PI / 2; rail.position.set(x, y, -LENGTH / 2); g.add(rail);
   }
-  g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(wind), 400, 0.012, 5, false), vine));
-  // roses and leaves along it, in the order they will open (bottom up, both sides)
-  const N = 46, roses = new THREE.InstancedMesh(roseGeometry(), new THREE.MeshBasicMaterial({ color: ROSE_RED, fog: true }), N);
-  const leaves = new THREE.InstancedMesh(new THREE.SphereGeometry(0.05, 6, 4).scale(1, 0.25, 0.55), vine, N);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3();
-  const order = Array.from({ length: N }, (_, i) => i / (N - 1)).map(u => (u < 0.5 ? u : 1 - u) + Math.random() * 0.04);
-  const sorted = order.map((o, i) => [o, i]).sort((a, b) => a[0] - b[0]).map(p => p[1]);
-  sorted.forEach((i, k) => {
-    const u = i / (N - 1), p = path.getPointAt(u);
-    const off = new THREE.Vector3((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.08, 0.03 + Math.random() * 0.07);
-    m.compose(p.clone().add(off), q.setFromEuler(e.set(Math.random() * 3, Math.random() * 3, Math.random() * 3)), sc.setScalar(0.8 + Math.random() * 0.6));
-    roses.setMatrixAt(k, m);
-    const lo = off.clone().multiplyScalar(-1).add(new THREE.Vector3(0.05, -0.04, 0));
-    m.compose(p.clone().add(lo), q.setFromEuler(e.set(Math.random() * 3, Math.random() * 3, 0)), sc.setScalar(1));
-    leaves.setMatrixAt(k, m);
+
+  // roses and leaves as sprites, spread along every arch and over the rails,
+  // ordered to open from the entrance inward
+  const roses = [], leaves = [];
+  const jitter = (s) => (Math.random() - 0.5) * s;
+  paths.forEach((path, a) => {
+    for (let k = 0; k < 44; k++) {
+      const u = Math.random(), p = path.getPointAt(u);
+      roses.push([p.x + jitter(0.14), p.y + jitter(0.12), p.z + jitter(0.2), a]);
+      const q = path.getPointAt(Math.random());
+      leaves.push([q.x + jitter(0.2), q.y + jitter(0.16), q.z + jitter(0.26), a]);
+    }
   });
-  roses.count = 0; leaves.count = 0;
-  roses.frustumCulled = leaves.frustumCulled = false;   // bounds were measured while empty
-  g.add(roses, leaves);
-  // light through the opening, and toward the visitor
-  const rays = buildLightRays(4, { nearW: ARCH_HALF * 2 - 0.1, nearH: POST_H + 0.5, farW: 2.3, farH: 3.1, gapZ: -0.05, z0: 0.02, gapK: 0.35 });
+  for (let k = 0; k < 150; k++) {                     // the roof between the arches
+    const u = Math.random(), ang = Math.PI * Math.random(), z = -u * LENGTH;
+    roses.push([Math.cos(ang) * HALF + jitter(0.1), POST_H + Math.sin(ang) * HALF + jitter(0.1), z, u * (ARCHES - 1)]);
+    leaves.push([Math.cos(ang) * HALF + jitter(0.18), POST_H + Math.sin(ang) * HALF + jitter(0.14), z + jitter(0.2), u * (ARCHES - 1)]);
+  }
+  const cloud = (list, tex, size, tint) => {
+    list.sort((a, b) => a[3] - b[3]);
+    const pos = new Float32Array(list.length * 3), col = new Float32Array(list.length * 3);
+    list.forEach(([x, y, z], i) => { pos.set([x, y, z], i * 3); const v = tint(); col.set(v, i * 3); });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setDrawRange(0, 0);
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size, sizeAttenuation: true, vertexColors: true, alphaTest: 0.45, fog: true }));
+    pts.frustumCulled = false;
+    g.add(pts);
+    return pts;
+  };
+  const leafPts = cloud(leaves, leafTexture(), 0.2, () => { const k = 0.7 + Math.random() * 0.5; return [k, k, k]; });
+  const rosePts = cloud(roses, roseTexture(), 0.24, () => { const k = 0.75 + Math.random() * 0.45; return [k, k * (0.85 + Math.random() * 0.2), k]; });
+
+  // light: the far arch glows in its own shape, and shafts pour back through the tunnel
+  const glowU = { uK: { value: 0 } };
+  const glow = new THREE.Mesh(new THREE.ShapeGeometry(archShape(HALF - 0.05, POST_H), 24),
+    new THREE.ShaderMaterial({ uniforms: glowU, vertexShader: GLOW_VERT, fragmentShader: GLOW_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  glow.position.z = -LENGTH - 0.3; g.add(glow);
+  // and beyond it a wall of light filling the corridor: the tunnel has no visible end
+  const haze = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 3.3),
+    new THREE.ShaderMaterial({ uniforms: glowU, vertexShader: GLOW_VERT, fragmentShader: GLOW_FRAG.replace('vec2(0.95, 1.6)', 'vec2(1.5, 2.2)'),
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  haze.position.set(0, 1.65, -LENGTH - 0.9); haze.geometry.translate(0, -1.65 + 1.3, 0); g.add(haze);
+  const rays = buildLightRays(LENGTH + 3.5, { nearW: HALF * 1.8, nearH: POST_H + 0.6, farW: 2.3, farH: 3.1, z0: -LENGTH - 0.25, gapK: 0 });
   g.add(rays.group);
-  // the words, hung under the top of the arch
-  const words = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.19),
-    new THREE.MeshBasicMaterial({ map: archText(text), transparent: true, depthWrite: false, opacity: 0 }));
-  words.position.set(0, POST_H + 0.33, 0.06);
+
+  // the words, under the top of the entrance
+  const words = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.21),
+    new THREE.MeshBasicMaterial({ map: tunnelText(text), transparent: true, depthWrite: false, opacity: 0 }));
+  words.position.set(0, 1.72, 0.05);                  // at eye level, inside the entrance
   g.add(words);
 
-  g.scale.setScalar(0.001);
+  arches.forEach(ag => ag.scale.set(1, 0.001, 1));
   let grow = 0;
   return {
     group: g,
-    halfWidth: ARCH_HALF,
-    // t: seconds since it began to grow
+    halfWidth: HALF - 0.1,
+    length: LENGTH,
     update(dt, time) {
-      grow = Math.min(1, grow + dt / 2.4);
-      const e3 = 1 - (1 - grow) ** 3;
-      g.scale.set(1, 0.05 + 0.95 * e3, 1);                       // rises out of the floor
-      roses.count = leaves.count = Math.floor(N * Math.min(1, grow * 1.3));
-      rays.set(Math.max(0, (grow - 0.35) / 0.65) * (0.85 + 0.15 * Math.sin(time * 1.7)), time);
+      grow = Math.min(1, grow + dt / 3.2);
+      arches.forEach((ag, a) => {                     // the arches rise one after another
+        const k = Math.max(0, Math.min(1, grow * 1.6 - a * 0.12));
+        ag.scale.y = 0.001 + (1 - (1 - k) ** 3) * 0.999;
+      });
+      const bloom = Math.max(0, (grow - 0.2) / 0.8);
+      rosePts.geometry.setDrawRange(0, Math.floor(rosePts.geometry.attributes.position.count * bloom));
+      leafPts.geometry.setDrawRange(0, Math.floor(leafPts.geometry.attributes.position.count * Math.min(1, bloom * 1.3)));
+      const k = Math.max(0, (grow - 0.35) / 0.65) * (0.85 + 0.15 * Math.sin(time * 1.7));
+      rays.set(k, time); glowU.uK.value = 1.3 * k;
       words.material.opacity = Math.max(0, (grow - 0.7) / 0.3);
     },
     dispose() {
@@ -186,22 +266,39 @@ export function buildRoseArch(text) {
   };
 }
 
-// Where the arch can stand: a couple of steps from the visitor along a
-// corridor axis, in open floor wide enough for it, as close as possible to
-// where they are already looking. Returns { x, z, dir: [dx, dz], yaw } or null.
-export function findArchSpot(px, pz, yaw) {
-  const open = (x, z) => !solidAtGlobal(Math.floor(x / CELL), Math.floor(z / CELL));
+// Where the tunnel can stand: a couple of steps from the visitor along a
+// corridor axis, on straight open floor wide and long enough for it, as close
+// as possible to where they are already looking. Returns
+// { x, z, dir: [dx, dz], yaw } for the entrance, or null.
+// blocked(x, z): anything else in the way that is not a labyrinth wall
+// (doors, furniture), supplied by the caller.
+export function findArchSpot(px, pz, yaw, blocked = () => false) {
+  const solid = (x, z) => solidAtGlobal(Math.floor(x / CELL), Math.floor(z / CELL)) || blocked(x, z);
+  const open = (x, z) => !solid(x, z);
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].sort((a, b) => (b[0] * fx + b[1] * fz) - (a[0] * fx + a[1] * fz));
-  for (const dist of [3.0, 2.6, 3.6, 2.2]) {
-    for (const [dx, dz] of dirs) {
-      const lx = -dz, lz = dx;                        // across the corridor
-      for (const side of [0, 0.3, -0.3, 0.6, -0.6]) {
-        const x = px + dx * dist + lx * side, z = pz + dz * dist + lz * side;
-        let ok = open(x, z) && open(x + dx * 1.2, z + dz * 1.2);
-        for (const w of [-0.95, 0.95]) ok = ok && open(x + lx * w, z + lz * w);
-        for (let s = 0.4; ok && s < dist; s += 0.4) ok = open(px + dx * s + lx * side * s / dist, pz + dz * s + lz * side * s / dist);
-        if (ok) return { x, z, dir: [dx, dz], yaw: Math.atan2(-dx, -dz) };
+  const sides = [0, 0.1, -0.1, 0.2, -0.2, 0.3, -0.3, 0.4, -0.4, 0.5, -0.5, 0.6, -0.6, 0.7, -0.7, 0.8, -0.8];
+  const fits = (x, z, dx, dz, corridor) => {
+    const lx = -dz, lz = dx;
+    let walled = 0, n = 0;
+    for (let s = 0; s <= LENGTH + 1.6; s += 0.4, n++) {        // the whole tunnel and a stretch beyond
+      const cx = x + dx * s, cz = z + dz * s;
+      if (!open(cx, cz) || solid(cx + lx * (HALF + 0.08), cz + lz * (HALF + 0.08)) || solid(cx - lx * (HALF + 0.08), cz - lz * (HALF + 0.08))) return false;
+      if (solid(cx + lx * 1.4, cz + lz * 1.4) && solid(cx - lx * 1.4, cz - lz * 1.4)) walled++;
+    }
+    return !corridor || walled >= n * 0.85;          // a corridor: walls close on both sides nearly all the way
+  };
+  for (const corridor of [true, false]) {            // a corridor if there is one, open floor only if not
+    for (const dist of corridor ? [2.4, 3.0, 2.0, 3.6, 4.4, 5.2, 6.0, 7.0, 8.0] : [2.4, 3.0, 2.0, 3.6]) {   // a corridor is worth a few more steps
+      for (const [dx, dz] of dirs) {
+        const lx = -dz, lz = dx;
+        for (const side of sides) {
+          const x = px + dx * dist + lx * side, z = pz + dz * dist + lz * side;
+          if (!fits(x, z, dx, dz, corridor)) continue;
+          let clear = true;
+          for (let s = 0.4; clear && s < dist; s += 0.4) clear = open(px + dx * s + lx * side * s / dist, pz + dz * s + lz * side * s / dist);
+          if (clear) return { x, z, dir: [dx, dz], yaw: Math.atan2(-dx, -dz) };
+        }
       }
     }
   }

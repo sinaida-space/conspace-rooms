@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CONSPACE_SEED, chunkRooms } from './world.js';
+import { CONSPACE_SEED, chunkRooms, solidAtGlobal, CELL } from './world.js';
 import { t, getLang } from './i18n.js';
 
 // ── conspace-rooms · artworks.js ────────────────────────────────────────────
@@ -68,6 +68,23 @@ function ringOrdinal(cx, cz) {
   return ringStart + pos;
 }
 
+// A wall run in a corridor: the open floor in front of it is exactly two
+// cells wide (the lattice corridors), with the opposite wall right behind.
+// Works hang only there, so every work, and the rose tunnel that follows the
+// last one, is met in a corridor.
+function inCorridor(slot) {
+  const { position: p, normal: n, length } = slot;
+  for (const k of [0.5, length / 2, length - 0.5]) {          // both ends and the middle of the run
+    const u = -length * CELL / 2 + k * CELL;                   // along the wall
+    const x = n.x !== 0 ? p.x + n.x * CELL * 0.5 : p.x + u;    // the cell in front of it
+    const z = n.x !== 0 ? p.z + u : p.z + n.z * CELL * 0.5;
+    const gi = Math.floor(x / CELL), gj = Math.floor(z / CELL);
+    if (solidAtGlobal(gi, gj) || solidAtGlobal(gi + n.x, gj + n.z)) return false;   // two open cells
+    if (!solidAtGlobal(gi + 2 * n.x, gj + 2 * n.z)) return false;                    // then the other wall
+  }
+  return true;
+}
+
 // Which wall slots (if any) get an artwork in this chunk, and which deck
 // index each one draws. Pure function of (cx, cz) + the chunk's own slots.
 function chunkArtworkPlan(cx, cz, slots, deck) {
@@ -76,7 +93,7 @@ function chunkArtworkPlan(cx, cz, slots, deck) {
   let target = 0;
   for (let r = 0; r < rooms; r += 2 + rand()) target++; // ~1 per 2–3 rooms
 
-  const candidates = slots.filter(s => s.length >= 2);
+  const candidates = slots.filter(s => s.length >= 2 && inCorridor(s));
   for (let i = candidates.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
