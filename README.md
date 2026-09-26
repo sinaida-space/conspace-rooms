@@ -15,7 +15,8 @@
 
 Add `?lang=ru` or `?lang=en` to any page for the language. The mirror is for
 networks where Vercel does not open: `?mirror` keeps you on GitHub Pages and the
-browser remembers it. Gesture control still needs jsDelivr and Google.
+browser remembers it. MediaPipe and its models are vendored in
+`vendor/mediapipe/`, so nothing loads from a CDN.
 
 A walk-through web installation by [Sinaida](https://sinaida.eu/) and
 [UVALISS](https://uvaliss.ru/) (Alisa Feer). Eighteen works from the SOULS series
@@ -162,6 +163,7 @@ visitor. The code is in `src/gallery.js`.
 | `card`    | `25`    | seconds the closing card of questions stays up (5–300) |
 | `volume`  | `0.9`   | master volume, 0 to 1 |
 | `seed`    | time    | an integer for one fixed labyrinth instead of a new one per visitor |
+| `uptime`  | `6`     | hours before a fresh reload, done only while nobody walks (1–48) |
 
 Example: `/gallery?lang=en&idle=60&card=30&volume=0.7`
 
@@ -171,6 +173,15 @@ Example: `/gallery?lang=en&idle=60&card=30&volume=0.7`
 |-----|--------------|
 | `F` | toggle full screen (when not in kiosk mode) |
 | any key | enter with keyboard controls, if the camera is not available |
+| `O` × 3 | operator panel: FPS, camera, network, cached files, uptime, walks today and in total |
+
+### Keeper
+
+`src/keeper.js` looks after a running installation. It registers `sw.js`, a
+service worker that keeps every file of the piece (works, models, MediaPipe) so
+`/gallery` runs offline after its first walk. A lost WebGL context or a render
+loop stalled for 12 s reloads the page. The walk counter lives in the gallery
+machine's localStorage and holds numbers only.
 
 The cheats in [docs/CHEATS.md](docs/CHEATS.md) work here too. As in the ordinary
 gesture mode, the camera image is processed only in the browser: nothing is

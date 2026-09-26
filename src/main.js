@@ -152,6 +152,7 @@ async function boot() {
     if (post) post.render(scene, camera, dt, elapsed, speed);
     else renderer.render(scene, camera);
     window.__app.clip?.frame();   // copy the frame while the drawing buffer still holds it
+    window.__app.beat = performance.now(); window.__app.frames = (window.__app.frames || 0) + 1;   // the gallery keeper's heartbeat
   };
   renderer.setAnimationLoop(frame);
   window.__app.frame = frame;   // dev hook: step the world by hand (headless checks, hidden tabs)

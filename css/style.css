@@ -594,3 +594,7 @@ body.can-inspect #pad .pad-inspect:active, body.inspecting #pad .pad-inspect:act
 /* walk clip: a small red recording mark, then the save tape in the same place */
 .clip-badge { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40; color: #ff4a3d; font: 14px/1 "Departure Mono", monospace; letter-spacing: 0.08em; text-shadow: 0 0 6px rgba(0, 0, 0, 0.8); }
 .clip-badge .tape { font-size: 15px; }
+
+/* gallery keeper: the operator panel, O three times */
+.keeper-panel { position: fixed; left: 16px; bottom: 16px; z-index: 60; margin: 0; padding: 0.8em 1em; background: rgba(1, 8, 5, 0.92); border: 1px solid var(--dim); color: var(--fg); font: 13px/1.5 var(--font-dos); white-space: pre; }
+.keeper-panel.hidden { display: none; }

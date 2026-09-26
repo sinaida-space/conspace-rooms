@@ -12,11 +12,13 @@
 //   card=25       seconds the card of questions stays up before the reset
 //   volume=0.9    master volume, 0..1
 //   seed=<int>    one fixed labyrinth instead of a new one each time
+//   uptime=6      hours before a fresh reload, done only while nobody walks (keeper.js)
 //
 // All video stays in the browser, as in the ordinary gesture mode.
 
 import { HandInput } from './hands.js';
 import { t } from './i18n.js';
+import { startKeeper } from './keeper.js';
 
 const num = (k, d, lo, hi) => {
   const v = parseFloat(new URLSearchParams(location.search).get(k));
@@ -29,6 +31,7 @@ export function createGallery() {
   const line = document.getElementById('attract-line');
   const note = document.getElementById('attract-note');
   let hands = null, cameraOk = false;
+  const keeper = startKeeper({ getHands: () => hands, attractUp: () => !attract.classList.contains('gone') });
 
   const show = (text) => { if (text) line.textContent = text; attract.classList.remove('gone'); };
   const hide = () => attract.classList.add('gone');
@@ -62,7 +65,7 @@ export function createGallery() {
     // without a camera, at the first key or click.
     waitForVisitor() {
       return new Promise(res => {
-        const enter = mode => { clearInterval(timer); hide(); res({ mode, cameraStream: null }); };
+        const enter = mode => { clearInterval(timer); hide(); keeper.walk(); res({ mode, cameraStream: null }); };
         let held = 0;
         const timer = setInterval(() => {
           if (!cameraOk) return;
@@ -82,6 +85,7 @@ export function createGallery() {
       setInterval(() => {
         if (leaving) return;
         const card = document.getElementById('final-card');
+        if (card && !cardSince) keeper.finish();
         cardSince = card ? cardSince + 1 : 0;
         const empty = cameraOk && hands.idleMs() > params.idle * 1000;
         if (empty || cardSince > params.card) {
