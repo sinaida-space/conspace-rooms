@@ -492,7 +492,7 @@ body:has(#pad) #artwork-prompt { bottom: calc(max(16px, env(safe-area-inset-bott
 /* the wheat grain at the stem's root: closed and whole at n = 0, splits into
    a faint husk at the first work seen (John 12:24, hidden) */
 .roses .grain { transform-box: fill-box; }
-.roses .gr-halo { fill: #e0b060; opacity: 0.35; filter: blur(2.2px); transition: opacity 0.8s ease; }
+.roses .gr-halo { fill: #e0b060; opacity: 0.5; filter: blur(5px); transition: opacity 0.8s ease; }
 .roses .gr-husk { fill: #c99a4a; stroke: #8a6423; stroke-width: 0.25; transform-box: fill-box; transform-origin: center; transition: transform 0.4s ease, opacity 1s ease; }
 .roses .gr-crease { stroke: #8a6423; stroke-width: 0.35; opacity: 0.6; transition: opacity 0.4s ease; }
 .roses .grain.glow .gr-halo { animation: grain-pulse 0.6s ease; }
@@ -500,7 +500,7 @@ body:has(#pad) #artwork-prompt { bottom: calc(max(16px, env(safe-area-inset-bott
 .roses .grain.open .gr-husk-r { transform: translate(0.9px, 0.5px) rotate(8deg); }
 .roses .grain.open .gr-husk { opacity: 0.4; }
 .roses .grain.open .gr-crease { opacity: 0; }
-.roses .grain.open .gr-halo { opacity: 0.15; }
+.roses .grain.open .gr-halo { opacity: 0.22; }
 @keyframes grain-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.9; } }
 
 /* the finale: the rose sheds. Petals fall away with their own delay and
@@ -516,7 +516,7 @@ body:has(#pad) #artwork-prompt { bottom: calc(max(16px, env(safe-area-inset-bott
 .roses.shed .grain .gr-husk-l, .roses.shed .grain .gr-husk-r { transform: translate(0, 0) rotate(0deg); transition: transform 0.6s ease 2s; }
 .roses.shed .grain .gr-husk { opacity: 1; transition: opacity 0.8s ease 2s; }
 .roses.shed .grain .gr-crease { opacity: 0.6; transition: opacity 0.6s ease 2s; }
-.roses.shed .grain .gr-halo { opacity: 0.5; transition: opacity 1s ease 2s; animation: grain-pulse 2.6s ease-in-out 2.2s infinite alternate; }
+.roses.shed .grain .gr-halo { opacity: 0.6; transition: opacity 1s ease 2s; animation: grain-pulse 2.6s ease-in-out 2.2s infinite alternate; }
 
 @media (prefers-reduced-motion: reduce) {
   .roses .grain.open .gr-husk-l, .roses .grain.open .gr-husk-r,

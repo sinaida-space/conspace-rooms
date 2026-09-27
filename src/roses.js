@@ -46,8 +46,8 @@ export const GRAIN_OPEN_MS = 1000;   // set(1): glow (600 ms) then open (400 ms)
 export const SHED_MS = 3000;         // api.shed(): petals fall, leaves dry, stems dim, the grain returns
 function grain() {
   return `<g class="grain" data-grain>
-    <ellipse class="gr-halo" cx="3" cy="0" rx="6" ry="4"/>
-    <g transform="translate(3 0) rotate(-12)">
+    <ellipse class="gr-halo" cx="4" cy="3" rx="15" ry="11"/>
+    <g transform="translate(4 3) rotate(-12) scale(1.8)">
       <path class="gr-husk gr-husk-l" d="M0 -1.8 A3 1.8 0 0 0 0 1.8Z"/>
       <path class="gr-husk gr-husk-r" d="M0 -1.8 A3 1.8 0 0 1 0 1.8Z"/>
       <line class="gr-crease" x1="0" y1="-1.7" x2="0" y2="1.7"/>
