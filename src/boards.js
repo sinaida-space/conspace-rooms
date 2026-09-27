@@ -157,8 +157,23 @@ export function carpetTexture(seed) {
     if (Math.abs(x - cx) / 180 + Math.abs(y - cy) / 260 < 1) continue;
     g.fillStyle = [cream, gold, blue][i % 3]; g.fillRect(x - 5, y - 5, 10, 10);
   }
-  // pile: fine noise, and a paler worn patch
-  for (let i = 0; i < 22000; i++) { g.fillStyle = `rgba(${r() < 0.5 ? '0,0,0' : '255,230,200'},${r() * 0.07})`; g.fillRect(r() * W, r() * H, 2, 2); }
+  // pile: the pattern goes soft, as wool does, then thousands of short
+  // fibres, each in the colour under it, a shade lighter or darker, leaning
+  // every which way; the knots show as a faint grid
+  g.filter = 'blur(1.6px)'; g.drawImage(c, 0, 0); g.filter = 'none';
+  const px = g.getImageData(0, 0, W, H).data;
+  g.lineCap = 'round';
+  for (let i = 0; i < 42000; i++) {
+    const x = r() * W, y = r() * H, k = (Math.floor(y) * W + Math.floor(x)) * 4;
+    const sh = r() < 0.5 ? 0.72 + r() * 0.2 : 1.1 + r() * 0.25;
+    g.strokeStyle = `rgba(${Math.min(255, px[k] * sh) | 0},${Math.min(255, px[k + 1] * sh) | 0},${Math.min(255, px[k + 2] * sh) | 0},0.55)`;
+    g.lineWidth = 0.8 + r() * 0.9;
+    const a2 = r() * 6.283, l = 1.5 + r() * 3;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a2) * l, y + Math.sin(a2) * l); g.stroke();
+  }
+  g.fillStyle = 'rgba(0,0,0,0.06)';
+  for (let x = 0; x < W; x += 4) g.fillRect(x, 0, 1, H);
+  for (let y = 0; y < H; y += 4) g.fillRect(0, y, W, 1);
   const wear = g.createRadialGradient(W * (0.3 + r() * 0.4), H * 0.62, 10, W * 0.5, H * 0.62, W * 0.5);
   wear.addColorStop(0, 'rgba(255,230,200,0.14)'); wear.addColorStop(1, 'rgba(255,230,200,0)');
   g.fillStyle = wear; g.fillRect(0, 0, W, H);
