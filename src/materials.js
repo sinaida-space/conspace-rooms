@@ -196,7 +196,7 @@ vec3 candleLight(vec3 P, vec3 N){
     float ndl = max(dot(N, L * inversesqrt(d2 + 1e-4)), 0.0) * 0.8 + 0.2;
     acc += uCandleCol[i] * w * ndl / (1.0 + d2 * 2.5);
   }
-  return acc;
+  return acc * (1.0 - 0.7 * uZone.z);               // on pale cloud a flame's glow would blow out
 }
 
 // Diffuse and specular from the same 3×3 fixtures in one pass (walls need

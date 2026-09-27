@@ -1380,7 +1380,7 @@ export class SoulPath {
     else this._stillT = 0;
     if (this._stillT > STILL_FOR_19) this._hangNineteenth(time);
     if (this.nineteenth) {
-      this.nineteenth.canvas.material.opacity = 0.55 + 0.25 * Math.sin(time * 0.8);
+      this.nineteenth.canvas.material.color.setScalar(0.9 + 0.1 * Math.sin(time * 0.8));   // breathes with light
     }
 
     // portals: cross-check, animate the veils, dim the ones already used
@@ -1518,12 +1518,22 @@ export class SoulPath {
         const g = new THREE.Group();
         g.position.set(wx + nx * 0.012, 1.55, wz + nz * 0.012);
         g.rotation.y = Math.atan2(nx, nz);
+        // an empty primed canvas, lit from inside: the visitor is the work
+        const cv = document.createElement('canvas'); cv.width = 256; cv.height = 340;
+        const cg = cv.getContext('2d'), grad = cg.createRadialGradient(128, 150, 10, 128, 170, 220);
+        grad.addColorStop(0, '#fbfaf3'); grad.addColorStop(1, '#d9d8cc');
+        cg.fillStyle = grad; cg.fillRect(0, 0, 256, 340);
+        for (let i = 0; i < 4000; i++) { cg.fillStyle = `rgba(120,110,90,${Math.random() * 0.06})`; cg.fillRect(Math.random() * 256, Math.random() * 340, 1, 1); }   // linen
         const canvas = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.45),
-          new THREE.MeshBasicMaterial({ color: 0xf6f7ef, transparent: true, opacity: 0.6, fog: false }));
+          new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), color: 0xffffff, fog: false }));
         g.add(canvas);
-        const frame = new THREE.Mesh(new THREE.BoxGeometry(1.22, 1.57, 0.05), new THREE.MeshBasicMaterial({ color: 0x3b2c17 }));
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(1.22, 1.57, 0.05), this.artworks.frameMat);
         frame.position.z = -0.03;
+        frame.userData.keepMaterial = true;
         g.add(frame);
+        const shade = new THREE.Mesh(new THREE.PlaneGeometry(1.72, 2.12), this.artworks.shadowMat);
+        shade.position.set(0, -0.07, -0.009);
+        g.add(shade);
         const plac = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.2),
           new THREE.MeshBasicMaterial({ map: placardTexture(['UVALISS', t('youLabel'), 'SOULS · 19']) }));
         plac.position.set(0.55 + 0.06 + 0.1 + 0.17, -0.2, 0.002);

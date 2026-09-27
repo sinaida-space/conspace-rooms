@@ -191,6 +191,55 @@ function buildPlacardTexture(art) {
   return tex;
 }
 
+// A moulded wooden frame: darker grain, a lit outer bevel and a shadowed
+// inner lip, so it reads as a profile and not a flat black box. One texture
+// stretched over the whole box; the canvas covers its middle.
+function frameTexture() {
+  const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = '#3a2a16'; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 90; i++) {                      // grain running round the frame
+    g.strokeStyle = `rgba(${Math.random() < 0.5 ? '20,12,4' : '90,66,36'},${0.08 + Math.random() * 0.12})`;
+    g.lineWidth = 0.5 + Math.random() * 1.5;
+    const k = Math.random() * S * 0.5;
+    g.strokeRect(k, k, S - 2 * k, S - 2 * k);
+  }
+  const bevel = (k, col, w) => { g.strokeStyle = col; g.lineWidth = w; g.strokeRect(k, k, S - 2 * k, S - 2 * k); };
+  bevel(3, 'rgba(160,122,70,0.55)', 4);               // the lit outer edge
+  bevel(10, 'rgba(0,0,0,0.25)', 5);
+  bevel(19, 'rgba(190,150,90,0.35)', 2);              // a bead of gilt
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+// The soft shadow a hanging frame throws on the wall: a blurred rectangle,
+// a little lower than the frame, darkest near its edge.
+let WALL_SHADOW = null;
+function wallShadowTexture() {
+  if (WALL_SHADOW) return WALL_SHADOW;
+  const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, S, S);         // an alpha map: white is shadow
+  g.filter = 'blur(10px)'; g.fillStyle = '#fff'; g.fillRect(22, 22, S - 44, S - 44);
+  WALL_SHADOW = new THREE.CanvasTexture(c);
+  return WALL_SHADOW;
+}
+// Fog reaches a work only in part: the image stays readable in the milk of
+// the last stage, while its frame and the wall fade as usual.
+function thinFog(mat, k = 0.4) {
+  mat.onBeforeCompile = sh => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <fog_fragment>',
+      `#ifdef USE_FOG
+        #ifdef FOG_EXP2
+          float fogF = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+        #else
+          float fogF = smoothstep(fogNear, fogFar, vFogDepth);
+        #endif
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogF * ${k.toFixed(2)});
+      #endif`);
+  };
+  return mat;
+}
+
 // ── DOM: proximity prompt + inspect overlay ─────────────────────────────────
 function ensureDom() {
   if (document.getElementById('artwork-prompt')) return;
@@ -246,7 +295,10 @@ export class Artworks {
     this.chunkGroups = new Map();    // chunk key -> THREE.Group | null
     this.active = [];                // [{ art, centerWorld, normal, width, height, chunkKey }]
 
-    this.frameMat = new THREE.MeshBasicMaterial({ color: 0x3b2c17 });
+    this.frameMat = new THREE.MeshBasicMaterial({ map: frameTexture() });
+    this.shadowMat = new THREE.MeshBasicMaterial({ map: wallShadowTexture(), color: 0x000000, transparent: true, opacity: 0.55, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    this.shadowMat.alphaMap = this.shadowMat.map; this.shadowMat.map = null;
     this.texCache = new Map();       // art.id -> { tex, refs }
     this.placardCache = new Map();   // art.id -> { tex, refs }
 
@@ -320,8 +372,12 @@ export class Artworks {
     sub.userData.artworkId = art.id;
     group.add(sub);
 
-    const canvasMesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: texture }));
+    const canvasMesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), thinFog(new THREE.MeshBasicMaterial({ map: texture })));
     sub.add(canvasMesh);
+    // its shadow on the wall, thrown down by the lamps overhead
+    const shade = new THREE.Mesh(new THREE.PlaneGeometry(width + 0.5, height + 0.55), this.shadowMat);
+    shade.position.set(0, -0.07, -0.008);                // on the wall itself, just in front of it
+    sub.add(shade);
 
     const border = FRAME_BORDER, depth = 0.05;
     const frameMesh = new THREE.Mesh(new THREE.BoxGeometry(width + border * 2, height + border * 2, depth), this.frameMat);
@@ -353,7 +409,7 @@ export class Artworks {
     this.scene.remove(group);
     group.traverse(o => {
       if (o.geometry) o.geometry.dispose();
-      if (o.material && o.material !== this.frameMat) o.material.dispose();
+      if (o.material && o.material !== this.frameMat && o.material !== this.shadowMat) o.material.dispose();
       if (o.userData && o.userData.artworkId) {
         this._releaseTexture(o.userData.artworkId);
         this._releasePlacard(o.userData.artworkId);
@@ -492,7 +548,7 @@ export class Artworks {
 
   dispose() {
     for (const key of Array.from(this.chunkGroups.keys())) this._disposeChunk(key);
-    this.frameMat.dispose();
+    this.frameMat.map?.dispose(); this.frameMat.dispose(); this.shadowMat.dispose();
     this._prompt?.remove();
     this._overlay?.remove();
   }
