@@ -158,7 +158,7 @@ export function createRoseCounter(total = 18) {
       if (!p.classList.contains('rstem-hi')) el.querySelectorAll(`[data-thorn="${p.dataset.i}"]`).forEach(th => th.classList.toggle('on', f >= +th.dataset.at + 0.03));
     });
     LEAVES.forEach(([, , , from], i) => el.querySelector(`[data-leaf="${i}"]`).classList.toggle('on', k >= from));
-    BUDS.forEach(([, , shows, opens], i) => {
+    BUDS.forEach(([, , , shows, opens], i) => {
       el.querySelector(`[data-bud="${i}"]`).classList.toggle('on', k >= shows && k < opens);
       el.querySelector(`[data-bloom="${i}"]`).classList.toggle('on', k >= opens);
     });
