@@ -332,6 +332,22 @@ export class SoulPath {
       if (this._sevenTimes.length >= 5) { this._sevenTimes = []; this._jumpToLastWork(); }
     });
 
+    // five presses of B: chevrons on the floor to the nearest grandmother's
+    // room (the red rooms, if the visitor is still in the hospital); once it
+    // is found they go out and the souls begin to wander
+    this._bTimes = [];
+    addEventListener('keydown', e => {
+      if (e.code !== 'KeyB' || e.repeat) return;
+      const now = performance.now();
+      this._bTimes = this._bTimes.filter(tm => now - tm < 3000).concat(now);
+      if (this._bTimes.length < 5) return;
+      this._bTimes = [];
+      if (this.stage.stage === 0 && this.stage.go(1)) this.post?.burst(1.4);
+      if (this.stage.stage !== 1 || this.visitedRoom) return;
+      this._guideRoom = true;
+      if (!this.guide) this._toggleGuide();
+    });
+
     // five presses of 0: straight into the light, the acceptance stage
     this._zeroTimes = [];
     addEventListener('keydown', e => {
@@ -1210,6 +1226,7 @@ export class SoulPath {
 
   _updateGuide(dt, time) {
     const g = this.guide;
+    if (this._guideRoom && this.visitedRoom) { this._guideRoom = false; this._toggleGuide(); return; }   // B×5 led here: its work is done
     g.t -= dt;
     g.mesh.material.opacity = 0.6 + 0.35 * Math.sin(time * 4);
     if (g.t > 0) return;
