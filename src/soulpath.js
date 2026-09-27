@@ -1024,7 +1024,7 @@ export class SoulPath {
     const P = this.player;
     if (!this.balloons) {
       const qs = t('acceptQuestions'), order = this._soulOrder(4, qs.length);
-      this.balloons = Array.from({ length: 5 }, (_, i) => {
+      this.balloons = Array.from({ length: 2 }, (_, i) => {   // just a couple, far apart
         const text = qs[order[i % qs.length]];
         const g = new THREE.Group();
         const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 28, 18), this.atmo.prop({ color: 0xe8f1f8, rust: 0 }));
@@ -1062,9 +1062,10 @@ export class SoulPath {
   _spawnBalloon(b) {
     const P = this.player;
     for (let tries = 0; tries < 40; tries++) {
-      const a = Math.random() * 6.28, d = 5 + Math.random() * 12;
+      const a = Math.random() * 6.28, d = 8 + Math.random() * 12;
       const x = P.pos.x + Math.cos(a) * d, z = P.pos.y + Math.sin(a) * d;
       if (!this._airClear(x, z, 0.9)) continue;
+      if ((this.balloons || []).some(o => o !== b && !o.gone && Math.hypot(o.pos.x - x, o.pos.z - z) < 8)) continue;   // never two together
       b.pos.set(x, 1.7 + Math.random() * 0.5, z);
       b.gone = false; b.rise = 0; b.g.position.copy(b.pos);
       return;
