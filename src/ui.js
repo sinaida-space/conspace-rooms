@@ -6,6 +6,34 @@ import { renderFooter } from './footer.js';
 const $ = id => document.getElementById(id);
 const wait = ms => new Promise(res => setTimeout(res, ms));
 
+// Every strip of tape is torn by hand: its own ragged ends, its own slightly
+// crooked long edges, drawn once as a clip-path when it first appears.
+function tearTape(el) {
+  if (el.dataset.torn) return;
+  el.dataset.torn = '1';
+  const r = (a, b) => a + Math.random() * (b - a), pts = [];
+  const end = (x0, inward, down) => {                  // a torn end: 5–8 teeth across the strip
+    const n = 5 + Math.floor(Math.random() * 4);
+    for (let i = 0; i <= n; i++) {
+      const y = down ? i / n * 100 : 100 - i / n * 100;
+      pts.push(`${(x0 + inward * r(0, 5.5)).toFixed(1)}% ${Math.min(100, Math.max(0, y + r(-3, 3))).toFixed(1)}%`);
+    }
+  };
+  pts.push(`${r(2, 7).toFixed(1)}% ${r(0, 6).toFixed(1)}%`);              // the long top edge, a hair off straight
+  pts.push(`${r(30, 70).toFixed(1)}% ${r(0, 3).toFixed(1)}%`);
+  end(100, -1, true);                                                     // right end, top to bottom
+  pts.push(`${r(30, 70).toFixed(1)}% ${r(97, 100).toFixed(1)}%`);         // the long bottom edge
+  end(0, 1, false);                                                       // left end, bottom to top
+  el.style.clipPath = `polygon(${pts.join(', ')})`;
+}
+const TAPES = '.tape, #pad .pad-inspect, #hud-toolbar button';
+function tearAll(root = document) { root.querySelectorAll?.(TAPES).forEach(tearTape); }
+if (typeof document !== 'undefined') {
+  tearAll();
+  new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) { if (n.matches(TAPES)) tearTape(n); tearAll(n); } })
+    .observe(document.documentElement, { childList: true, subtree: true });
+}
+
 // WebGL2 support (hard requirement) + GPU class heuristic + dpr + touch.
 export function detectCapabilities() {
   let webgl2 = false, gpu = '';

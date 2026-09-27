@@ -23,6 +23,7 @@ import { ZONE, ORIGIN } from './zones.js';
 // recent footsteps glow brighter and fade behind them (uTrail).
 
 const SPACING = 4.8; // metres between ceiling fixtures (= 4 cells)
+const WALL_N = 64;   // cells per side of the wall-distance field around the visitor (77 m)
 
 // ── shared GLSL ─────────────────────────────────────────────────────────────
 const LIB = /* glsl */`
@@ -48,6 +49,8 @@ uniform vec3  uTrail[4];   // xz of recent footsteps + strength (0..1)
 uniform vec3  uZone;      // stage weights (fear, memory, acceptance), set by the portal crossings
 uniform vec4  uCandle[8];     // the 8 candles nearest the visitor: xyz, w = flickering intensity
 uniform vec3  uCandleCol[8];  // their flame colours
+uniform sampler2D uWallDist; // distance to the nearest wall, one texel per cell around the visitor (see wallField)
+uniform vec2  uWallO;         // cell index of texel 0
 uniform vec4  uHaze[6];       // the fixtures in sight of the visitor: xyz centre of the glow, w = strength (flicker included)
 
 varying vec3 vWorldPos;
@@ -104,6 +107,38 @@ float trailBoost(vec2 pc){
   return b;
 }
 
+// Signed distance to the nearest wall in metres (negative inside one),
+// bilinear between cell centres, so it is smooth and its zero sits on the
+// wall faces. Out of the field: open floor.
+float wallDist(vec2 xz){
+  vec2 uv = (xz / ${CELL.toFixed(2)} - uWallO) / ${WALL_N}.0;
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 3.0;
+  return texture2D(uWallDist, uv).r * 4.8 - 1.2;
+}
+// How much of a fixture P sees past the walls: sphere-traced across the
+// floor plan toward the lamp (walls run floor to ceiling, so the plan is
+// enough), with the soft-shadow estimate that turns a near miss into a
+// penumbra. The panel is an area light, so the shadow edge stays soft.
+float lampVis(vec3 P, vec3 N, vec2 lamp){
+  if (uTier == 0) return 1.0;
+  vec2 o = P.xz + N.xz * 0.05, d = lamp - o;
+  float len = length(d);
+  if (len < 0.5) return 1.0;
+  d /= len;
+  float res = 1.0, t = 0.3;
+  int steps = uTier > 1 ? 10 : 6;
+  for (int i = 0; i < 10; i++) {
+    if (i >= steps || t > len - 0.3) break;
+    float h = wallDist(o + d * t);
+    res = min(res, 3.0 * h / t);
+    if (res < 0.0) return 0.0;
+    t += max(h, 0.2);
+  }
+  return smoothstep(0.0, 1.0, res);
+}
+// Open floor around P: 0 hard against a wall, 1 a metre clear.
+float openness(vec2 xz){ return smoothstep(0.0, 1.0, wallDist(xz)); }
+
 // The 3×3 nearest fixtures around P: centre of each lamp cell, in metres.
 // Summed diffuse illumination at P (normal N).
 vec3 fixtureLight(vec3 P, vec3 N, vec3 lightCol){
@@ -118,8 +153,8 @@ vec3 fixtureLight(vec3 P, vec3 N, vec3 lightCol){
       float dist = length(L);
       float atten = 1.0 / (1.0 + 0.16 * dist + 0.10 * dist * dist);
       float ndl = max(dot(N, L / max(dist, 1e-3)), 0.0) * 0.7 + 0.3; // soft wrap
-      float fl = 1.0;
-      if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl = uFlickerAmt;
+      float fl = lampVis(P, N, pc);
+      if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl *= uFlickerAmt;
       acc += lightCol * atten * ndl * fl;             // footstep boost lives on the fixtures themselves (ceiling)
     }
   }
@@ -140,8 +175,8 @@ vec3 fixtureSpec(vec3 P, vec3 N, vec3 V, vec3 lightCol, float shin){
       float dist = length(L);
       L /= max(dist, 1e-3);
       float atten = 1.0 / (1.0 + 0.16 * dist + 0.10 * dist * dist);
-      float fl = 1.0;
-      if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl = uFlickerAmt;
+      float fl = lampVis(P, N, pc);
+      if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl *= uFlickerAmt;
       vec3 H = normalize(L + V);
       acc += lightCol * atten * fl * pow(max(dot(N, H), 0.0), shin) * step(0.0, dot(N, L));
     }
@@ -178,8 +213,8 @@ void fixtureLightSpec(vec3 P, vec3 N, vec3 V, vec3 lightCol, float shin, out vec
       float dist = length(L);
       L /= max(dist, 1e-3);
       float atten = 1.0 / (1.0 + 0.16 * dist + 0.10 * dist * dist);
-      float fl = 1.0;
-      if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl = uFlickerAmt;
+      float fl = lampVis(P, N, pc);
+      if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl *= uFlickerAmt;
       vec3 c = lightCol * atten * fl;
       float nl = dot(N, L);
       diff += c * (max(nl, 0.0) * 0.7 + 0.3);
@@ -400,7 +435,6 @@ void main(){
   float ao = mix(0.5, 1.0, smoothstep(0.0, 0.45 + footRag, y)) * (1.0 - 0.45 * topGrime) * (1.0 - 0.25 * streak);
   ao *= cornerShade(vU * ${CELL.toFixed(2)}, vCorner.x) * cornerShade((1.0 - vU) * ${CELL.toFixed(2)}, vCorner.y);
   col = mix(col, col * vec3(0.85, 0.8, 0.66), (topGrime * 0.6 + streak * 0.4) * (1.0 - z.z));     // yellow-brown damp
-  ao = mix(ao, 0.85 + 0.15 * ao, z.z);                  // cloud: corners and the floor line melt away
 
   vec3 L = zoneLight(z);
   vec3 V = normalize(cameraPosition - vWorldPos);
@@ -408,7 +442,8 @@ void main(){
   vec3 dSum, sSum;
   fixtureLightSpec(vWorldPos, Nb, V, L, shin, dSum, sSum);
   vec3 cl = candleLight(vWorldPos, Nb);
-  vec3 diffuse = col * (dSum + 0.04 * L + z.y * FILL_MEM * 1.6 + cl) * ao;
+  float open = openness(vWorldPos.xz + N.xz * 1.2);    // a wall facing a hall gets more bounce than one in a slot
+  vec3 diffuse = col * (dSum + 0.04 * L * (0.5 + open) + z.y * FILL_MEM * 1.6 + cl) * ao;
   vec3 spec = sSum * gloss * mix(0.25, 0.9, z.x) * ao;
   vec3 lit = rolloff(diffuse + spec + cl * 0.05 * ao); // a little warm haze on the plaster right by a flame
   lit += z.z * 0.03 * LIGHT_ACC;                       // a little light from inside the cloud
@@ -516,8 +551,10 @@ void main(){
 
   vec3 L = zoneLight(z);
   col *= pow(vAO, 1.6);                                 // shadow and dust gathered at the walls
+  float open = openness(p);
+  col *= mix(0.5, 1.0, smoothstep(0.0, 0.55, wallDist(p)));   // contact shadow: the floor darkens into every wall foot
   vec3 clf = candleLight(vWorldPos, N);
-  vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L + z.y * FILL_MEM * 1.2 + clf) + clf * 0.04);
+  vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L * (0.5 + open) + z.y * FILL_MEM * 1.2 + clf) + clf * 0.04);
   lit += z.z * 0.05 * LIGHT_ACC;
   lit += hazeGlow(vWorldPos, L);
   gl_FragColor = vec4(lit, 1.0);
@@ -761,7 +798,33 @@ const TRAIL_N = 4;
 const TRAIL_EVERY = 2.4;   // metres walked between trail samples
 const TRAIL_FADE = 0.12;   // strength lost per second
 
+// The wall-distance field: for each cell around the visitor, the distance
+// from its centre to the nearest wall face (negative inside a wall), packed
+// into a byte as (d + 1.2) / 4.8. Walls stand still, so it is rebuilt only
+// when the visitor has walked a quarter of the way to its edge.
+function fillWallField(data, gi0, gj0) {
+  const N = WALL_N, R = 3, M = N + 2 * R;
+  const solid = new Uint8Array(M * M);
+  for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) solid[j * M + i] = solidAtGlobal(gi0 - R + i, gj0 - R + j) ? 1 : 0;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const me = solid[(j + R) * M + i + R];
+    let best = R * CELL;
+    for (let b = -R; b <= R; b++) for (let a = -R; a <= R; a++) {
+      if (solid[(j + R + b) * M + i + R + a] === me) continue;
+      // centre of this cell to the nearest point of that cell's square
+      const dx = Math.max(0, Math.abs(a) - 0.5) * CELL, dz = Math.max(0, Math.abs(b) - 0.5) * CELL;
+      best = Math.min(best, Math.hypot(dx, dz));
+    }
+    const d = me ? -best : best;
+    data[(j * N + i) * 4] = Math.max(0, Math.min(255, Math.round((d + 1.2) / 4.8 * 255)));
+  }
+}
+
 export function createMaterials(quality) {
+  const wallTex = new THREE.DataTexture(new Uint8Array(WALL_N * WALL_N * 4), WALL_N, WALL_N, THREE.RGBAFormat);
+  wallTex.magFilter = wallTex.minFilter = THREE.LinearFilter;
+  wallTex.generateMipmaps = false;
+  let fieldAt = null;
   // one shared uniform set: update once, all three materials follow
   const shared = {
     uTime: { value: 0 },
@@ -773,6 +836,8 @@ export function createMaterials(quality) {
     uCandle: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, -100, 0, 0)) },
     uCandleCol: { value: Array.from({ length: 8 }, () => new THREE.Color(0, 0, 0)) },
     uHaze: { value: Array.from({ length: HAZE_N }, () => new THREE.Vector4(0, -100, 0, 0)) },
+    uWallDist: { value: wallTex },
+    uWallO: { value: new THREE.Vector2(-1e4, -1e4) },
   };
   const hazeSeen = new Map();   // lamp cell key -> smoothed visibility, so a glow fades in as a corner opens
 
@@ -819,6 +884,13 @@ export function createMaterials(quality) {
     update(dt, t, camPos, zone) {
       shared.uTime.value = t;
       shared.uTier.value = quality.tier;
+      const ci = Math.floor(camPos.x / CELL), cj = Math.floor(camPos.z / CELL);
+      if (!fieldAt || Math.abs(ci - fieldAt[0]) > WALL_N / 4 || Math.abs(cj - fieldAt[1]) > WALL_N / 4) {
+        fieldAt = [ci, cj];
+        fillWallField(wallTex.image.data, ci - WALL_N / 2, cj - WALL_N / 2);
+        wallTex.needsUpdate = true;
+        shared.uWallO.value.set(ci - WALL_N / 2, cj - WALL_N / 2);
+      }
       if (zone) shared.uZone.value.set(zone.fear, zone.memory, zone.accept);
 
       // footsteps light the lamps above them, then fade

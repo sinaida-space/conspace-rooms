@@ -4,6 +4,7 @@ import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, hash2i, mulberry32, isLampCell } from './world.js';
 import { ORIGIN } from './zones.js';
 import { roundedBox } from './geom.js';
+import { contactShadows } from './shadows.js';
 import { t, getLang } from './i18n.js';
 
 // ── conspace-rooms · ward.js ────────────────────────────────────────────────
@@ -174,7 +175,11 @@ export function wardPlan(cx, cz, reserved, withModels = true) {
   if (tip && kind.type === 'drip') boxes = [orientedBox(anchor.x, anchor.z, 1.9, 0.5, anchor.rot)];
   if (tip && kind.type === 'wheelchair') boxes = [orientedBox(anchor.x + Math.sin(anchor.rot) * 0.5, anchor.z + Math.cos(anchor.rot) * 0.5, 1.1, 1.1, anchor.rot)];
 
-  return { anchor, items, sign, lamp, cells, boxes };
+  // its footprint on the floor, for the contact shadow (shadows.js)
+  const foot = tip && kind.type === 'drip' ? [1.9, 0.5] : tip && kind.type === 'wheelchair' ? [1.1, 1.1] : dims;
+  const shadow = { x: boxes[0].x, z: boxes[0].z, w: foot[0], d: foot[1], rot: anchor.rot, k: kind.type === 'drip' && !tip ? 0.5 : 1 };
+
+  return { anchor, items, sign, lamp, cells, boxes, shadow };
 }
 
 // Four wall segments around a w×d rectangle turned by rot (local X is w).
@@ -506,6 +511,8 @@ export function createWardKit(atmo, quality) {
     build(group, plan) {
       const geos = [];
       const { anchor } = plan;
+      const shade = contactShadows([plan.shadow]);
+      if (shade) group.add(shade);
       if (anchor.type === 'drip' && anchor.tip) {           // fallen along the wall
         const parts = ANCHOR_DRAW.drip();
         for (const p of parts) p.translate(0, -0.93, 0);

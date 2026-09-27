@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
 import { roundedBox } from './geom.js';
+import { contactShadows } from './shadows.js';
 
 // ── conspace-rooms · props.js ───────────────────────────────────────────────
 // Things left along the corridors, so that hardly a corridor is quite empty.
@@ -349,7 +350,7 @@ export function createPropKit(atmo) {
     // point, n = into the corridor, r = a random 0..1) · air: [{ x, z, r }]
     // cell centres for things that float (light only)
     build(group, stage, walls, air) {
-      const parts = [], windows = [], tulles = [], floats = [], boxes = [];
+      const parts = [], windows = [], tulles = [], floats = [], boxes = [], feet = [];
       for (const s of walls) {
         const name = pick(stage, s.r);
         const rot = Math.atan2(s.nx, s.nz);
@@ -371,6 +372,7 @@ export function createPropKit(atmo) {
         const yaw = rot + (d.toy ? (s.r * 97 % 1 - 0.5) * 1.2 : (s.r * 53 % 1 - 0.5) * 0.25);
         parts.push(geoOf(stage, name).clone().applyMatrix4(M(x, 0, z, 0, yaw)));
         if (d.solid) boxes.push(box(x, z, d.w, d.depth, yaw));
+        feet.push({ x, z, w: d.w, d: d.depth, rot: yaw, k: d.toy ? 0.7 : 1 });
       }
       for (const a of air) {                        // lace alone, cranes in threes
         const cranes = a.r > 0.6, n = cranes ? 3 : 1;
@@ -397,6 +399,8 @@ export function createPropKit(atmo) {
         group.add(m); meshes.push(m);
       };
       add(parts, mat); add(windows, windowMat); add(tulles, tulleMat); add(floats, floatMat);
+      const shade = contactShadows(feet);
+      if (shade) { group.add(shade); meshes.push(shade); }
       return {
         boxes, walls, air, count: walls.length + air.length,
         dispose() { for (const m of meshes) { group.remove(m); m.geometry.dispose(); } },

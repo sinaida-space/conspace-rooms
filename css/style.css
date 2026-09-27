@@ -641,3 +641,23 @@ body.can-inspect #pad .pad-inspect:active, body.inspecting #pad .pad-inspect:act
 /* walk clip: a small red recording mark, then the save tape in the same place */
 .clip-badge { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40; color: #ff4a3d; font: 14px/1 "Departure Mono", monospace; letter-spacing: 0.08em; text-shadow: 0 0 6px rgba(0, 0, 0, 0.8); }
 .clip-badge .tape { font-size: 15px; }
+
+/* the name of a stage, once, as the visitor enters it (soulpath.js) */
+#zone-title {
+  position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 4; pointer-events: none;
+  font-family: 'Departure Mono', ui-monospace, monospace; font-size: clamp(1.8rem, 6vw, 3.4rem);
+  letter-spacing: 0.32em; text-transform: lowercase; color: #eef3ec; white-space: nowrap;
+  text-shadow: 0 0 18px rgba(200, 255, 215, 0.45), 0 0 2px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+}
+#zone-title.show { animation: zone-title 6s ease forwards; }
+body.inspecting #zone-title { display: none; }
+@keyframes zone-title {
+  0% { opacity: 0; filter: blur(8px); letter-spacing: 0.5em; }
+  22% { opacity: 1; filter: blur(0); letter-spacing: 0.32em; }
+  70% { opacity: 1; filter: blur(0); }
+  100% { opacity: 0; filter: blur(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #zone-title.show { animation-duration: 4s; }
+}

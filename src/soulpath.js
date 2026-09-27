@@ -1239,7 +1239,18 @@ export class SoulPath {
   }
 
   // ── per-frame ───────────────────────────────────────────────────────────
+  // The name of the stage, shown once as the visitor enters it: rises out of
+  // the dark in the middle of the screen, holds, and sinks back.
+  _zoneTitle(n) {
+    let el = document.getElementById('zone-title');
+    if (!el) { el = document.createElement('div'); el.id = 'zone-title'; el.setAttribute('aria-live', 'polite'); document.body.appendChild(el); }
+    el.textContent = t('zoneNames')[n];
+    el.classList.remove('show'); void el.offsetWidth;   // restart the animation
+    el.classList.add('show');
+  }
+
   update(dt, time, zone) {
+    if (this._titleFor !== this.stage.stage) { this._titleFor = this.stage.stage; this._zoneTitle(this.stage.stage); }
     this._sync();
     this.petals.update(dt, time);
     this._time = time;
