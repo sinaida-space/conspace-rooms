@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CONSPACE_SEED, chunkRooms, solidAtGlobal, CELL, CHUNK } from './world.js';
+import { CONSPACE_SEED, solidAtGlobal, CELL, CHUNK } from './world.js';
 import { t, getLang } from './i18n.js';
 
 // ── conspace-rooms · artworks.js ────────────────────────────────────────────
@@ -68,21 +68,23 @@ function ringOrdinal(cx, cz) {
   return ringStart + pos;
 }
 
-// A wall run in a corridor: the open floor in front of it is exactly two
-// cells wide (the lattice corridors), with the opposite wall right behind.
-// Works hang only there, so every work, and the rose tunnel that follows the
-// last one, is met in a corridor.
-function inCorridor(slot) {
+// A wall run with room to stand back: at least two open cells in front of it
+// along its whole usable length, so the dolly of inspect always fits. With
+// the opposite wall right behind those two cells it is a corridor, and
+// corridors are hung first, so the rose tunnel that follows the last work is
+// still usually met in one.
+function frontClear(slot) {
   const { position: p, normal: n, length } = slot;
+  let corridor = true;
   for (const k of [0.5, length / 2, length - 0.5]) {          // both ends and the middle of the run
     const u = -length * CELL / 2 + k * CELL;                   // along the wall
     const x = n.x !== 0 ? p.x + n.x * CELL * 0.5 : p.x + u;    // the cell in front of it
     const z = n.x !== 0 ? p.z + u : p.z + n.z * CELL * 0.5;
     const gi = Math.floor(x / CELL), gj = Math.floor(z / CELL);
-    if (solidAtGlobal(gi, gj) || solidAtGlobal(gi + n.x, gj + n.z)) return false;   // two open cells
-    if (!solidAtGlobal(gi + 2 * n.x, gj + 2 * n.z)) return false;                    // then the other wall
+    if (solidAtGlobal(gi, gj) || solidAtGlobal(gi + n.x, gj + n.z)) return 0;       // two open cells
+    if (!solidAtGlobal(gi + 2 * n.x, gj + 2 * n.z)) corridor = false;               // then the other wall?
   }
-  return true;
+  return corridor ? 2 : 1;
 }
 
 // The part of a wall run a work may use: two cells clear of the chunk's
@@ -103,20 +105,19 @@ function usableSpan(slot, cx, cz) {
 // Which wall slots (if any) get an artwork in this chunk, and which deck
 // index each one draws. Pure function of (cx, cz) + the chunk's own slots.
 function chunkArtworkPlan(cx, cz, slots, deck) {
-  const rooms = chunkRooms(cx, cz).length;
   const rand = mulberry32(hash2i(DECK_SEED, cx, cz));
-  let target = 0;
-  for (let r = 0; r < rooms; r += 2 + rand()) target++; // ~1 per 2–3 rooms
-  target = Math.max(target, 2 + (rand() < 0.4 ? 1 : 0));   // fewer walls qualify now (corridors, clear spans): hang more on those that do
+  const target = 3 + Math.floor(rand() * 3);                  // 3–5 works a chunk: the labyrinth is a gallery, works may repeat
 
-  const candidates = slots.map(s => usableSpan(s, cx, cz)).filter(s => s && inCorridor(s));
-  for (let i = candidates.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  const candidates = [];
+  for (const s of slots) {
+    const span = usableSpan(s, cx, cz);
+    const clear = span ? frontClear(span) : 0;
+    if (clear) candidates.push({ slot: span, clear, r: rand() });
   }
-  const chosen = candidates.slice(0, Math.min(target, candidates.length));
+  candidates.sort((a, b) => b.clear - a.clear || a.r - b.r);  // corridors first, shuffled within
+  const chosen = candidates.slice(0, target);
   const ord = ringOrdinal(cx, cz);
-  return chosen.map((slot, i) => ({ slot, artIndex: deck[(ord * 3 + i) % deck.length] }));
+  return chosen.map(({ slot }, i) => ({ slot, artIndex: deck[(ord * 5 + i) % deck.length] }));
 }
 
 // The wall runs that carry a work in this chunk, so other things keep off them.
@@ -428,6 +429,14 @@ export class Artworks {
       const facing = (fx * dx + fz * dz) / d;
       if (facing < INSPECT_FACING) continue;
       if ((dx * a.normal.x + dz * a.normal.z) / d > -0.2) continue; // must be on the viewer side of the wall
+      // the gaze has to land on the canvas itself: the dark placard beside it
+      // (and the wall around) is only read, never inspected
+      const toward = -(fx * a.normal.x + fz * a.normal.z);          // how squarely we face the wall
+      if (toward < 1e-3) continue;
+      const back = -(dx * a.normal.x + dz * a.normal.z);           // our distance from the wall plane
+      const hx = px + fx * back / toward - a.centerWorld.x, hz = pz + fz * back / toward - a.centerWorld.z;
+      const along = hx * a.normal.z - hz * a.normal.x;             // + is toward the placard
+      if (along > a.width / 2 + FRAME_BORDER + 0.04 || along < -(a.width / 2 + FRAME_BORDER + 0.25)) continue;
       if (d < bestD) { bestD = d; best = a; }
     }
     return best;
