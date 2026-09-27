@@ -134,6 +134,10 @@ body::after {
 .welcome-actions {
   display: flex; flex-wrap: wrap; align-items: center; gap: 1em 1.6em;
 }
+/* gestures chosen: ВОЙТИ lights up as the choice, ТРЕНИРОВКА stands beside it in outline */
+#btn-train { display: none; }
+.welcome-actions.two #btn-enter:not(.hidden) + #btn-train { display: inline-block; }
+.welcome-actions.two #btn-enter { background: var(--accent); color: var(--bg); }
 #wordmark {
   font: inherit; letter-spacing: inherit; color: inherit; text-shadow: inherit;
   background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
@@ -675,6 +679,40 @@ body.inspecting #zone-title { display: none; }
 @media (prefers-reduced-motion: reduce) {
   #zone-title.show { animation-duration: 4s; }
 }
+
+/* Тренировка: one gesture at a time, a bar that fills while it holds, a hint when it will not come */
+#training {
+  position: fixed; left: 50%; top: 12vh; transform: translate(-50%, -8px); z-index: 30;
+  width: min(92vw, 30em); padding: 1.2em 1.4em; text-align: center;
+  background: rgba(1, 12, 7, 0.88); border: 1px solid var(--accent); color: var(--fg);
+  font-family: 'Departure Mono', ui-monospace, monospace;
+  opacity: 0; transition: opacity 0.5s ease, transform 0.5s ease;
+}
+#training.visible { opacity: 1; transform: translate(-50%, 0); }
+#training .train-head { display: flex; justify-content: space-between; margin: 0 0 0.6em; font-size: 0.8em; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+#training .train-glyph { font-size: clamp(3rem, 12vh, 6rem); line-height: 1.1; transition: transform 0.3s ease; }
+#training.got .train-glyph, #training.done .train-glyph { transform: scale(1.12); color: var(--accent); }
+#training .train-label { margin: 0.4em 0 0.8em; font-size: 1.15em; }
+#training .train-bar { height: 6px; border: 1px solid var(--dim); }
+#training .train-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.1s linear; }
+#training .train-hint { min-height: 2.6em; margin: 0.8em 0 0.4em; font-size: 0.9em; color: #ffb4a8; }
+#training.got .train-hint { color: var(--accent); }
+#training .train-skip { font: inherit; font-size: 0.85em; background: transparent; color: var(--dim); border: 1px solid var(--dim); padding: 0.3em 1em; cursor: pointer; }
+#training .train-skip:hover { color: var(--fg); border-color: var(--fg); }
+#training.done .train-skip { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+
+/* between ВОЙТИ and the first corridor: the labyrinth is being built, a line at a time */
+#loading {
+  position: fixed; inset: 0; z-index: 39; display: flex; align-items: center; justify-content: center; pointer-events: none;
+  background: #000; color: #7dff9a; font-family: 'Departure Mono', ui-monospace, monospace; text-align: center; padding: 16px;
+  transition: opacity 1.2s ease;
+}
+#loading.gone { opacity: 0; }
+#loading p { font-size: clamp(1rem, 2.6vw, 1.5rem); letter-spacing: 0.14em; margin: 0; text-shadow: 0 0 12px rgba(125, 255, 154, 0.55); animation: loading-line 2.6s ease-in-out infinite; }
+#loading p::after { content: '▍'; animation: loading-caret 0.9s steps(1) infinite; margin-left: 0.2em; }
+@keyframes loading-line { 0%, 100% { opacity: 0.25; } 12%, 88% { opacity: 1; } 50% { opacity: 0.85; } }
+@keyframes loading-caret { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #loading p, #loading p::after { animation: none; } }
 
 /* the labyrinth could not be built: a quiet note and a tape to try again */
 #world-broken {

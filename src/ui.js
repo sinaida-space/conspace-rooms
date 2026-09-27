@@ -166,6 +166,7 @@ export class UI {
     const isTouch = !!(caps.device?.isTouch ?? caps.touch);
     if (isTouch && recommendedMode === 'hands') recommendedMode = 'keys';
     this.selectedMode = recommendedMode;
+    this._syncTrain();
     const buttons = Array.from(document.querySelectorAll('#mode-select button'));
     const hasWebcam = !!navigator.mediaDevices?.getUserMedia;
     buttons.forEach(btn => {
@@ -190,10 +191,17 @@ export class UI {
         buttons.forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
         this.selectedMode = btn.dataset.mode;
+        this._syncTrain();
         // the choice is made: bring ВОЙТИ into view
         $('btn-enter')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
       });
     });
+  }
+
+  // Тренировка stands beside ВОЙТИ only when gestures are chosen (and a camera exists)
+  _syncTrain() {
+    const on = this.selectedMode === 'hands' && !!navigator.mediaDevices?.getUserMedia;
+    document.querySelector('.welcome-actions')?.classList.toggle('two', on);
   }
 
   // Easter egg: clicking the CONSPACE ROOMS wordmark opens a small Pac-Man
@@ -215,26 +223,54 @@ export class UI {
     $('webgl-error')?.classList.remove('hidden');
   }
 
-  // Resolves { mode, cameraStream }. cameraStream is a Promise<MediaStream> or
+  // Resolves { mode, cameraStream, training } (training: ТРЕНИРОВКА was pressed). cameraStream is a Promise<MediaStream> or
   // null, created synchronously inside the click listener (before any await)
   // so iOS user-activation is still live when getUserMedia is called. A
   // no-op .catch() is attached so a rejection here is never unhandled; the
   // caller (main.js) awaits the same promise and handles the real error.
   waitForEnter() {
     return new Promise(res => {
-      $('btn-enter').addEventListener('click', () => {
+      const go = training => () => {
         let cameraStream = null;
         if (this.selectedMode === 'hands' && navigator.mediaDevices?.getUserMedia) {
           cameraStream = navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' } });
           cameraStream.catch(() => {});
         }
-        res({ mode: this.selectedMode, cameraStream });
-      });
+        res({ mode: this.selectedMode, cameraStream, training: training && this.selectedMode === 'hands' });
+      };
+      $('btn-enter').addEventListener('click', go(false));
+      $('btn-train')?.addEventListener('click', go(true));
     });
   }
 
   hideWelcome() {
     $('welcome')?.classList.add('hidden');
+  }
+
+  // While the labyrinth builds (and the hands model loads) a line glows in
+  // the dark and changes every couple of seconds; it fades once all is ready.
+  showLoading() {
+    if ($('loading')) return;
+    const el = document.createElement('div');
+    el.id = 'loading';
+    el.setAttribute('role', 'status');
+    const lines = t('loadingLines');
+    let i = 0;
+    el.innerHTML = `<p>${lines[0]}</p>`;
+    document.body.appendChild(el);
+    this._loadingTimer = setInterval(() => { el.firstChild.textContent = lines[++i % lines.length]; }, 2600);
+    this._loadingSince = performance.now();
+  }
+
+  hideLoading() {
+    const el = $('loading');
+    if (!el) return;
+    const wait = Math.max(0, 1400 - (performance.now() - this._loadingSince));   // never a flash
+    setTimeout(() => {
+      clearInterval(this._loadingTimer);
+      el.classList.add('gone');
+      setTimeout(() => el.remove(), 1300);
+    }, wait);
   }
 
   // On-screen pad for the buttons mode: arrows hold the same keys the keyboard

@@ -76,6 +76,7 @@ const SOUL_WALK = 3;             // metres walked between two souls
 const SOUL_STOP = 1.6;           // a soul drawn to a still visitor halts this far off
 const BOARD_NEAR = 2.4;          // metres: on hands, passing a notice board this close stops the walk before it
 const BOARD_FIST = 3;            // seconds of a held fist before the walk turns back and goes on
+const BOARD_FOV = 34;            // degrees: close enough to read the board's question
 
 const SEED_WRITING = CONSPACE_SEED ^ 0x77a1;
 const SEED_DOOR = CONSPACE_SEED ^ 0x0d00;
@@ -762,23 +763,33 @@ export class SoulPath {
     return close;
   }
 
+  _boardZoom(fov) {
+    const P = this.player;
+    P.fov = fov; P.camera.fov = fov; P.camera.updateProjectionMatrix();
+  }
+
   // In fear, on hands: passing a notice board stops the walk, turns the view
-  // to it and puts its question on screen. Hands lowered, it stays; a fist
-  // held for BOARD_FIST seconds turns the view back the way it was going and
-  // the walk goes on. Each board asks once.
+  // to it and leans in until its question can be read. Hands lowered, it
+  // stays; a fist held for BOARD_FIST seconds turns the view back the way it
+  // was going and the walk goes on. Each board asks once.
   _updateBoards(dt) {
     const P = this.player, b = this._board;
     if (b) {
-      if (P.auto !== b.auto) { b.close?.(); this._board = null; return; }   // the keys took over, or Space
+      if (P.auto !== b.auto) { this._boardZoom(b.fov0); this._board = null; return; }   // the keys took over, or Space
+      // the view leans in on the board while it asks, and back out as the walk turns away
+      const want = b.phase === 'hold' ? BOARD_FOV : b.fov0;
+      this._boardZoom(P.fov + (want - P.fov) * Math.min(1, dt * 2.4));
       if (b.phase === 'hold') {
+        b.auto.yaw = Math.atan2(-(b.x - P.pos.x), -(b.z - P.pos.y));   // at the board itself, as the walk comes to rest
         b.fist = P.hand.present && P.hand.anyFist ? b.fist + dt : 0;
-        if (b.fist >= BOARD_FIST) { b.phase = 'back'; b.auto.yaw = b.back; b.close?.(); b.close = null; }
+        if (b.fist >= BOARD_FIST) { b.phase = 'back'; b.auto.yaw = b.back; }
       } else if (Math.abs(Math.atan2(Math.sin(b.back - P.yaw), Math.cos(b.back - P.yaw))) < 0.06) {
+        this._boardZoom(b.fov0);
         P.auto = null; this._board = null;
       }
       return;
     }
-    if (this.stage.stage !== 0 || P.mode !== 'hands' || !P.hand.present || P.auto || P.locked || this.finale) return;
+    if (this.stage.stage !== 0 || P.mode !== 'hands' || !P.hand.present || P.auto || P.locked || this.finale || window.__app?.training) return;
     if (P.vel.length() < 0.3) return;                   // only a walk passing by, not someone standing near
     this._boardsAsked ||= new Set();
     for (const st of this.chunkStuff.values()) for (const p of st.posters || []) {
@@ -792,10 +803,9 @@ export class SoulPath {
       if (-(dx * -Math.sin(P.yaw) + dz * -Math.cos(P.yaw)) < -0.4 * Math.hypot(dx, dz)) continue;   // one already behind is let be
       if (!this._lineOfSight(P.pos.x, P.pos.y, m.position.x + nx * 0.3, m.position.z + nz * 0.3)) continue;
       this._boardsAsked.add(key);
-      const list = t('fearQuestions').concat(t('posterQuestions'));
-      const auto = { kind: 'board', yaw: Math.atan2(nx, nz) };
+      const auto = { kind: 'board', yaw: Math.atan2(dx, dz) };
       P.auto = auto;
-      this._board = { auto, back: P.yaw, phase: 'hold', fist: 0, close: this._say(null, list[p.q % list.length], null, { keep: true }) };
+      this._board = { auto, back: P.yaw, phase: 'hold', fist: 0, fov0: P.fov, x: m.position.x, z: m.position.z };   // the question is on the board itself
       return;
     }
   }

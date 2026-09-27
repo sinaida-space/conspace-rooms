@@ -146,8 +146,9 @@ async function boot() {
   renderer.setAnimationLoop(frame);
   window.__app.frame = frame;   // dev hook: step the world by hand (headless checks, hidden tabs)
 
-  const { mode, cameraStream } = GALLERY ? await gallery.waitForVisitor() : await ui.waitForEnter();
+  const { mode, cameraStream, training } = GALLERY ? await gallery.waitForVisitor() : await ui.waitForEnter();
   ui.hideWelcome();
+  ui.showLoading();
 
   if (mode === 'keys' && caps.device.isPhone) {
     quality.tier = 0; // buttons on a phone: tier 0, radius 1, no post, half-res, no webcam
@@ -232,7 +233,8 @@ async function boot() {
 
   // if the labyrinth cannot be built, say so gently and offer to try again,
   // instead of leaving the visitor in the dark
-  startWorld().catch(e => {
+  const worldReady = startWorld().catch(e => {
+    ui.hideLoading();
     console.error('[world] could not be built', e);
     const el = document.createElement('div');
     el.id = 'world-broken';
@@ -241,7 +243,8 @@ async function boot() {
     document.body.appendChild(el);
   });
 
-  if (mode === 'hands') {
+  let handsReady = Promise.resolve();
+  if (mode === 'hands') handsReady = (async () => {
     try {
       if (GALLERY) {                                  // already watching since the attract screen
         hands = gallery.hands;
@@ -257,7 +260,12 @@ async function boot() {
       console.warn('hand tracking unavailable, falling back:', e);
       handleCameraFailure();
     }
-  }
+  })();
+  Promise.all([worldReady, handsReady]).then(() => {
+    ui.hideLoading();
+    // Тренировка: the six gestures one at a time, while the walk begins (training.js)
+    if (training && activeMode === 'hands' && player) import('./training.js').then(m => m.startTraining({ player }));
+  });
 
   // dev hook
   window.__router = router;

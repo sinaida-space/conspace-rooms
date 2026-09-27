@@ -512,7 +512,7 @@ export class Artworks {
       return;
     }
     this._pickPressed = false;
-    if (this.player.auto || this.player.locked) return;       // a question board holds the walk
+    if (this.player.auto || this.player.locked || window.__app?.training) return;       // a question board holds the walk, or Тренировка is on
     const next = this._findAuto();
     if (next) this._showAuto(next);
   }
