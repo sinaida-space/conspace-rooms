@@ -15,8 +15,8 @@ const ZOOM_NEED = 0.08;    // hand-distance change that counts as a zoom
 const STEPS = [
   { id: 'walk',  glyph: '✊',       two: false, ok: h => h.anyFist && !h.bothFists },
   { id: 'run',   glyph: '✊✊',     two: true,  ok: h => h.bothFists },
-  { id: 'right', glyph: '👉',       two: false, ok: h => h.pointRight && !h.anyFist },
-  { id: 'left',  glyph: '👈',       two: false, ok: h => h.pointLeft && !h.anyFist },
+  { id: 'right', glyph: '✊ →',     two: false, ok: h => h.turnRight && !h.bothFists },
+  { id: 'left',  glyph: '← ✊',     two: false, ok: h => h.turnLeft && !h.bothFists },
   { id: 'stop',  glyph: '✋✋',     two: true,  ok: h => h.stopped },
   { id: 'zoom',  glyph: '✋ ↔ ✋',  two: true,  ok: h => h.stopped },   // and the palms move (below)
 ];
@@ -32,13 +32,11 @@ function hintFor(step, h) {
       if (has('palm')) return t('trainHintFist');
       if (has('point')) return t('trainHintFistPoint');
       break;
-    case 'right': case 'left': {
-      const own = step.id === 'right' ? h.right : h.left, other = step.id === 'right' ? h.left : h.right;
-      if (!own && other) return t(step.id === 'right' ? 'trainHintRightHand' : 'trainHintLeftHand');
-      if (own === 'fist') return t('trainHintOpenIndex');
-      if (own === 'palm') return t('trainHintOnlyIndex');
-      break;
-    }
+    case 'right': case 'left':
+      if (h.bothFists) return t('trainHintOneFist');
+      if (!h.anyFist) return has('point') ? t('trainHintFistPoint') : t('trainHintFist');
+      if (step.id === 'right' ? h.turnLeft : h.turnRight) return t('trainHintOtherWay');
+      return t('trainHintCarry');
     case 'stop':
       if (has('fist')) return t('trainHintPalms');
       break;
@@ -104,7 +102,7 @@ export function startTraining({ player, onDone }) {
   const tick = now => {
     raf = requestAnimationFrame(tick);
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
-    if (doneAt) { if (now - doneAt > 6000) close(); return; }
+    if (doneAt) { if (now - doneAt > 3500) close(); return; }   // then onDone: the new labyrinth
     if (i < 0 || i >= STEPS.length) return;
     const s = STEPS[i], h = player.hand || {};
     since += dt;

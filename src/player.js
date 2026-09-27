@@ -3,7 +3,8 @@ import { CELL } from './world.js';
 
 // ── conspace-rooms · player.js ──────────────────────────────────────────────
 // First-person walker. Two input paths feeding one controller:
-//   • gestures (HandInput): one fist → walk, both fists → run, pointing hand
+//   • gestures (HandInput): one fist → walk, carried sideways → turn that way,
+//     both fists → run, pointing hand
 //     (with no fist) → turn that way, both open palms → stop (and zoom while
 //     held). On hands the walk keeps to the middle of the corridor (rails
 //     with a little play) and the view settles along it.
@@ -24,7 +25,8 @@ const BOB_FREQ = 9;        // head-bob rate scaler
 const MIN_FOV = 35;        // deg — fully zoomed in
 const MAX_FOV = 70;        // deg — resting FOV, matches main.js's initial camera
 const ZOOM_SENS = 240;     // FOV degrees per unit of hand-distance change
-const HAND_YAW_RATE = 1.15; // rad/s, turning by a pointing hand: slower than the keys, and eased in
+const HAND_YAW_RATE = 1.15; // rad/s, turning by a fist carried sideways (or a pointing hand): slower than the keys, and eased in
+const TURN_WALK = 0.35;    // a steering fist slows the walk to this share, so a corner can be taken
 const HAND_YAW_EASE = 4;   // 1/s, how fast the hand turn speeds up and settles
 const RAIL_PLAY = 0.3;     // m either side of the corridor's middle the walk may drift freely
 const RAIL_SOFT = 0.9;     // 1/s, gentle pull toward the middle inside the play
@@ -62,7 +64,7 @@ export class Player {
     this._yawVel = 0;      // eased turn speed on hands
     this.hand = {
       present: false, anyFist: false, bothFists: false, pointLeft: false, pointRight: false,
-      stopped: false, pinch: false, zoomDelta: 0,
+      turnLeft: false, turnRight: false, stopped: false, pinch: false, zoomDelta: 0,
     };
     this.locked = false; // set true during artwork inspect (#4) — update() becomes a no-op
     this.fov = camera.fov; // gesture zoom target (both palms open + spread/pinch)
@@ -144,9 +146,12 @@ export class Player {
       this.pitch += (0 - this.pitch) * Math.min(1, dt * 2.2);
       this._yawVel = 0;
     } else if (onHands) {
-      // a pointing hand turns, but only without a fist: a fist walks straight.
-      // The turn eases in and out, so a flicker of the hand is not a jolt
-      const want = this.hand.anyFist ? 0 : this.hand.pointRight ? 1 : this.hand.pointLeft ? -1 : 0;
+      // one fist carried sideways turns that way (running never turns); without
+      // a fist a pointing hand still does. The turn eases in and out, so a
+      // flicker of the hand is not a jolt
+      const h = this.hand;
+      const want = h.anyFist ? (h.bothFists ? 0 : h.turnRight ? 1 : h.turnLeft ? -1 : 0)
+        : h.pointRight ? 1 : h.pointLeft ? -1 : 0;
       this._yawVel += (want * HAND_YAW_RATE - this._yawVel) * Math.min(1, dt * HAND_YAW_EASE);
       this.yaw -= this._yawVel * dt;
     } else {
@@ -170,6 +175,7 @@ export class Player {
       walk = 0; strafe = 0;
     } else if (onHands) {
       walk = this.hand.anyFist ? 1 : 0;   // one fist walks, two run (below); anything else stops
+      if (walk && !this.hand.bothFists && (this.hand.turnLeft || this.hand.turnRight)) walk = TURN_WALK;
       strafe = 0;
     } else {
       walk = (this.keys.KeyW || this.keys.ArrowUp ? 1 : 0) - (this.keys.KeyS || this.keys.ArrowDown ? 1 : 0) - (this.drive?.y || 0);

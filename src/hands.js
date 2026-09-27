@@ -20,8 +20,11 @@
 // Two-hand vocabulary (callers just read the flags on the emitted state):
 //   one fist (either hand) → walk forward (anyFist)
 //   both fists            → run (bothFists)
-//   right hand pointing    → turn right
-//   left hand pointing     → turn left
+//   one fist carried out to the side → turn that way (turnLeft/turnRight):
+//                            left fist out or right fist in → left,
+//                            right fist out or left fist in → right
+//   both fists carried sideways → runTurn: the caller asks to stop first
+//   a pointing hand still turns too (pointLeft/pointRight), the old way
 //   both palms open (stop) → freezes turning/walking; moving the two open
 //                            palms apart/together zooms in/out (zoomDelta)
 //   thumb-index pinch (either hand) → inspect
@@ -34,6 +37,10 @@ const NO_FRAMES_TIMEOUT_MS = 6000;
 // A gesture has to hold for a moment before it counts, and a moment more
 // before it lets go: one misread frame no longer starts or stops the walk.
 const ON_MS = 110, OFF_MS = 200;
+// A fist carried sideways steers. Where it formed is its middle; this far
+// (in frame widths) toward the visitor's right or left turns that way.
+const TURN_OFF = 0.07;
+const TURN_CREEP = 0.04;   // inside the dead zone the middle follows the fist slowly, so it never drifts off
 const WATCHDOG_TIMEOUT_MS = 8000;
 const MAX_CONSECUTIVE_DETECT_FAILURES = 5;
 
@@ -74,6 +81,7 @@ export class HandInput {
     this._failCount = 0;
     this._watchdogTimer = null;
     this._flags = {};                // debounced gesture flags: name -> { on, since }
+    this._anchor = { left: null, right: null };   // where each fist formed (frame x)
     this._loop = this._loop.bind(this);
   }
 
@@ -242,13 +250,14 @@ export class HandInput {
 
       if (n === 0) {
         this._prevHandDist = null;
-        for (const k of ['anyFist', 'bothFists', 'bothOpen', 'pointLeft', 'pointRight', 'pinch']) this._stable(k, false, now);
+        for (const k of ['anyFist', 'bothFists', 'bothOpen', 'pointLeft', 'pointRight', 'pinch', 'turnLeft', 'turnRight', 'runTurn']) this._stable(k, false, now);
+        this._anchor.left = this._anchor.right = null;
         // a hand lost for a frame or two is not a hand taken away
         if (now - (this._handAt || 0) < OFF_MS && this._last) { this.onUpdate({ ...this._last, zoomDelta: 0 }); requestAnimationFrame(this._loop); return; }
         this._last = null;
         this.onUpdate({
           present: false, anyFist: false, bothFists: false, pointLeft: false, pointRight: false,
-          stopped: false, pinch: false, zoomDelta: 0,
+          turnLeft: false, turnRight: false, runTurn: false, stopped: false, pinch: false, zoomDelta: 0,
         });
       } else {
         let left = null, right = null, anyPinch = false;
@@ -272,6 +281,22 @@ export class HandInput {
         const pointRight = this._stable('pointRight', !!right?.pointing, now);
         anyPinch = this._stable('pinch', anyPinch, now);
 
+        // steering: how far each fist has moved from where it formed, toward
+        // the visitor's right (+). The frame is not mirrored: their right is smaller x.
+        const off = {};
+        for (const k of ['left', 'right']) {
+          const g = k === 'left' ? left : right;
+          if (!g?.fist) { this._anchor[k] = null; off[k] = 0; continue; }
+          if (this._anchor[k] == null) this._anchor[k] = g.center.x;
+          off[k] = this._anchor[k] - g.center.x;
+          if (Math.abs(off[k]) < TURN_OFF) this._anchor[k] += (g.center.x - this._anchor[k]) * TURN_CREEP;
+        }
+        const oneFist = !!(left?.fist) !== !!(right?.fist);
+        const steer = oneFist ? (left?.fist ? off.left : off.right) : 0;
+        const turnRight = this._stable('turnRight', steer > TURN_OFF, now);
+        const turnLeft = this._stable('turnLeft', steer < -TURN_OFF, now);
+        const runTurn = this._stable('runTurn', !!(left?.fist && right?.fist) && Math.max(Math.abs(off.left), Math.abs(off.right)) > TURN_OFF * 1.5, now);
+
         let zoomDelta = 0;
         if (bothOpen && left && right) {
           const d = dist(left.center, right.center);
@@ -282,7 +307,7 @@ export class HandInput {
         }
 
         this._last = {
-          present: true, anyFist, bothFists, pointLeft, pointRight,
+          present: true, anyFist, bothFists, pointLeft, pointRight, turnLeft, turnRight, runTurn,
           stopped: bothOpen, pinch: anyPinch, zoomDelta,
           left: left ? handName(left) : '', right: right ? handName(right) : '',
         };

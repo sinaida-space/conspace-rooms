@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Quality } from './quality.js';
 import { InputRouter } from './input.js';
 import { UI, detectCapabilities } from './ui.js';
-import { t, applyStatic, setLang, langFromUrl } from './i18n.js';
+import { t, applyStatic, setLang, langFromUrl, getLang } from './i18n.js';
 import { mixZone, SoulStage } from './zones.js';
 import { createClip, clipSupported } from './clip.js';
 import { installBugReport, setBugSource, bugTick, bugFrame } from './bugreport.js';
@@ -24,6 +24,11 @@ const ui = new UI();
 // gallery.html: an installation, no gates or buttons (gallery.js)
 const GALLERY = document.body.classList.contains('gallery');
 let gallery = null;
+// ?enter=hands: straight into a fresh labyrinth on gestures, no gates (after Тренировка)
+const DIRECT = !GALLERY && new URLSearchParams(location.search).get('enter') === 'hands' && langFromUrl();
+// once only: a reload shows the gates again (the seed goes once world.js has read it)
+const dropParams = (...keys) => { const u = new URL(location.href); keys.forEach(k => u.searchParams.delete(k)); history.replaceState(null, '', u); };
+if (DIRECT) dropParams('enter');
 
 if (!caps.webgl2) {
   applyStatic();
@@ -37,6 +42,11 @@ if (!caps.webgl2) {
     boot();
     await camera;
   });
+} else if (DIRECT) {
+  setLang(DIRECT);
+  applyStatic();
+  document.getElementById('lang-gate')?.classList.add('hidden');
+  boot();
 } else {
   ui.gateLanguage().then(() => ui.gateConsent()).then(() => {
     const welcome = document.getElementById('welcome');
@@ -48,7 +58,7 @@ if (!caps.webgl2) {
 }
 
 async function boot() {
-  if (!GALLERY) {
+  if (!GALLERY && !DIRECT) {
     await ui.runBootSequence(caps);
     ui.showCapabilityResult(caps);
     ui.initModeSelect(caps.recommendedMode, caps);
@@ -146,7 +156,8 @@ async function boot() {
   renderer.setAnimationLoop(frame);
   window.__app.frame = frame;   // dev hook: step the world by hand (headless checks, hidden tabs)
 
-  const { mode, cameraStream, training } = GALLERY ? await gallery.waitForVisitor() : await ui.waitForEnter();
+  const { mode, cameraStream, training } = GALLERY ? await gallery.waitForVisitor()
+    : DIRECT ? { mode: 'hands', cameraStream: null, training: false } : await ui.waitForEnter();
   ui.hideWelcome();
   ui.showLoading();
 
@@ -170,6 +181,10 @@ async function boot() {
     const wake = () => audio.ctx?.resume();
     addEventListener('pointerdown', wake); addEventListener('keydown', wake);
     gallery.watch();
+  }
+  if (DIRECT) {                                      // no click on this page yet: the first touch or key wakes the sound
+    const wake = () => audio.ctx?.resume();
+    addEventListener('pointerdown', wake); addEventListener('keydown', wake);
   }
   const muteBtn = document.getElementById('btn-mute');
   if (!GALLERY) muteBtn.classList.remove('hidden');
@@ -243,16 +258,22 @@ async function boot() {
     document.body.appendChild(el);
   });
 
+  // a hand state to the walk; running with a fist carried sideways asks to stop first
+  let runToastAt = 0;
+  const onHand = state => {
+    if (player) player.setHand(state);
+    if (state.runTurn && performance.now() - runToastAt > 5000) { runToastAt = performance.now(); ui.showToast(t('runTurn')); }
+  };
   let handsReady = Promise.resolve();
   if (mode === 'hands') handsReady = (async () => {
     try {
       if (GALLERY) {                                  // already watching since the attract screen
         hands = gallery.hands;
-        hands.onUpdate = state => { if (player) player.setHand(state); };
+        hands.onUpdate = onHand;
         hands.onError = handleCameraFailure;
       } else {
         const { HandInput } = await import('./hands.js');
-        hands = new HandInput(state => { if (player) player.setHand(state); }, handleCameraFailure);
+        hands = new HandInput(onHand, handleCameraFailure);
         const stream = cameraStream ? await cameraStream : null;
         await hands.start(stream); // uses the pre-authorized stream from the Enter click, opt-in only
       }
@@ -263,8 +284,19 @@ async function boot() {
   })();
   Promise.all([worldReady, handsReady]).then(() => {
     ui.hideLoading();
+    if (DIRECT) dropParams('seed');
     // Тренировка: the six gestures one at a time, while the walk begins (training.js)
-    if (training && activeMode === 'hands' && player) import('./training.js').then(m => m.startTraining({ player }));
+    // and then a new labyrinth with a new seed, straight on gestures
+    if (training && activeMode === 'hands' && player) import('./training.js').then(m => m.startTraining({
+      player,
+      onDone: () => {
+        const u = new URL(location.href);
+        u.searchParams.set('lang', getLang());
+        u.searchParams.set('seed', String(Math.floor(Math.random() * 2 ** 31)));
+        u.searchParams.set('enter', 'hands');
+        location.replace(u);
+      },
+    }));
   });
 
   // dev hook
