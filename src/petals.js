@@ -3,8 +3,9 @@ import * as THREE from 'three';
 // ── conspace-rooms · petals.js ──────────────────────────────────────────────
 // Grain. Two moments that come out of the rose in the top-left corner:
 //
-//   sparkle()   a small handful of bright sparkles falls from the corner,
-//               a little down and to the right, twinkles and goes out
+//   sparkle()   a handful of bright sparkles spills from the corner in a
+//               cone, diagonally down and across the screen, spiralling
+//               round its axis as it widens, twinkles and goes out
 //   stream()    the finale: the corner rose's petals pour into the world with
 //               honey-gold dust, swirl toward the rose arch while it rises and
 //               then drift through the tunnel into its light, looping there
@@ -23,19 +24,22 @@ const EMIT = 2.5;                   // seconds the stream keeps pouring out
 // ── sparkles ────────────────────────────────────────────────────────────────
 const SPARK_VERT = /* glsl */`
 uniform float uTime, uSpeed, uViewH;
-attribute vec3 aVel;          // initial velocity (world), set from the camera at emission
+attribute vec3 aVel;          // velocity along the cone's axis (world), set from the camera at emission
+attribute vec3 aS1, aS2;      // two axes across the cone, scaled by how fast this one drifts off the axis
 attribute float aBirth;       // clock time of birth
 attribute float aSeed;
 varying float vA;
 varying vec3 vCol;
 void main(){
   float age = uTime - aBirth;
-  float life = mix(1.5, 2.0, fract(aSeed * 13.7));
+  float life = mix(2.2, 3.0, fract(aSeed * 13.7));
   if (age < 0.0 || age > life) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
   float mt = age * uSpeed;                                    // motion time
-  // drift along the launch velocity, sink a little, shiver sideways
-  vec3 p = position + aVel * mt + vec3(0.0, -0.02, 0.0) * mt * mt
-         + vec3(sin(mt * 3.1 + aSeed * 40.0), 0.0, cos(mt * 2.7 + aSeed * 23.0)) * 0.006;
+  // out along the cone's axis, further off it the longer it flies, and
+  // round it: the handful turns as one, a slow spiral that widens
+  float th = aSeed * 6.2832 + mt * mix(2.4, 3.6, fract(aSeed * 5.1));
+  vec3 p = position + aVel * mt + (aS1 * cos(th) + aS2 * sin(th)) * mt
+         + vec3(0.0, -0.012, 0.0) * mt * mt;
   vec4 mv = viewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mv;
   float size = mix(0.020, 0.034, fract(aSeed * 7.3));        // world size, flare included
@@ -232,7 +236,9 @@ export function createPetals(scene, camera, quality) {
   const sVel = new THREE.BufferAttribute(new Float32Array(sPool * 3), 3);
   const sBirth = new THREE.BufferAttribute(new Float32Array(sPool).fill(-1e4), 1);
   const sSeed = new THREE.BufferAttribute(new Float32Array(sPool), 1);
+  const sS1 = new THREE.BufferAttribute(new Float32Array(sPool * 3), 3), sS2 = new THREE.BufferAttribute(new Float32Array(sPool * 3), 3);
   sGeo.setAttribute('position', sPos); sGeo.setAttribute('aVel', sVel);
+  sGeo.setAttribute('aS1', sS1); sGeo.setAttribute('aS2', sS2);
   sGeo.setAttribute('aBirth', sBirth); sGeo.setAttribute('aSeed', sSeed);
   const sMat = new THREE.ShaderMaterial({
     vertexShader: SPARK_VERT, fragmentShader: SPARK_FRAG, uniforms: shared,
@@ -297,18 +303,24 @@ export function createPetals(scene, camera, quality) {
     sparkle() {
       corner();
       const j = () => (Math.random() - 0.5) * 0.02;
+      // the cone's axis: from the corner diagonally down across the screen,
+      // a little away from the eye; two axes across it for the spiral
+      const ax = _r.clone().multiplyScalar(1).addScaledVector(_u, -0.8).addScaledVector(_f, 0.35).normalize();
+      const b1 = _f.clone().cross(ax).normalize(), b2 = ax.clone().cross(b1).normalize();
       for (let k = 0; k < nSpark; k++) {
         const i = (head + k) % sPool;
         sPos.setXYZ(i, _c.x + j(), _c.y + j(), _c.z + j());
-        // down and to the right of the corner, with a little scatter in depth
-        const vr = 0.02 + Math.random() * 0.04, vd = 0.03 + Math.random() * 0.04, vf = (Math.random() - 0.5) * 0.03;
-        sVel.setXYZ(i, _r.x * vr - _u.x * vd + _f.x * vf, _r.y * vr - _u.y * vd + _f.y * vf, _r.z * vr - _u.z * vd + _f.z * vf);
-        sBirth.setX(i, now + Math.random() * 0.3);
+        const v = 0.07 + Math.random() * 0.09;                  // along the axis, m/s
+        const off = v * Math.tan(Math.random() * 0.42);          // off it: inside a cone of ~24°
+        sVel.setXYZ(i, ax.x * v, ax.y * v, ax.z * v);
+        sS1.setXYZ(i, b1.x * off, b1.y * off, b1.z * off);
+        sS2.setXYZ(i, b2.x * off, b2.y * off, b2.z * off);
+        sBirth.setX(i, now + Math.random() * 0.35);
         sSeed.setX(i, Math.random());
       }
       head = (head + nSpark) % sPool;
-      sPos.needsUpdate = sVel.needsUpdate = sBirth.needsUpdate = sSeed.needsUpdate = true;
-      sparkEnd = now + 0.3 + 2.0 + 0.1;
+      sPos.needsUpdate = sVel.needsUpdate = sS1.needsUpdate = sS2.needsUpdate = sBirth.needsUpdate = sSeed.needsUpdate = true;
+      sparkEnd = now + 0.35 + 3.0 + 0.1;
       sparkles.visible = true;
     },
 

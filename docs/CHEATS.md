@@ -10,6 +10,7 @@ any keyboard layout; the presses must come within three seconds.
 |------|--------------|
 | `7` × 5 | The nearest hanging work becomes the last one: every other work counts as seen (the rose shows 17 of 18) and you stand in front of it. Look at it and the arch of roses opens. |
 | `5` × 5 | Jump to the nearest grandmother's room (the red rooms stage). |
+| `0` × 5 | Straight into the light: the world turns to the acceptance stage where you stand. |
 | `M` × 5 | Toggle a guide chevron on the floor: in the hospital it points to the nearest portal into the red rooms, there to grandmother's room, then onward into the light. Press again to hide it. |
 | `Shift` | Run. |
 

@@ -342,6 +342,15 @@ export class SoulPath {
       if (this._sevenTimes.length >= 5) { this._sevenTimes = []; this._jumpToLastWork(); }
     });
 
+    // five presses of 0: straight into the light, the acceptance stage
+    this._zeroTimes = [];
+    addEventListener('keydown', e => {
+      if ((e.code !== 'Digit0' && e.code !== 'Numpad0') || e.repeat) return;
+      const now = performance.now();
+      this._zeroTimes = this._zeroTimes.filter(tm => now - tm < 3000).concat(now);
+      if (this._zeroTimes.length >= 5) { this._zeroTimes = []; if (this.stage.go(2)) this.post?.burst(1.4); }
+    });
+
     // doors take part in collision: wrap World's wall query once
     const orig = world.wallSegmentsNear.bind(world);
     world.wallSegmentsNear = (x, z) => {
