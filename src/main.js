@@ -123,9 +123,9 @@ async function boot() {
       const zone = stage.weights();
       window.__app.zone = zone;
       if (scene.fog?.isFogExp2) {
-        mixZone(scene.fog.color, zone, 0x0e1f14, 0x030905, 0xa9b0a2);
+        mixZone(scene.fog.color, zone, 0x0e1f14, 0x030905, 0xa4aaa4);
         const base = quality.tier === 0 ? 1.5 : 1;
-        scene.fog.density = base * (0.03 * zone.fear + 0.045 * zone.memory + 0.038 * zone.accept);
+        scene.fog.density = base * (0.03 * zone.fear + 0.045 * zone.memory + 0.085 * zone.accept);   // the light stage stands in milky fog
         renderer.setClearColor(scene.fog.color);
       }
       if (atmo) atmo.update(dt, elapsed, camera.position, zone);

@@ -14,7 +14,7 @@ import { ZONE, ORIGIN } from './zones.js';
 //   MEMORY     grandmother's flat at night: dark green foliage wallpaper with
 //              oxblood roses, a red ornamental carpet, red lamp glow in a
 //              green half-dark
-//   ACCEPTANCE pale walls that thin into lace and let the light through
+//   ACCEPTANCE walls gone soft as cloud in a milky fog
 // Only the zones with weight > 0 are evaluated, so a fragment pays for one
 // look almost everywhere and for two only inside a blend band.
 //
@@ -332,11 +332,23 @@ vec3 memoryWall(float h, float y, int oct, out float gloss){
   return col;
 }
 
-// ── ACCEPTANCE: pale plaster ────────────────────────────────────────────────
-float acceptHeight(float h, float y){ return 0.3 * vnoise(vec2(h, y) * 6.0); }
+// ── ACCEPTANCE: cloud ───────────────────────────────────────────────────────
+// No plaster left: a slow billowing mass, domain-warped fBm drifting and
+// breathing, pale on the crowns of the billows and grey-blue in their folds.
+// Low contrast, no edges, no shine, so it never reads as a pattern.
+float cloud(float h, float y, int oct){
+  float t = uTime * 0.018;
+  vec2 q = vec2(h, y * 1.3) * 0.5;
+  vec2 warp = vec2(fbm(q * 1.6 + vec2(t, 3.1), 3), fbm(q * 1.6 - vec2(2.7, t), 3));
+  return fbm(q + warp * 1.4 + vec2(t * 0.6, -t * 0.3), oct);
+}
+float acceptHeight(float h, float y){ return 0.0; }   // the billows are shaded in colour: a relief would cost three more clouds
 vec3 acceptWall(float h, float y, int oct, out float gloss){
-  gloss = 0.12;
-  return vec3(0.74, 0.74, 0.70) * (0.85 + 0.2 * fbm(vec2(h, y) * 0.9, oct));
+  gloss = 0.0;
+  float c = cloud(h, y, oct);
+  float crown = smoothstep(0.32, 0.66, c);
+  vec3 fold = vec3(0.40, 0.44, 0.49), top = vec3(0.78, 0.79, 0.77);
+  return mix(fold, top, crown) * (0.97 + 0.06 * vnoise(vec2(h, y) * 3.0 + uTime * 0.05));
 }
 
 float wallHeight(float h, float y, vec3 z){
@@ -354,16 +366,6 @@ void main(){
   float y = vWorldPos.y;
   int oct = uTier > 0 ? 5 : 3;
   vec3 z = zoneWeights(vWorldPos.xz);
-
-  // ACCEPTANCE: the wall dissolves into lace; holes open where a slow noise
-  // field drops under the zone weight and the light behind shows through.
-  float lace = 0.0;
-  if (z.z > 0.01) {
-    float holes = fbm(vec2(h, y) * 0.9 + vec2(uTime * 0.015, 0.0), 3);
-    float cut = z.z * 0.5 - 0.1;
-    if (holes < cut) discard;
-    lace = smoothstep(cut + 0.06, cut, holes);
-  }
 
   vec3 col = vec3(0.0);
   float gloss = 0.0, g;
@@ -385,7 +387,7 @@ void main(){
   float sand = vnoise(vec2(h, y) * 90.0);
   float pit = smoothstep(0.83, 0.9, vnoise(vec2(h, y) * 38.0 + 11.0));
   float drag = vnoise(vec2(h * 3.0, y * 40.0));
-  col *= (0.94 + 0.1 * sand) * (1.0 - 0.12 * pit) * (0.975 + 0.04 * drag);
+  col *= mix((0.94 + 0.1 * sand) * (1.0 - 0.12 * pit) * (0.975 + 0.04 * drag), 1.0, z.z);   // cloud has no sand
   gloss *= 0.75 + 0.35 * sand;                          // paint lies unevenly: the shine breaks up
 
   // corners where wall meets floor and ceiling collect shadow; the edge of
@@ -397,7 +399,8 @@ void main(){
   float footRag = (vnoise(vec2(h * 2.6, 7.0)) - 0.5) * 0.18;
   float ao = mix(0.5, 1.0, smoothstep(0.0, 0.45 + footRag, y)) * (1.0 - 0.45 * topGrime) * (1.0 - 0.25 * streak);
   ao *= cornerShade(vU * ${CELL.toFixed(2)}, vCorner.x) * cornerShade((1.0 - vU) * ${CELL.toFixed(2)}, vCorner.y);
-  col = mix(col, col * vec3(0.85, 0.8, 0.66), topGrime * 0.6 + streak * 0.4);     // yellow-brown damp
+  col = mix(col, col * vec3(0.85, 0.8, 0.66), (topGrime * 0.6 + streak * 0.4) * (1.0 - z.z));     // yellow-brown damp
+  ao = mix(ao, 0.85 + 0.15 * ao, z.z);                  // cloud: corners and the floor line melt away
 
   vec3 L = zoneLight(z);
   vec3 V = normalize(cameraPosition - vWorldPos);
@@ -408,7 +411,7 @@ void main(){
   vec3 diffuse = col * (dSum + 0.04 * L + z.y * FILL_MEM * 1.6 + cl) * ao;
   vec3 spec = sSum * gloss * mix(0.25, 0.9, z.x) * ao;
   vec3 lit = rolloff(diffuse + spec + cl * 0.05 * ao); // a little warm haze on the plaster right by a flame
-  lit += z.z * (0.06 + 0.7 * lace) * LIGHT_ACC * 0.5;  // acceptance walls glow from inside, brightest at the lace rims
+  lit += z.z * 0.03 * LIGHT_ACC;                       // a little light from inside the cloud
   lit += hazeGlow(vWorldPos, L);
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
