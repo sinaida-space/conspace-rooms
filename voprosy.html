@@ -59,15 +59,15 @@
 
   const L = {
     ru: { boot: 'C:\\CONSPACE\\SOULS> type voprosy.txt', sub: 'Все вопросы, которые задаёт лабиринт.',
-          posters: 'Распечатки на стенах', farewell: 'Экран прощания' },
+          boards: 'Страх. Доски объявлений', frames: 'Память. Рамки на стенах', clouds: 'Принятие. Облака', farewell: 'Экран прощания' },
     en: { boot: 'C:\\CONSPACE\\SOULS> type questions.txt', sub: 'Every question the labyrinth asks.',
-          posters: 'Printouts on the walls', farewell: 'Farewell screen' },
+          boards: 'Fear. Notice boards', frames: 'Memory. Frames on the walls', clouds: 'Acceptance. Clouds', farewell: 'Farewell screen' },
   }[lang];
   document.getElementById('boot').textContent = L.boot;
   document.getElementById('sub').textContent = L.sub;
 
   const groups = t('soulLabels').map((label, i) => [label, t('soulQuestions')[i]]);
-  groups.push([L.posters, t('posterQuestions')], [L.farewell, t('questions')]);
+  groups.push([L.boards, t('fearQuestions').concat(t('posterQuestions'))], [L.frames, t('memoryQuestions')], [L.clouds, t('acceptQuestions')], [L.farewell, t('questions')]);
 
   document.getElementById('lists').replaceChildren(...groups.map(([title, qs]) => {
     const panel = document.createElement('section');

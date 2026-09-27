@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, mulberry32 } from './world.js';
 import { zoneWeights, ORIGIN, ZONE } from './zones.js';
-import { t } from './i18n.js';
+import { t, getLang } from './i18n.js';
+import { boardTexture, museumTexture, carpetTexture } from './boards.js';
 import { EYE_HEIGHT } from './player.js';
 import { buildKitchen, createKitchenRig, buildScatter, tickCandles } from './kitchen.js';
 import { baroqueFrame } from './frames.js';
@@ -34,7 +35,8 @@ import { createPropKit } from './props.js';
 //                   someone close (gold), of a child (green), of a grown-up
 //                   (deep red). Walk into one and it scatters; its question
 //                   types itself on the television and across the screen.
-//   posters         old terminal printouts pinned to corridor walls, each
+//   posters         the walls' questions: notice boards in the hospital, framed
+//                   pieces in grandmother's rooms (boards.js), each
 //                   asking one question
 //   roses           every work seen grows the rose in the top-left corner;
 //                   with all of them an arch of roses opens a couple of steps
@@ -236,42 +238,6 @@ function glowTexture() {
   return GLOW;
 }
 
-// A question printed like an old terminal screen dump and pinned to the wall:
-// phosphor text on black, a double-line box, a file path header, a prompt,
-// tape on the corners, the print faded and scuffed.
-const PHOSPHOR = ['#39ff6a', '#ffb347', '#dfe8d8'];
-function posterTexture(text, n, stage) {
-  const W = 480, H = 640, c = document.createElement('canvas'); c.width = W; c.height = H;
-  const g = c.getContext('2d'), ink = PHOSPHOR[stage] || PHOSPHOR[0];
-  g.fillStyle = '#040806'; g.fillRect(0, 0, W, H);
-  g.fillStyle = ink; g.strokeStyle = ink; g.shadowColor = ink; g.shadowBlur = 6;
-  g.lineWidth = 3; g.strokeRect(22, 22, W - 44, H - 44);
-  g.lineWidth = 1.5; g.strokeRect(32, 32, W - 64, H - 64);
-  g.font = '18px "Departure Mono", monospace';
-  g.fillText(`C:\\CONSPACE\\SOULS\\Q_${String(n).padStart(2, '0')}.TXT`, 48, 70);
-  g.fillRect(48, 84, W - 96, 2);
-  g.font = '30px "Departure Mono", monospace';
-  const words = text.split(' '); let line = '', y = 150;
-  for (const w of words) {
-    const test = line ? line + ' ' + w : w;
-    if (g.measureText(test).width > W - 110 && line) { g.fillText(line, 48, y); line = w; y += 44; }
-    else line = test;
-  }
-  g.fillText(line, 48, y);
-  g.font = '18px "Departure Mono", monospace';
-  g.fillText('> _', 48, H - 70);
-  g.shadowBlur = 0;
-  for (let yy = 0; yy < H; yy += 3) { g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, yy, W, 1); } // scanlines of the print
-  for (let i = 0; i < 1400; i++) { g.fillStyle = `rgba(255,255,255,${Math.random() * 0.05})`; g.fillRect(Math.random() * W, Math.random() * H, 2, 2); }
-  const fade = g.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.75);
-  fade.addColorStop(0, 'rgba(0,0,0,0)'); fade.addColorStop(1, 'rgba(20,14,6,0.55)');
-  g.fillStyle = fade; g.fillRect(0, 0, W, H);
-  g.fillStyle = 'rgba(214,200,160,0.75)';             // tape on the corners
-  for (const [tx, ty, r] of [[30, 12, -0.4], [W - 30, 12, 0.4]]) { g.save(); g.translate(tx, ty); g.rotate(r); g.fillRect(-36, -10, 72, 20); g.restore(); }
-  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-  return tex;
-}
-
 // ── SoulPath ────────────────────────────────────────────────────────────────
 export class SoulPath {
   constructor({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo }) {
@@ -386,7 +352,7 @@ export class SoulPath {
       stuff.group.traverse(o => {
         if (o.userData.keep) return;                  // shared scatter geometry and materials
         o.geometry?.dispose();
-        if (o.material && o.material !== this.markMat && !this.marks.includes(o) && !o.userData.keepMaterial) { o.material.map?.dispose(); o.material.dispose(); }
+        if (o.material && o.material !== this.markMat && !this.marks.includes(o) && !o.userData.keepMaterial) { o.material.map?.dispose(); o.material.uniforms?.uMap?.value?.dispose?.(); o.material.dispose(); }
       });
       this.chunkStuff.delete(key);
     }
@@ -430,26 +396,42 @@ export class SoulPath {
       usedEdges.add(pp.edge);
     }
 
-    // ── posters: one terminal printout on some chunks, beside (never over) a work
+    // ── the walls' questions: a notice board in the hospital, a framed piece
+    // in grandmother's rooms (boards.js); one or two a chunk, never on a
+    // work's wall. And a Soviet carpet on some walls of the red rooms.
     const rpo = mulberry32(hash2i(SEED_POSTER, cx, cz));
-    stuff.posters = [];
-    if (rpo() < 0.45) {
-      const hung = new Set(artworkSlots(cx, cz, this.world.getWallSlots(cx, cz)).map(sl => sl.cellKey));
-      const long = this.world.getWallSlots(cx, cz).filter(sl => sl.length >= 4 && !hung.has(sl.cellKey));   // never on a work's wall
-      if (long.length) {
-        const sl = long[Math.floor(rpo() * long.length)];
-        const off = (rpo() < 0.5 ? -1 : 1) * (sl.length * CELL / 2 - 0.7);
-        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 1.04), new THREE.MeshBasicMaterial({ fog: true }));
-        mesh.position.set(
-          sl.position.x + sl.normal.x * 0.013 + (sl.normal.x === 0 ? off : 0), 1.6,
-          sl.position.z + sl.normal.z * 0.013 + (sl.normal.z === 0 ? off : 0));
-        mesh.rotation.set(0, Math.atan2(sl.normal.x, sl.normal.z), (rpo() - 0.5) * 0.05); // pinned a little crooked
-        group.add(mesh);
-        (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.0]);
-        const p = { mesh, q: Math.floor(rpo() * 1000) };
-        this._printPoster(p);
-        stuff.posters.push(p);
-      }
+    stuff.posters = []; stuff.carpets = [];
+    const hung = new Set(artworkSlots(cx, cz, this.world.getWallSlots(cx, cz)).map(sl => sl.cellKey));
+    const long = this.world.getWallSlots(cx, cz).filter(sl => sl.length >= 4 && !hung.has(sl.cellKey));
+    for (let i = long.length - 1; i > 0; i--) { const j = Math.floor(rpo() * (i + 1)); [long[i], long[j]] = [long[j], long[i]]; }
+    const nPost = rpo() < 0.85 ? (rpo() < 0.45 ? 2 : 1) : 0;
+    const onWall = (sl, w, h, y, off) => {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), this.atmo.prop({ rust: 0 }));
+      mesh.position.set(
+        sl.position.x + sl.normal.x * 0.014 + (sl.normal.x === 0 ? off : 0), y,
+        sl.position.z + sl.normal.z * 0.014 + (sl.normal.z === 0 ? off : 0));
+      mesh.rotation.set(0, Math.atan2(sl.normal.x, sl.normal.z), 0);
+      group.add(mesh);
+      return mesh;
+    };
+    long.slice(0, nPost).forEach(sl => {
+      const off = (rpo() < 0.5 ? -1 : 1) * (sl.length * CELL / 2 - 0.9);
+      const mesh = onWall(sl, 0.78, 1.04, 1.6, off);
+      mesh.rotation.z = (rpo() - 0.5) * 0.04;              // hung a little crooked
+      (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.0]);
+      const p = { mesh, q: Math.floor(rpo() * 1000) };
+      this._printPoster(p);
+      stuff.posters.push(p);
+    });
+    const carpetWall = long[nPost];
+    if (carpetWall && rpo() < 0.65) {
+      const mesh = onWall(carpetWall, 1.5, 2.1, 1.55, 0);
+      const seed = Math.floor(rpo() * 1e6);
+      mesh.material.uniforms.uMap.value = carpetTexture(seed);
+      mesh.material.uniforms.uHasMap.value = 1;
+      mesh.visible = this.stage.stage === 1;
+      stuff.carpets.push(mesh);
+      (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.2]);
     }
 
     // ── the hospital's leftovers: one small island in some rooms, off the
@@ -527,11 +509,15 @@ export class SoulPath {
   }
 
   _printPoster(p) {
-    const list = t('posterQuestions');
+    const st = this.stage.stage, u = p.mesh.material.uniforms;
+    p.mesh.visible = st < 2;                          // in the light the clouds carry the questions
+    if (st === 2) return;
+    const list = st === 0 ? t('fearQuestions').concat(t('posterQuestions')) : t('memoryQuestions');
     const i = p.q % list.length;
-    const old = p.mesh.material.map;
-    p.mesh.material.map = posterTexture(list[i], i + 1, this.stage.stage);
-    p.mesh.material.needsUpdate = true;
+    const old = u.uMap.value;
+    u.uMap.value = st === 0 ? boardTexture(list[i], p.q + 1, getLang()) : museumTexture(list[i], i + 1);
+    u.uHasMap.value = 1;
+    if (st === 0) p.mesh.scale.set(1.55, 0.85, 1); else p.mesh.scale.set(0.95, 0.95, 1);   // a wide board, an upright frame
     old?.dispose();
   }
 
@@ -1399,6 +1385,7 @@ export class SoulPath {
       const target = { fear: +(this.stage.stage === 0), memory: +(this.stage.stage === 1), accept: +(this.stage.stage === 2) };
       for (const st of this.chunkStuff.values()) for (const w of st.writings) { w.zone = target; this._writeOn(w); }
       for (const st of this.chunkStuff.values()) for (const p of st.posters || []) this._printPoster(p);
+      for (const st of this.chunkStuff.values()) for (const m of st.carpets || []) m.visible = this.stage.stage === 1;
       this._rebuildScatter();
       for (const st of this.chunkStuff.values()) if (st.ward) st.ward.group.visible = this.stage.stage === 0;
     }
