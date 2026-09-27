@@ -87,6 +87,7 @@ const SEED_SOULQ = CONSPACE_SEED ^ 0x50a1;
 const SEED_EGG = CONSPACE_SEED ^ 0xe66c;
 const SEED_PROPS = CONSPACE_SEED ^ 0x9e05;
 const EGG_BAND = new Set([4, 5, 10, 11]);   // the corridor lattice, mirrored from world.js
+const SKY = '#cfe6ff';                              // the questions of the light, pale sky blue
 const SOUL_COLORS = [0xffd27a, 0x5dff8a, 0xd0202a]; // someone close · a child · a grown-up
 
 // Portals of one chunk as a pure function, so any chunk can ask where the
@@ -593,7 +594,7 @@ export class SoulPath {
     if (!this.asked.includes(text)) this.asked.push(text);
     const label = t('soulLabels')[cat];
     this.audio?.whisper?.();
-    this._say(label, text);
+    this._say(label, text, '#' + new THREE.Color(SOUL_COLORS[cat]).lerp(new THREE.Color(0xffffff), 0.3).getHexString());   // in the soul's own colour
   }
 
   // ── the finale ─────────────────────────────────────────────────────────
@@ -666,7 +667,9 @@ export class SoulPath {
   }
 
   // A line typed across the lower screen, then gone.
-  _say(label, text) {
+  // color: the asker's own colour for the words (a soul's, a pale sky blue
+  // in the light); without it the screen's phosphor green
+  _say(label, text, color = null) {
     if (label !== null) {                               // the television shows exactly what a soul says
       this._tvText = text;
       this._tvUntil = performance.now() + 11000;
@@ -676,6 +679,7 @@ export class SoulPath {
     const el = document.createElement('div');
     el.id = 'soul-q';
     el.innerHTML = `<p class="sq-label"></p><p class="sq-text"></p>`;
+    if (color) el.style.setProperty('--q', color);
     if (label) el.querySelector('.sq-label').textContent = label; else el.querySelector('.sq-label').remove();
     document.body.appendChild(el);
     const tEl = el.querySelector('.sq-text');
@@ -938,7 +942,7 @@ export class SoulPath {
     const text = qs[order[this._soulIdx[3]++ % qs.length]];
     if (!this.asked.includes(text)) this.asked.push(text);
     this.audio?.whisper?.();
-    this._say(t('cloudLabel'), text);
+    this._say(t('cloudLabel'), text, SKY);
   }
   // open floor a metre round (x, z): clouds and balloons keep clear of walls
   _airClear(x, z, r = 1.0) {
@@ -1034,7 +1038,7 @@ export class SoulPath {
         this._soulAt = time; this._walked = 0;
         if (!this.asked.includes(b.text)) this.asked.push(b.text);
         this.audio?.whisper?.();
-        this._say(t('balloonLabel'), b.text);
+        this._say(t('balloonLabel'), b.text, SKY);
       }
     }
   }

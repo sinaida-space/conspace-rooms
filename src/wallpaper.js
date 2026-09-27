@@ -1,19 +1,19 @@
 // ── conspace-rooms · wallpaper.js ───────────────────────────────────────────
 // Alisa's grandmother's wallpaper, from two photographs of the same wall,
-// in the green of the red rooms: a deep green ground under a fine gilt crosshatch, a gilt ogee
+// in the deep green the red rooms already had: a deep green ground under a fine gilt crosshatch, a gilt ogee
 // trellis of scalloped cartouches, a pale bouquet of roses in each, lanced
 // leaf ornaments where the trellis meets, all of it a little faded. One
 // half-drop repeat, drawn on a canvas; tiles seamlessly.
 
 const rnd = seed => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 
-export function wallpaperCanvas(W = 512, H = 640, seed = 3) {
+export function wallpaperCanvas(W = 760, H = 950, seed = 3) {
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d'), r = rnd(seed);
-  const GROUND = '#1d3325', DEEP = '#15281c', GOLD = '#c2a15c', GOLD_DIM = 'rgba(194,161,92,0.45)', LEAF = '#5f7d55';
+  const GROUND = '#0b1f12', DEEP = '#0d2415', GOLD = '#c2a15c', GOLD_DIM = 'rgba(194,161,92,0.45)', LEAF = '#5f7d55';
   // the cartouche centres of one repeat: the middle, and the half-drop at the corners
   const centres = [[W / 2, H / 2], [0, 0], [W, 0], [0, H], [W, H]];
-  const RX = W * 0.36, RY = H * 0.3;
+  const RX = W * 0.38, RY = H * 0.32;              // wide cartouches: most of the wall is plain ground
   const cartouche = (cx, cy, k) => {                    // a scalloped oval with a pointed top and bottom
     g.beginPath();
     for (let i = 0; i <= 200; i++) {
@@ -27,17 +27,11 @@ export function wallpaperCanvas(W = 512, H = 640, seed = 3) {
   };
   // ground with a fine gilt crosshatch
   g.fillStyle = GROUND; g.fillRect(0, 0, W, H);
-  g.strokeStyle = 'rgba(194,161,92,0.5)'; g.lineWidth = 1.3; g.setLineDash([3, 4]);   // a dashed diamond lattice, as printed
-  for (let d = -H; d < W + H; d += 12) {
-    g.beginPath(); g.moveTo(d, 0); g.lineTo(d + H, H); g.stroke();
-    g.beginPath(); g.moveTo(d, H); g.lineTo(d + H, 0); g.stroke();
-  }
-  g.setLineDash([]);
-  for (let i = 0; i < 900; i++) { g.fillStyle = GOLD_DIM; g.fillRect(r() * W, r() * H, 1.2, 1.2); }   // dots at the crossings, roughly
+  // no lattice over the ground: it is almost all plain tone
   // the trellis: a double gilt line round each cartouche, the dark field inside
   for (const [cx, cy] of centres) {
-    cartouche(cx, cy, 1.0); g.strokeStyle = GOLD; g.lineWidth = 3; g.stroke();
-    cartouche(cx, cy, 0.93); g.fillStyle = DEEP; g.fill(); g.strokeStyle = GOLD; g.lineWidth = 1.5; g.stroke();
+    cartouche(cx, cy, 1.0); g.strokeStyle = 'rgba(194,161,92,0.7)'; g.lineWidth = 4; g.stroke();   // bold enough to read across a room
+    cartouche(cx, cy, 0.95); g.fillStyle = DEEP; g.fill();
   }
   // the vensels where four cartouches meet: a tall ogee arch pointed top
   // and bottom, a smaller one inside, a trefoil at each point, C-scrolls
@@ -54,7 +48,7 @@ export function wallpaperCanvas(W = 512, H = 640, seed = 3) {
       g.bezierCurveTo(-w, -h * 0.45, -w * 0.15, -h * 0.75, 0, -h);
       g.stroke();
     };
-    ogee(70, 34, 2.4); ogee(46, 19, 1.6);
+    ogee(70, 34, 4); ogee(46, 19, 3);
     const trefoil = sy => {                              // a small three-lobed flame at the point
       g.save(); g.translate(0, sy * 74); g.scale(1, sy);
       g.beginPath(); g.moveTo(0, 0); g.bezierCurveTo(7, -6, 5, -18, 0, -24); g.bezierCurveTo(-5, -18, -7, -6, 0, 0); g.fill();
@@ -77,7 +71,7 @@ export function wallpaperCanvas(W = 512, H = 640, seed = 3) {
     }
     g.restore();
   };
-  for (const [x, y] of [[0, H / 2], [W, H / 2], [W / 2, 0], [W / 2, H]]) lance(x, y, 1);
+  for (const [x, y] of [[0, H / 2], [W, H / 2], [W / 2, 0], [W / 2, H]]) lance(x, y, 0.8);
   // the bouquet: a few pale roses, buds and leaves on thin stems
   const bouquet = (cx, cy) => {
     const rr = rnd(seed * 31 + Math.round(cx) * 7 + Math.round(cy));
@@ -120,7 +114,7 @@ export function wallpaperCanvas(W = 512, H = 640, seed = 3) {
     g.fillStyle = '#a82b36'; g.beginPath(); g.ellipse(x, y, 4, 7, (rr() - 0.5) * 0.5, 0, Math.PI * 2); g.fill();
   };
   for (const [cx, cy] of centres) {                   // the bouquet fills its cartouche, as in the photographs
-    g.save(); g.translate(cx, cy); g.scale(1.75, 1.75); g.translate(-cx, -cy); bouquet(cx, cy - 4); g.restore();
+    g.save(); g.translate(cx, cy); g.scale(0.9, 0.9); g.translate(-cx, -cy); bouquet(cx, cy - 4); g.restore();
   }
   // printed ink sits a little soft, and the paper has faded unevenly
   g.filter = 'blur(0.6px)'; g.drawImage(c, 0, 0); g.filter = 'none';

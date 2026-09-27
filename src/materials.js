@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CEIL_H, CELL, lampLineNear, solidAtGlobal, isChandelierCell } from './world.js';
 import { ZONE, ORIGIN } from './zones.js';
+import { wallpaperCanvas } from './wallpaper.js';
 
 // ── conspace-rooms · materials.js ───────────────────────────────────────────
 // Procedural shader materials for the labyrinth. No texture files: everything
@@ -51,6 +52,7 @@ uniform vec4  uCandle[8];     // the 8 candles nearest the visitor: xyz, w = fli
 uniform vec3  uCandleCol[8];  // their flame colours
 uniform sampler2D uWallDist; // distance to the nearest wall, one texel per cell around the visitor (see wallField)
 uniform vec2  uWallO;         // cell index of texel 0
+uniform sampler2D uWallpaper; // grandmother's wallpaper, one repeat (wallpaper.js)
 uniform vec4  uHaze[6];       // the fixtures in sight of the visitor: xyz centre of the glow, w = strength (flicker included)
 
 varying vec3 vWorldPos;
@@ -338,63 +340,33 @@ vec3 fearWall(float h, float y, int oct, out float gloss){
 }
 
 // ── MEMORY: printed wallpaper ───────────────────────────────────────────────
-// A real repeat: 0.53 m strips, half-drop, each tile a cabbage rose with four
-// leaves and a sprig between. Ink sits slightly raised (embossed print), the
-// paper has fibre, strips meet in a seam that lifts a little, the red plate
-// is a hair out of register, and the whole sheet is sun-faded at the top.
-float leafSDF(vec2 p, float ang){
-  float c = cos(ang), s = sin(ang);
-  p = mat2(c, -s, s, c) * p;
-  p.x -= 0.075;
-  return length(p * vec2(1.0, 2.6)) - 0.07;             // an elongated oval
-}
-// returns x: rose mask, y: leaf mask, z: leaf vein, w: petal shading
-vec4 wallpaperMotif(vec2 q){
-  vec2 cell = vec2(q.x / 0.53, q.y / 0.6);
-  cell.y += 0.5 * mod(floor(cell.x), 2.0);              // half-drop repeat
-  vec2 f = (fract(cell) - 0.5) * vec2(0.53, 0.6);       // metres inside the tile
-  float r = length(f), a = atan(f.y, f.x);
-  // rose: petals as rings wobbling with angle, shaded darker toward the heart
-  float petals = sin(a * 5.0 + r * 55.0) * 0.5 + 0.5;
-  float rose = smoothstep(0.085, 0.078, r + 0.012 * sin(a * 7.0));
-  // four leaves on the diagonals, plus a small sprig in the tile corner
-  float leaf = 1e3; float vein = 0.0;
-  for (int k = 0; k < 4; k++) {
-    float ang = 0.785 + float(k) * 1.5708;
-    float d = leafSDF(f, ang);
-    leaf = min(leaf, d);
-    vec2 pr = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * f;
-    vein = max(vein, smoothstep(0.004, 0.0, abs(pr.y)) * step(0.02, pr.x) * step(pr.x, 0.14));
-  }
-  vec2 fc = f - vec2(0.265, 0.3) * sign(f);
-  leaf = min(leaf, length(fc * vec2(1.0, 1.8)) - 0.03);
-  float leafMask = smoothstep(0.004, -0.004, leaf) * (1.0 - rose);
-  return vec4(rose, leafMask, vein * leafMask, petals);
-}
+// Alisa's grandmother's wallpaper (wallpaper.js): a gilt ogee trellis of
+// cartouches, a bouquet of roses in each, vensels where they meet, on the
+// deep green of these rooms. Drawn once to a canvas, one repeat 0.64 × 0.8 m.
+// On the wall the paper gets its body: fibre, ink sitting raised, strip
+// seams, the green faded toward the top and aged unevenly.
+#define PAPER_W 0.64
+#define PAPER_H 0.8
+vec3 paper(vec2 q){ return texture2D(uWallpaper, vec2(q.x / PAPER_W, q.y / PAPER_H)).rgb; }
 float memoryHeight(float h, float y){
-  vec4 m = wallpaperMotif(vec2(h, y));
-  return 0.6 * max(m.x, m.y) + 0.05 * vnoise(vec2(h, y) * 180.0); // raised ink + paper tooth
+  vec3 c = paper(vec2(h, y));
+  float ink = smoothstep(0.02, 0.12, abs(dot(c - vec3(0.043, 0.122, 0.071), vec3(0.4, 0.4, 0.2))));
+  return 0.6 * ink + 0.05 * vnoise(vec2(h, y) * 180.0);   // raised ink + paper tooth
 }
 vec3 memoryWall(float h, float y, int oct, out float gloss){
   vec2 q = vec2(h, y);
-  vec3 ground = vec3(0.045, 0.12, 0.07);
+  vec3 col = paper(q);
+  float ink = smoothstep(0.02, 0.12, abs(dot(col - vec3(0.043, 0.122, 0.071), vec3(0.4, 0.4, 0.2))));
   float fibre = vnoise(q * vec2(90.0, 260.0)) * 0.5 + vnoise(q * 400.0) * 0.5;
-  vec3 col = ground * (0.85 + 0.3 * fibre);
-  vec4 m = wallpaperMotif(q);
-  vec3 leafC = mix(vec3(0.10, 0.27, 0.14), vec3(0.20, 0.42, 0.24), fbm(q * 14.0, 2));
-  col = mix(col, leafC, m.y);
-  col = mix(col, vec3(0.06, 0.16, 0.08), m.z);           // leaf veins
-  vec4 mr = wallpaperMotif(q + vec2(0.0025, -0.002));    // red plate slightly out of register
-  vec3 roseC = mix(vec3(0.20, 0.02, 0.03), vec3(0.46, 0.05, 0.07), mr.w);
-  col = mix(col, roseC, mr.x);
+  col *= 0.86 + 0.28 * fibre;
   // strip seams: a hairline shadow and a lifted edge catching light
-  float sx = fract(h / 0.53);
+  float sx = fract(h / PAPER_W);
   col *= 1.0 - 0.35 * smoothstep(0.004, 0.0, sx);
   col += 0.03 * smoothstep(0.012, 0.004, sx);
   col *= mix(0.9, 1.08, smoothstep(0.3, 2.6, y));        // sun-faded toward the top
   col *= 0.85 + 0.2 * fbm(q * 0.7, oct);                 // uneven ageing
   if (y < 0.12) col = vec3(0.06, 0.05, 0.04);            // dark skirting board
-  gloss = 0.35 + 0.4 * max(m.x, m.y);                    // satin paper, ink a touch shinier
+  gloss = 0.35 + 0.4 * ink;                              // satin paper, gilt and ink a touch shinier
   return col;
 }
 
@@ -543,13 +515,13 @@ vec3 fearFloor(vec2 p, int oct){
   return base * (1.0 + 0.18 * worn);
 }
 
-// MEMORY: Soviet herringbone parquet, planks 7.5 × 30 cm. The pattern is a
+// MEMORY: Soviet herringbone parquet, wide planks 11 × 44 cm. The pattern is a
 // lattice with steps (4, 4) and (1, −1) plank widths holding one flat and
 // one upright plank; each point finds its plank among the nine nearest
 // cells. Every plank its own tone of honey and walnut, grain along it,
 // dark seams, varnish worn where feet go.
 vec3 memoryFloor(vec2 p, int oct){
-  const float PW = 0.075, PL = 4.0;
+  const float PW = 0.11, PL = 4.0;                 // wide planks: 11 × 44 cm
   vec2 q = p / PW;
   vec2 e1 = vec2(PL, PL), e2 = vec2(1.0, -1.0);
   float a = floor((q.x + q.y) / (2.0 * PL)), b = floor((q.x - q.y) * 0.5);
@@ -560,14 +532,26 @@ vec3 memoryFloor(vec2 p, int oct){
     if (r.x >= 0.0 && r.x < PL && r.y >= 0.0 && r.y < 1.0) { id = cell; loc = r; }
     if (r.x >= PL - 1.0 && r.x < PL && r.y >= 1.0 && r.y < PL + 1.0) { id = cell + 0.5; loc = vec2(r.y - 1.0, r.x - PL + 1.0); }
   }
-  float h = hash21(id * 1.73 + 0.31);
-  vec3 wood = mix(vec3(0.20, 0.12, 0.06), vec3(0.36, 0.23, 0.12), h);   // old varnish, darkened
+  float h = hash21(id * 1.73 + 0.31), h2 = hash21(id * 5.1 + 2.7);
+  vec3 wood = mix(vec3(0.17, 0.10, 0.05), vec3(0.38, 0.25, 0.13), h);
+  wood = mix(wood, vec3(0.26, 0.2, 0.14), step(0.86, h2) * 0.6);   // a replaced plank, greyer, never matched   // old varnish, darkened
   float grain = vnoise(vec2(loc.x * 2.2 + h * 20.0, loc.y * 16.0 + h * 7.0));
   wood *= 0.8 + 0.32 * grain;
   wood *= 0.93 + 0.07 * sin(loc.y * 22.0 + grain * 7.0);            // the rings, running along the plank
   float seam = smoothstep(0.0, 0.07, loc.y) * smoothstep(1.0, 0.93, loc.y) * smoothstep(0.0, 0.03, loc.x) * smoothstep(PL, PL - 0.03, loc.x);
-  wood *= mix(0.3, 1.0, seam);
-  wood *= 0.82 + 0.28 * fbm(p * 0.55, oct);                        // worn and waxed unevenly
+  float gapW = 0.05 + 0.08 * h2;                                  // seams opened unevenly, dirt in them
+  seam = smoothstep(0.0, gapW, loc.y) * smoothstep(1.0, 1.0 - gapW, loc.y) * smoothstep(0.0, 0.03 + 0.05 * h, loc.x) * smoothstep(PL, PL - 0.03 - 0.05 * h, loc.x);
+  wood *= mix(0.22, 1.0, seam);
+  wood *= 0.9 + 0.1 * smoothstep(0.35, 0.0, loc.y) * step(0.7, h);   // a lifted edge catching the light
+  // wear: varnish gone grey in the walked middle, scratches, stains
+  float worn = smoothstep(0.45, 0.75, fbm(p * 0.35 + 3.0, oct));
+  wood = mix(wood, wood * 0.75 + vec3(0.07, 0.06, 0.05), worn * 0.7);
+  float scratch = smoothstep(0.965, 1.0, vnoise(vec2(p.x * 3.0 + p.y * 40.0, p.y * 2.0)));
+  scratch += smoothstep(0.97, 1.0, vnoise(vec2(p.x * 45.0 - p.y * 8.0, p.x * 1.5)));
+  wood += vec3(0.06, 0.05, 0.035) * scratch;
+  float stain = smoothstep(0.62, 0.7, fbm(p * 0.8 + 11.0, 3));
+  wood *= 1.0 - 0.35 * stain;
+  wood *= 0.8 + 0.3 * fbm(p * 0.55, oct);                         // waxed unevenly
   return wood;
 }
 
@@ -856,6 +840,9 @@ export function createMaterials(quality) {
   wallTex.magFilter = wallTex.minFilter = THREE.LinearFilter;
   wallTex.generateMipmaps = false;
   let fieldAt = null;
+  const paperTex = new THREE.CanvasTexture(wallpaperCanvas());
+  paperTex.wrapS = paperTex.wrapT = THREE.RepeatWrapping;
+  paperTex.anisotropy = 8;
   // one shared uniform set: update once, all three materials follow
   const shared = {
     uTime: { value: 0 },
@@ -869,6 +856,7 @@ export function createMaterials(quality) {
     uHaze: { value: Array.from({ length: HAZE_N }, () => new THREE.Vector4(0, -100, 0, 0)) },
     uWallDist: { value: wallTex },
     uWallO: { value: new THREE.Vector2(-1e4, -1e4) },
+    uWallpaper: { value: paperTex },
   };
   const hazeSeen = new Map();   // lamp cell key -> smoothed visibility, so a glow fades in as a corner opens
 

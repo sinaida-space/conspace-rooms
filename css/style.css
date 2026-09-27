@@ -396,10 +396,10 @@ body::after {
   opacity: 0; transition: opacity 1s ease;
 }
 #soul-q.visible { opacity: 1; }
-#soul-q .sq-label { display: inline-block; font-size: 0.75em; letter-spacing: 0.2em; color: #6fcf8e; margin-bottom: 0.5em; background: rgba(1, 8, 5, 0.55); padding: 0.2em 0.6em; }
+#soul-q .sq-label { display: inline-block; font-size: 0.75em; letter-spacing: 0.2em; color: var(--q, #6fcf8e); opacity: 0.85; margin-bottom: 0.5em; background: rgba(1, 8, 5, 0.55); padding: 0.2em 0.6em; }
 #soul-q .sq-text {
-  font-size: clamp(1.1rem, 2.6vw, 1.7rem); line-height: 1.5; color: var(--fg);
-  text-shadow: 0 0 8px rgba(57, 255, 106, 0.6), 0 0 24px rgba(57, 255, 106, 0.25);
+  font-size: clamp(1.1rem, 2.6vw, 1.7rem); line-height: 1.5; color: var(--q, var(--fg));
+  text-shadow: 0 0 8px color-mix(in srgb, var(--q, #39ff6a) 60%, transparent), 0 0 24px color-mix(in srgb, var(--q, #39ff6a) 25%, transparent);
   background: rgba(1, 8, 5, 0.55); padding: 0.4em 0.6em; text-wrap: balance;
 }
 
