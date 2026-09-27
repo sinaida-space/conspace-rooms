@@ -67,13 +67,21 @@ function bloom(x, y) {
 const DEFS = `<defs>
   <linearGradient id="rgl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7cc98d"/><stop offset="0.5" stop-color="#4f9e68"/><stop offset="1" stop-color="#2c6a43"/></linearGradient>
   <linearGradient id="rgs" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5fae77"/><stop offset="1" stop-color="#2b633f"/></linearGradient>
-  <radialGradient id="rgp" cx="0.5" cy="0.95" r="0.95"><stop offset="0" stop-color="#4a0508"/><stop offset="0.45" stop-color="#a8101a"/><stop offset="0.85" stop-color="#d8242e"/><stop offset="1" stop-color="#f5828a"/></radialGradient>
+  <radialGradient id="rgp" cx="0.5" cy="0.95" r="0.95"><stop offset="0" stop-color="#6a0a14"/><stop offset="0.45" stop-color="#b8182a"/><stop offset="0.85" stop-color="#e0485a"/><stop offset="1" stop-color="#f7a4ae" stop-opacity="0.8"/></radialGradient>
   <radialGradient id="rgb" cx="0.4" cy="0.3" r="0.8"><stop offset="0" stop-color="#e53a44"/><stop offset="0.6" stop-color="#a8101a"/><stop offset="1" stop-color="#5a0609"/></radialGradient>
-  <filter id="rtex" x="-10%" y="-10%" width="120%" height="120%">
-    <feTurbulence type="fractalNoise" baseFrequency="2.2" numOctaves="2" seed="7" result="n"/>
-    <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.9 0 0 0 -0.25" result="spots"/>
-    <feComposite in="spots" in2="SourceGraphic" operator="in" result="grain"/>
-    <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="grain"/></feMerge>
+  <!-- watercolour: ragged bled edges, a darker rim where the wash dried,
+       pigment settling unevenly into the paper grain -->
+  <filter id="rwc" filterUnits="userSpaceOnUse" x="-6" y="-6" width="66" height="96">
+    <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="3" seed="4" result="warp"/>
+    <feDisplacementMap in="SourceGraphic" in2="warp" scale="2.4" xChannelSelector="R" yChannelSelector="G" result="d"/>
+    <feGaussianBlur in="d" stdDeviation="0.45" result="soft"/>
+    <feMorphology in="soft" operator="erode" radius="0.55" result="inner"/>
+    <feComposite in="soft" in2="inner" operator="out" result="rimA"/>
+    <feColorMatrix in="rimA" type="matrix" values="0.55 0 0 0 0  0 0.55 0 0 0  0 0 0.55 0 0  0 0 0 0.8 0" result="rim"/>
+    <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="2" seed="9" result="grain"/>
+    <feColorMatrix in="grain" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 -0.5 1.15" result="grainA"/>
+    <feComposite in="soft" in2="grainA" operator="in" result="pigment"/>
+    <feMerge><feMergeNode in="pigment"/><feMergeNode in="rim"/></feMerge>
   </filter>
 </defs>`;
 // small thorns along each stem: [stem, where along it 0..1, side ±1]
@@ -102,9 +110,11 @@ export function createRoseCounter(total = 18) {
   el.setAttribute('role', 'img');
   el.innerHTML = `<svg viewBox="-2 -2 54 84" aria-hidden="true">${DEFS}
     ${grain()}
+    <g filter="url(#rwc)">
     ${STEMS.map(([d], i) => `<path d="${d}" pathLength="1" class="rstem" data-i="${i}"/><path d="${d}" pathLength="1" class="rstem rstem-hi" data-i="${i}" transform="translate(-0.45 -0.2)"/>`).join('')}
     <g class="rthorns"></g>
-    <g filter="url(#rtex)">
+    </g>
+    <g filter="url(#rwc)">
     ${LEAVES.map(([x, y, a], i) => `<g data-leaf="${i}">${leaf(x, y, a)}</g>`).join('')}
     ${BUDS.map((_, i) => `<g data-bud="${i}"><g class="rbp">${bud(0, 0)}</g></g><g data-bloom="${i}"><g class="rbp">${bloom(0, 0)}</g></g>`).join('')}
     </g>
