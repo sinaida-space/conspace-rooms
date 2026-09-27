@@ -501,7 +501,7 @@ export class SoulPath {
       const rx = centreOf(gi), rz = centreOf(gj);
       addRug(rx, rz, 1.8, 3.0, (rr() - 0.5) * 0.3);   // long side along z, where the room is open
       // and a child's things on it and round it, as if play had just stopped
-      const names = ['nevalyashka', 'pyramid', 'yula', 'matryoshki', 'ball', 'horse'];
+      const names = ['nevalyashka', 'pyramid', 'yula', 'matryoshki', 'ball'];
       const toys = [];
       for (let t = 0, n = 3 + Math.floor(rr() * 3); t < n; t++) {
         const name = names[Math.floor(rr() * names.length)];

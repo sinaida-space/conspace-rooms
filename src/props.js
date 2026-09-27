@@ -9,7 +9,7 @@ import { contactShadows } from './shadows.js';
 //   FEAR       a tube chair, a bucket and mop, bottles, a cardboard box, an
 //              oxygen cylinder
 //   MEMORY     the toys every Soviet child had (неваляшка, пирамидка, юла,
-//              матрёшки, a two-colour ball, a rocking horse), slippers, a
+//              матрёшки, a two-colour ball), slippers, a
 //              stool, jars of preserves, a tied stack of newspapers
 //   ACCEPTANCE furniture under white sheets, windows with nothing but light
 //              behind a breathing tulle, lace napkins adrift in the air and
@@ -34,13 +34,18 @@ const sphere = (r, w = 14, h = 10) => new THREE.SphereGeometry(r, w, h);
 // +z faces the corridor, the back rests toward the wall, y = 0 is the floor.
 function shape(build, crumple = 0) {
   const parts = [];
-  const put = (geo, hex, gloss, m) => {
+  // paint: optional (x, y, z) => hex in the part's own frame, before m, so
+  // a face, a flower or a stripe can be painted on per vertex
+  const put = (geo, hex, gloss, m, paint = null) => {
     const g = geo.index ? geo.toNonIndexed() : geo;
     if (g !== geo) geo.dispose();
+    const pos = g.attributes.position, cc = new THREE.Color();
+    const col = new Float32Array(pos.count * 4);
+    for (let i = 0; i < pos.count; i++) {
+      cc.setHex(paint ? paint(pos.getX(i), pos.getY(i), pos.getZ(i)) ?? hex : hex, THREE.LinearSRGBColorSpace);
+      col.set([cc.r, cc.g, cc.b, gloss], i * 4);
+    }
     if (m) g.applyMatrix4(m);
-    const cc = new THREE.Color().setHex(hex, THREE.LinearSRGBColorSpace);
-    const col = new Float32Array(g.attributes.position.count * 4);
-    for (let i = 0; i < g.attributes.position.count; i++) col.set([cc.r, cc.g, cc.b, gloss], i * 4);
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
     parts.push(g);
   };
@@ -96,51 +101,86 @@ const FEAR = {
 
 // ── memory: the toys, and the house around them ─────────────────────────────
 const MEMORY = {
+  // a roly-poly doll: an egg of a body, painted with a white apron and a
+  // flower on it, a round face with eyes, rosy cheeks and a fringe, a red
+  // headscarf with white dots
   nevalyashka: { depth: 0.18, w: 0.2, toy: true, build: put => {
-    put(sphere(0.09, 18, 12), 0xc81e24, 0.6, M(0, 0.085, 0, 0, 0, 0, 1, 0.95, 1));
-    put(sphere(0.07, 14, 10), 0xf2e6d8, 0.4, M(0, 0.09, 0.055, 0, 0, 0, 1, 1, 0.45));
-    put(sphere(0.055, 14, 10), 0xf1c9a6, 0.4, M(0, 0.2, 0));
-    put(new THREE.SphereGeometry(0.06, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0xc81e24, 0.6, M(0, 0.205, -0.004));
-    for (const x of [-0.018, 0.018]) put(sphere(0.006, 6, 4), 0x2a1a14, 0.3, M(x, 0.21, 0.05));
+    put(lathe([[0, 0], [0.05, 0.005], [0.085, 0.04], [0.095, 0.085], [0.085, 0.13], [0.06, 0.16], [0, 0.17]], 28), 0xc81e24, 0.65, M(0, 0, 0),
+      (x, y, z) => {
+        if (z > 0.02 && y > 0.03 && y < 0.15 && Math.abs(x) < 0.055 + (0.15 - y) * 0.2) {           // the apron
+          const fx = x, fy = y - 0.085, r = Math.hypot(fx, fy);
+          if (r < 0.012) return 0xf2c230;                                                            // the flower's heart
+          if (r < 0.03 && Math.cos(Math.atan2(fy, fx) * 5) > 0.2) return 0xd0202a;                   // five red petals
+          if (Math.abs(fx) < 0.004 && fy < -0.03) return 0x2f8a3c;                                   // its stem
+          return 0xf4ece0;
+        }
+        return null;
+      });
+    put(sphere(0.058, 28, 20), 0xf2cfae, 0.35, M(0, 0.215, 0), (x, y, z) => {
+      if (z < 0.01) return 0xc81e24;                                                                 // the scarf over the back
+      if (y > 0.028) return z > 0.035 && y < 0.04 ? 0x7a4a24 : 0xc81e24;                             // a fringe of hair, the scarf above
+      if (Math.hypot(Math.abs(x) - 0.019, y - 0.008) < 0.008 && z > 0.04) return 0x1e2a44;          // eyes
+      if (Math.hypot(Math.abs(x) - 0.03, y + 0.012) < 0.011 && z > 0.035) return 0xe07a70;          // rosy cheeks
+      if (Math.abs(x) < 0.01 && Math.abs(y + 0.028) < 0.004 && z > 0.04) return 0xb02030;           // mouth
+      return null;
+    });
+    const dots = (x, y, z) => (Math.sin(x * 160) * Math.sin(y * 160 + z * 90) > 0.82 ? 0xf4ece0 : null);   // white polka dots
+    put(new THREE.SphereGeometry(0.061, 28, 20, Math.PI / 2 + 0.95, Math.PI * 2 - 1.9), 0xc81e24, 0.6, M(0, 0.218, -0.004), dots);   // round the back, open at the face
+    put(new THREE.SphereGeometry(0.062, 28, 8, 0, Math.PI * 2, 0, 0.62), 0xc81e24, 0.6, M(0, 0.218, -0.004), dots);                  // over the crown and forehead
   } },
   pyramid: { depth: 0.18, w: 0.18, toy: true, build: put => {
-    put(cyl(0.08, 0.085, 0.03, 16), WOOD_PALE, 0.3, M(0, 0.015, 0));
-    put(cyl(0.012, 0.012, 0.3, 8), WOOD_PALE, 0.3, M(0, 0.18, 0));
+    put(cyl(0.08, 0.086, 0.03, 24), WOOD_PALE, 0.35, M(0, 0.015, 0));
+    put(cyl(0.012, 0.012, 0.3, 10), WOOD_PALE, 0.35, M(0, 0.18, 0));
     [0xd0202a, 0xf08a1a, 0xf2d21e, 0x2f9a3c, 0x2a5fb0, 0x7a3fa0].forEach((hex, i) =>
-      put(new THREE.TorusGeometry(0.072 - i * 0.008, 0.022 - i * 0.0015, 8, 18), hex, 0.55, M(0, 0.052 + i * 0.043, 0, Math.PI / 2)));
-    put(sphere(0.03), 0xd0202a, 0.6, M(0, 0.33, 0));
+      put(new THREE.TorusGeometry(0.072 - i * 0.008, 0.022 - i * 0.0015, 12, 28), hex, 0.7, M(0, 0.052 + i * 0.043, 0, Math.PI / 2)));
+    put(sphere(0.032, 16, 12), 0xd0202a, 0.7, M(0, 0.335, 0));
   } },
+  // a humming top, fallen on its side: red and blue bands, a yellow stripe,
+  // the steel plunger
   yula: { depth: 0.26, w: 0.3, toy: true, build: put => {
-    const t = M(0, 0.1, 0, 0, 0.5, 0.55);                // lying on its side, as it fell
-    put(lathe([[0, 0], [0.02, 0.01], [0.1, 0.06], [0.112, 0.09], [0.08, 0.13], [0.02, 0.15], [0, 0.15]], 20), 0xc8202a, 0.7, t.clone().multiply(M(0, -0.08, 0)));
-    put(new THREE.TorusGeometry(0.105, 0.012, 6, 24), 0x2a5fb0, 0.7, t.clone().multiply(M(0, -0.005, 0, Math.PI / 2)));
-    put(new THREE.TorusGeometry(0.09, 0.01, 6, 24), 0xf2d21e, 0.7, t.clone().multiply(M(0, 0.03, 0, Math.PI / 2)));
-    put(cyl(0.008, 0.008, 0.1, 6), STEEL, 0.7, t.clone().multiply(M(0, 0.12, 0)));
+    const t = M(0, 0.1, 0, 0, 0.5, 0.55);
+    put(lathe([[0, 0], [0.02, 0.01], [0.1, 0.06], [0.112, 0.09], [0.08, 0.13], [0.02, 0.15], [0, 0.15]], 32), 0xc8202a, 0.75, t.clone().multiply(M(0, -0.08, 0)),
+      (x, y) => (y > 0.1 ? 0x2a5fb0 : y > 0.075 && y < 0.09 ? 0xf2d21e : null));
+    put(new THREE.TorusGeometry(0.108, 0.01, 8, 32), 0xf2efe6, 0.7, t.clone().multiply(M(0, 0.01, 0, Math.PI / 2)));
+    put(cyl(0.008, 0.008, 0.11, 8), STEEL, 0.8, t.clone().multiply(M(0, 0.12, 0)));
+    put(sphere(0.016, 10, 8), STEEL, 0.8, t.clone().multiply(M(0, 0.18, 0)));
   } },
+  // matryoshki, three nested ones stood in a row: a painted face with a
+  // fringe and cheeks, a yellow apron with a red flower, a black-edged scarf
   matryoshki: { depth: 0.16, w: 0.36, toy: true, build: put => {
     [[1, -0.1], [0.78, 0.03], [0.58, 0.13]].forEach(([s, x]) => {
       const m = M(x, 0, 0, 0, (x * 3) % 0.6 - 0.3, 0, s);
-      put(lathe([[0, 0], [0.06, 0], [0.075, 0.04], [0.07, 0.1], [0.05, 0.14], [0.055, 0.17], [0.045, 0.2], [0, 0.215]], 18), 0xb81c20, 0.7, m);
-      put(sphere(0.028, 10, 8), 0xf3d2b0, 0.4, m.clone().multiply(M(0, 0.166, 0.046, 0, 0, 0, 1, 1, 0.35)));
-      put(sphere(0.045, 10, 8), 0xf2c230, 0.6, m.clone().multiply(M(0, 0.07, 0.062, 0, 0, 0, 1, 1.25, 0.3)));
+      put(lathe([[0, 0], [0.06, 0], [0.075, 0.04], [0.07, 0.1], [0.05, 0.14], [0.055, 0.17], [0.045, 0.2], [0, 0.215]], 32), 0xb81c20, 0.75, m,
+        (px, py, pz) => {
+          const face = Math.hypot(px, (py - 0.17) * 1.1) < 0.03 && pz > 0.03;
+          if (face) {
+            if (py > 0.185 && pz > 0.04) return 0x3a2012;                                   // fringe
+            if (Math.hypot(Math.abs(px) - 0.011, py - 0.172) < 0.004) return 0x1e2a44;     // eyes
+            if (Math.hypot(Math.abs(px) - 0.017, py - 0.162) < 0.006) return 0xe07a70;     // cheeks
+            if (Math.abs(px) < 0.005 && Math.abs(py - 0.153) < 0.002) return 0xb02030;     // mouth
+            return 0xf3d2b0;
+          }
+          if (Math.hypot(px, (py - 0.17) * 1.1) < 0.036 && pz > 0.02) return 0x1a1a1a;     // the scarf's dark edge
+          if (pz > 0.035 && py > 0.02 && py < 0.13 && Math.abs(px) < 0.045) {              // the apron
+            const r = Math.hypot(px, py - 0.075);
+            if (r < 0.01) return 0xf2c230;
+            if (r < 0.026 && Math.cos(Math.atan2(py - 0.075, px) * 6) > 0.1) return 0xd0202a;
+            return 0xf2c230;
+          }
+          return null;
+        });
     });
   } },
+  // a two-coloured rubber ball, a white band, a star on the red half,
+  // scuffed paler here and there
   ball: { depth: 0.2, w: 0.2, toy: true, build: put => {
-    put(new THREE.SphereGeometry(0.1, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0xc81e24, 0.7, M(0, 0.1, 0, 0.4, 0, 0.3));
-    put(new THREE.SphereGeometry(0.1, 18, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), 0x2a5fb0, 0.7, M(0, 0.1, 0, 0.4, 0, 0.3));
-    put(new THREE.TorusGeometry(0.1, 0.008, 6, 24), 0xf2efe6, 0.6, M(0, 0.1, 0, Math.PI / 2 + 0.4, 0, 0.3));
-  } },
-  horse: { depth: 0.3, w: 0.85, toy: true, solid: true, build: put => {
-    const arc = 1.0;
-    for (const z of [-0.1, 0.1]) put(new THREE.TorusGeometry(0.5, 0.016, 6, 20, arc), 0x7a4a24, 0.3, M(0, 0.516, z, 0, 0, -Math.PI / 2 - arc / 2));
-    for (const [x, z] of [[-0.16, -0.08], [0.16, -0.08], [-0.16, 0.08], [0.16, 0.08]]) put(cyl(0.018, 0.018, 0.34, 6), 0xe6d8bc, 0.3, M(x, 0.22, z * 1.1, z * 0.3, 0, x * -0.3));
-    put(roundedBox(0.45, 0.16, 0.14, 0.05), 0xe6d8bc, 0.35, M(0, 0.42, 0));
-    for (const [x, z] of [[-0.08, 0.071], [0.1, -0.071], [0.05, 0.071]]) put(sphere(0.03, 8, 6), 0x5a3a22, 0.3, M(x, 0.43, z, 0, 0, 0, 1, 1, 0.2));
-    put(roundedBox(0.1, 0.24, 0.1, 0.03), 0xe6d8bc, 0.35, M(0.23, 0.55, 0, 0, 0, -0.5));
-    put(roundedBox(0.2, 0.09, 0.09, 0.03), 0xe6d8bc, 0.35, M(0.31, 0.66, 0, 0, 0, -0.25));
-    put(new THREE.BoxGeometry(0.2, 0.05, 0.02), 0x3a2416, 0.2, M(0.2, 0.62, 0, 0, 0, -0.5));
-    put(roundedBox(0.15, 0.025, 0.16, 0.01), 0xb81c20, 0.5, M(0, 0.51, 0));
-    put(cyl(0.02, 0.005, 0.2, 6), 0x3a2416, 0.2, M(-0.26, 0.42, 0, 0, 0, 0.8));
+    put(sphere(0.1, 36, 24), 0xc81e24, 0.75, M(0, 0.1, 0, 0.4, 0, 0.3), (x, y, z) => {
+      if (Math.abs(y) < 0.009) return 0xf2efe6;
+      if (y < 0) return (Math.sin(x * 90) * Math.sin(z * 70) > 0.93) ? 0x6a86b8 : 0x2a5fb0;          // scuffs
+      const a = Math.atan2(z, x), r = Math.hypot(x, z);
+      if (y > 0.07 && r < 0.02 + 0.03 * Math.pow(Math.abs(Math.cos(a * 2.5)), 6)) return 0xf2d21e;    // the star on top
+      return (Math.sin(x * 80 + y * 30) * Math.sin(z * 90) > 0.94) ? 0xe06a6a : null;
+    });
   } },
   slippers: { depth: 0.3, w: 0.3, build: put => {
     [[-0.07, 0.1], [0.08, -0.15]].forEach(([x, a]) => {
@@ -352,8 +392,8 @@ export function createPropKit(atmo) {
   // kinds a stage can leave on the floor, with weights
   const KINDS = [
     [['chair', 3], ['bucket', 2], ['bottles', 3], ['box', 2], ['oxygen', 1]],
-    [['nevalyashka', 3], ['pyramid', 3], ['yula', 2], ['matryoshki', 3], ['ball', 2], ['horse', 1.5], ['slippers', 2], ['stool', 1.5], ['jars', 1.5], ['newspapers', 1]],
-    [['chair', 3], ['armchair', 2], ['mirror', 1.5], ['piano', 1], ['window', 3]],
+    [['nevalyashka', 3], ['pyramid', 3], ['yula', 2], ['matryoshki', 3], ['ball', 2], ['slippers', 2], ['stool', 1.5], ['jars', 1.5], ['newspapers', 1]],
+    [['armchair', 2], ['mirror', 1.5], ['piano', 1], ['window', 3]],   // no sheeted chair: it read as anything but
   ];
   const pick = (stage, r) => {
     const list = KINDS[stage], total = list.reduce((s, [, w]) => s + w, 0);
