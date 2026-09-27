@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, mulberry32 } from './world.js';
 import { zoneWeights, ORIGIN, ZONE } from './zones.js';
 import { t, getLang } from './i18n.js';
-import { boardTexture, carpetTexture } from './boards.js';
+import { boardTexture, carpetTexture, rugTexture } from './boards.js';
 import { createChandeliers } from './chandeliers.js';
 import { EYE_HEIGHT } from './player.js';
 import { buildKitchen, createKitchenRig, buildScatter, tickCandles } from './kitchen.js';
@@ -472,6 +472,25 @@ export class SoulPath {
       mesh.visible = this.stage.stage === 1;
       stuff.carpets.push(mesh);
       (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.2]);
+    }
+
+    // ── rugs on the parquet of the red rooms: one or two a chunk, a metre by
+    // two, turned a little, wherever the floor is open enough round them
+    stuff.rugs = [];
+    const rr = mulberry32(hash2i(SEED_POSTER ^ 0x7a9, cx, cz));
+    for (let k = 0, n = 1 + (rr() < 0.5 ? 1 : 0); k < 12 && stuff.rugs.length < n; k++) {
+      const gi = cx * CHUNK + 1 + Math.floor(rr() * (CHUNK - 2)), gj = cz * CHUNK + 1 + Math.floor(rr() * (CHUNK - 2));
+      let open = true;
+      for (let b = -1; b <= 1 && open; b++) for (let a = -1; a <= 1 && open; a++) if (solidAtGlobal(gi + a, gj + b)) open = false;
+      if (!open) continue;
+      const rot = (rr() < 0.5 ? 0 : Math.PI / 2) + (rr() - 0.5) * 0.35;
+      const mat = this.atmo.prop({ map: rugTexture(Math.floor(rr() * 1e6)), rust: 0 });
+      mat.polygonOffset = true; mat.polygonOffsetFactor = -1; mat.polygonOffsetUnits = -1;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 2.0).rotateX(-Math.PI / 2), mat);
+      mesh.position.set(centreOf(gi), 0.003, centreOf(gj)); mesh.rotation.y = rot;
+      mesh.visible = this.stage.stage === 1;
+      group.add(mesh);
+      stuff.rugs.push(mesh);
     }
 
     // ── the hospital's leftovers: one small island in some rooms, off the
@@ -1585,7 +1604,7 @@ export class SoulPath {
       const target = { fear: +(this.stage.stage === 0), memory: +(this.stage.stage === 1), accept: +(this.stage.stage === 2) };
       for (const st of this.chunkStuff.values()) for (const w of st.writings) { w.zone = target; this._writeOn(w); }
       for (const st of this.chunkStuff.values()) for (const p of st.posters || []) this._printPoster(p);
-      for (const st of this.chunkStuff.values()) for (const m of st.carpets || []) m.visible = this.stage.stage === 1;
+      for (const st of this.chunkStuff.values()) for (const m of (st.carpets || []).concat(st.rugs || [])) m.visible = this.stage.stage === 1;
       this._rebuildScatter();
       for (const st of this.chunkStuff.values()) if (st.ward) st.ward.group.visible = this.stage.stage === 0;
       for (const st of this.chunkStuff.values()) if (st.beds) st.beds.group.visible = this.stage.stage === 0;

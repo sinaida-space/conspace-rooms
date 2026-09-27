@@ -106,7 +106,7 @@ float chandelierK(vec2 cell){
   float a = mod(cell.x, 16.0), b = mod(cell.y, 16.0);
   bool ca = abs(a - 5.0) < 0.5 || abs(a - 11.0) < 0.5, cb = abs(b - 5.0) < 0.5 || abs(b - 11.0) < 0.5;
   bool ma = abs(a - 8.0) < 0.5 || abs(a - 1.0) < 0.5, mb = abs(b - 8.0) < 0.5 || abs(b - 1.0) < 0.5;
-  return mix(1.0, (ca && mb) || (cb && ma) ? 1.9 : 0.12, uZone.y);
+  return mix(1.0, (ca && mb) || (cb && ma) ? 1.15 : 0.45, uZone.y);   // the red half-dark it always had, a little more round a chandelier
 }
 float trailBoost(vec2 pc){
   float b = 0.0;
@@ -350,13 +350,13 @@ vec3 fearWall(float h, float y, int oct, out float gloss){
 vec3 paper(vec2 q){ return texture2D(uWallpaper, vec2(q.x / PAPER_W, q.y / PAPER_H)).rgb; }
 float memoryHeight(float h, float y){
   vec3 c = paper(vec2(h, y));
-  float ink = smoothstep(0.02, 0.12, abs(dot(c - vec3(0.086, 0.239, 0.141), vec3(0.4, 0.4, 0.2))));
+  float ink = smoothstep(0.02, 0.12, abs(dot(c - vec3(0.059, 0.169, 0.098), vec3(0.4, 0.4, 0.2))));
   return 0.6 * ink + 0.05 * vnoise(vec2(h, y) * 180.0);   // raised ink + paper tooth
 }
 vec3 memoryWall(float h, float y, int oct, out float gloss){
   vec2 q = vec2(h, y);
   vec3 col = paper(q);
-  float ink = smoothstep(0.02, 0.12, abs(dot(col - vec3(0.086, 0.239, 0.141), vec3(0.4, 0.4, 0.2))));
+  float ink = smoothstep(0.02, 0.12, abs(dot(col - vec3(0.059, 0.169, 0.098), vec3(0.4, 0.4, 0.2))));
   float fibre = vnoise(q * vec2(90.0, 260.0)) * 0.5 + vnoise(q * 400.0) * 0.5;
   col *= 0.86 + 0.28 * fibre;
   // strip seams: a hairline shadow and a lifted edge catching light
@@ -533,7 +533,7 @@ vec3 memoryFloor(vec2 p, int oct){
     if (r.x >= PL - 1.0 && r.x < PL && r.y >= 1.0 && r.y < PL + 1.0) { id = cell + 0.5; loc = vec2(r.y - 1.0, r.x - PL + 1.0); }
   }
   float h = hash21(id * 1.73 + 0.31), h2 = hash21(id * 5.1 + 2.7);
-  vec3 wood = mix(vec3(0.19, 0.14, 0.07), vec3(0.34, 0.26, 0.13), h);   // ochre and olive oak, darkened by the night
+  vec3 wood = mix(vec3(0.12, 0.08, 0.04), vec3(0.22, 0.16, 0.08), h);   // ochre and olive oak, darkened by the night
   wood = mix(wood, vec3(0.22, 0.19, 0.13), step(0.86, h2) * 0.6);   // a replaced plank, greyer, never matched   // old varnish, darkened
   float grain = vnoise(vec2(loc.x * 2.2 + h * 20.0, loc.y * 16.0 + h * 7.0));
   wood *= 0.8 + 0.32 * grain;
@@ -968,7 +968,7 @@ export function createMaterials(quality) {
       for (let i = 0; i < HAZE_N; i++) {
         const c = cand[i];
         if (!c || c.v < 0.01) { shared.uHaze.value[i].w = 0; continue; }
-        const fl = (c.gi === ft.x && c.gj === ft.y ? famt : 1) * (1 + (zone ? zone.memory : 0) * (isChandelierCell(c.gi, c.gj) ? 0.9 : -0.88));   // the red rooms glow only round a chandelier
+        const fl = (c.gi === ft.x && c.gj === ft.y ? famt : 1) * (1 + (zone ? zone.memory : 0) * (isChandelierCell(c.gi, c.gj) ? 0.15 : -0.55));   // the red rooms glow only round a chandelier
         const near = Math.min(1, Math.max(0.1, (c.d - 0.6) / 2.4));   // the column you stand in is air all round you, not a glow ahead
         shared.uHaze.value[i].set(c.x, HAZE_Y, c.z, c.v * fl * near * Math.min(1, (13 - c.d) / 3));
       }

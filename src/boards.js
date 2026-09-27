@@ -198,4 +198,49 @@ export function carpetTexture(seed) {
   return tex(c);
 }
 
+// ── memory: a rug on the parquet ────────────────────────────────────────────
+// The red ornamental carpet the red rooms once had wall to wall, now cut to
+// a rug about a metre by two: a deep red field darkening to its border,
+// wavy cream medallions, small motifs between, wool pile, fringe at the ends.
+export function rugTexture(seed) {
+  const W = 360, H = 720, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), r = rnd(seed * 7727 + 3);
+  const RED = '#5e0a0f', DARK = '#1f0608', CREAM = '#c9b199';
+  g.fillStyle = RED; g.fillRect(0, 0, W, H);
+  const edge = g.createRadialGradient(W / 2, H / 2, W * 0.3, W / 2, H / 2, H * 0.62);
+  edge.addColorStop(0, 'rgba(31,6,8,0)'); edge.addColorStop(1, 'rgba(31,6,8,0.75)');
+  g.fillStyle = edge; g.fillRect(0, 0, W, H);
+  g.strokeStyle = DARK; g.lineWidth = 16; g.strokeRect(14, 26, W - 28, H - 52);
+  g.strokeStyle = CREAM; g.lineWidth = 2; g.strokeRect(26, 38, W - 52, H - 76);
+  // medallions: two wavy rings each, as the old carpet had
+  const ring = (cx, cy, rad, amp, k) => {
+    g.beginPath();
+    for (let i = 0; i <= 160; i++) { const a = i / 160 * Math.PI * 2, rr = rad + amp * Math.sin(a * k); const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.closePath(); g.stroke();
+  };
+  g.strokeStyle = CREAM; g.lineWidth = 3;
+  for (const cy of [H * 0.3, H * 0.7]) { ring(W / 2, cy, 64, 9, 8); ring(W / 2, cy, 104, 6, 12); }
+  // small motifs strewn in the field
+  g.fillStyle = 'rgba(201,177,153,0.7)';
+  for (let i = 0; i < 40; i++) {
+    const x = 50 + r() * (W - 100), y = 60 + r() * (H - 120);
+    if (Math.hypot(x - W / 2, Math.min(Math.abs(y - H * 0.3), Math.abs(y - H * 0.7))) < 115) continue;
+    g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 6, y); g.lineTo(x, y + 6); g.lineTo(x - 6, y); g.fill();
+  }
+  // pile, as on the wall carpets
+  g.filter = 'blur(1.1px)'; g.drawImage(c, 0, 0); g.filter = 'none';
+  const px = g.getImageData(0, 0, W, H).data;
+  for (let i = 0; i < 26000; i++) {
+    const x = r() * W, y = r() * H, k = (Math.floor(y) * W + Math.floor(x)) * 4, sh = r() < 0.5 ? 0.75 : 1.2;
+    g.strokeStyle = `rgba(${Math.min(255, px[k] * sh) | 0},${Math.min(255, px[k + 1] * sh) | 0},${Math.min(255, px[k + 2] * sh) | 0},0.5)`;
+    g.lineWidth = 1; const a = r() * 6.283, l = 1.5 + r() * 2.5;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  // fringe at the short ends, on a transparent margin
+  g.clearRect(0, 0, W, 14); g.clearRect(0, H - 14, W, 14);
+  g.fillStyle = CREAM;
+  for (let x = 16; x < W - 16; x += 6) { g.fillRect(x, 2 + r() * 4, 2, 14); g.fillRect(x, H - 16, 2, 12 + r() * 4); }
+  return tex(c);
+}
+
 // Je suis le spectre d'une rose que tu portais hier au bal.

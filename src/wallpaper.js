@@ -10,7 +10,7 @@ const rnd = seed => () => { seed = (seed * 16807) % 2147483647; return (seed - 1
 export function wallpaperCanvas(W = 760, H = 950, seed = 3) {
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d'), r = rnd(seed);
-  const GROUND = '#163d24', DEEP = '#133520', GOLD = '#c2a15c', GOLD_DIM = 'rgba(194,161,92,0.45)', LEAF = '#5f7d55';
+  const GROUND = '#0f2b19', DEEP = '#0d2616', GOLD = '#c2a15c', GOLD_DIM = 'rgba(194,161,92,0.45)', LEAF = '#5f7d55';
   // the cartouche centres of one repeat: the middle, and the half-drop at the corners
   const centres = [[W / 2, H / 2], [0, 0], [W, 0], [0, H], [W, H]];
   const RX = W * 0.38, RY = H * 0.32;              // wide cartouches: most of the wall is plain ground
@@ -30,7 +30,7 @@ export function wallpaperCanvas(W = 760, H = 950, seed = 3) {
   // no lattice over the ground: it is almost all plain tone
   // the trellis: a double gilt line round each cartouche, the dark field inside
   for (const [cx, cy] of centres) {
-    cartouche(cx, cy, 1.0); g.strokeStyle = 'rgba(194,161,92,0.7)'; g.lineWidth = 4; g.stroke();   // bold enough to read across a room
+    cartouche(cx, cy, 1.0); g.strokeStyle = 'rgba(194,161,92,0.5)'; g.lineWidth = 4; g.stroke();   // bold enough to read across a room
     cartouche(cx, cy, 0.95); g.fillStyle = DEEP; g.fill();
   }
   // the vensels where four cartouches meet: a tall ogee arch pointed top
