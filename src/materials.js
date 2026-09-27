@@ -307,11 +307,11 @@ vec3 memoryWall(float h, float y, int oct, out float gloss){
   return col;
 }
 
-// ── ACCEPTANCE: pale plaster, warmed to honey ──────────────────────────────
+// ── ACCEPTANCE: pale plaster ────────────────────────────────────────────────
 float acceptHeight(float h, float y){ return 0.3 * vnoise(vec2(h, y) * 6.0); }
 vec3 acceptWall(float h, float y, int oct, out float gloss){
   gloss = 0.12;
-  return vec3(0.80, 0.72, 0.56) * (0.85 + 0.2 * fbm(vec2(h, y) * 0.9, oct));
+  return vec3(0.74, 0.74, 0.70) * (0.85 + 0.2 * fbm(vec2(h, y) * 0.9, oct));
 }
 
 float wallHeight(float h, float y, vec3 z){
@@ -581,7 +581,7 @@ void main(){
 
   vec3 matteFear = vec3(0.66, 0.68, 0.64);
   vec3 matteMem  = vec3(0.07, 0.07, 0.06);              // smoke-darkened ceiling
-  vec3 matteAcc  = vec3(0.94, 0.89, 0.72);   // warmed to honey, with the fog and dust light
+  vec3 matteAcc  = vec3(0.92, 0.92, 0.89);
   vec3 matte = (matteFear * z.x + matteMem * z.y + matteAcc * z.z) * ceilingAge(p, oct);
   matte = mix(matte * vec3(0.8, 0.74, 0.62), matte, pow(vAO, 0.7));   // yellowed soot toward the walls
   matte *= pow(vAO, 1.8);                                             // corner shadow

@@ -12,6 +12,7 @@ import { buildClockNook } from './eggs.js';
 import { createRoseCounter, buildRoseArch, findArchSpot, GRAIN_OPEN_MS } from './roses.js';
 import { showCard } from './card.js';
 import { createPetals } from './petals.js';
+import { createPropKit } from './props.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
 // Everything that makes the labyrinth respond to the visitor on the way from
@@ -80,6 +81,7 @@ const SEED_SCATTER = CONSPACE_SEED ^ 0x5ca7;
 const SEED_POSTER = CONSPACE_SEED ^ 0x7057;
 const SEED_SOULQ = CONSPACE_SEED ^ 0x50a1;
 const SEED_EGG = CONSPACE_SEED ^ 0xe66c;
+const SEED_PROPS = CONSPACE_SEED ^ 0x9e05;
 const EGG_BAND = new Set([4, 5, 10, 11]);   // the corridor lattice, mirrored from world.js
 const SOUL_COLORS = [0xffd27a, 0x5dff8a, 0xd0202a]; // someone close · a child · a grown-up
 
@@ -195,29 +197,28 @@ function placardTexture(lines) {
 // Three or four thin scratches, slanted up and to the right, as if a nail was
 // dragged along the plaster in the direction of travel.
 function scratchTexture() {
-  // a scratched arrow: two jagged shafts gouged toward the right, and a head
-  // of two short strokes where they end, so the way reads at a glance
+  // three nail scratches dragged along the plaster toward the right: each
+  // starts as a hairline and bites deeper as it goes, ending in a small
+  // chipped gouge. The way reads only to someone looking for it.
   const c = document.createElement('canvas');
   c.width = 256; c.height = 128;
   const ctx = c.getContext('2d');
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  const jag = (x0, y0, x1, y1, w) => {                 // many tiny segments with jitter
-    ctx.lineWidth = w;
-    ctx.globalAlpha = 0.7 + Math.random() * 0.3;
-    ctx.beginPath(); ctx.moveTo(x0, y0);
-    const n = Math.max(4, Math.round(Math.hypot(x1 - x0, y1 - y0) / 8));
-    for (let s = 1; s <= n; s++) {
-      const t = s / n;
-      ctx.lineTo(x0 + (x1 - x0) * t + (Math.random() - 0.5) * 2, y0 + (y1 - y0) * t + (Math.random() - 0.5) * 2.6);
+  ctx.strokeStyle = '#ffffff'; ctx.fillStyle = '#ffffff';
+  ctx.lineCap = 'round';
+  for (let k = 0; k < 3; k++) {
+    let x = 30 + k * 10 + Math.random() * 8, y = 48 + k * 15 + Math.random() * 4;
+    const end = 190 + k * 8 + Math.random() * 18;
+    while (x < end) {                                   // tapering: hairline to gouge
+      const t = (x - 30) / (end - 30);
+      const nx = x + 5 + Math.random() * 5, ny = y - 0.5 + (Math.random() - 0.5) * 1.8;
+      ctx.lineWidth = 0.6 + t * t * 4.2;
+      ctx.globalAlpha = 0.25 + t * 0.65;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(nx, ny); ctx.stroke();
+      x = nx; y = ny;
     }
-    ctx.stroke();
-  };
-  const tip = [226, 64];
-  jag(24, 58, tip[0] - 8, tip[1] - 2, 6);
-  jag(46, 76, tip[0] - 26, tip[1] + 8, 4);
-  jag(tip[0] - 50, tip[1] - 38, tip[0], tip[1], 7);   // the head
-  jag(tip[0] - 50, tip[1] + 38, tip[0], tip[1], 7);
+    ctx.globalAlpha = 0.8;                              // the chip where the nail stopped
+    ctx.beginPath(); ctx.ellipse(x + 1, y + 1, 3.2, 2, 0.4, 0, 7); ctx.fill();
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -285,6 +286,7 @@ export class SoulPath {
     this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
     this.roses = createRoseCounter(this.total);
     this.petals = createPetals(scene, camera, quality);
+    this.props = createPropKit(atmo);   // what each stage leaves along its corridors
     this.roses.set(0, t('rosesLabel', { n: 0, total: this.total }));
     this.finale = null;
     this.chunkStuff = new Map();    // chunk key -> { group, writings[], doors[], kitchen }
@@ -298,7 +300,7 @@ export class SoulPath {
       map: scratchTexture(), color: MARK_COLOR, transparent: true, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -2, fog: true,
     });
-    const markGeo = new THREE.PlaneGeometry(0.6, 0.3);
+    const markGeo = new THREE.PlaneGeometry(0.5, 0.25);
     this.marks = Array.from({ length: MARK_POOL }, () => {
       const m = new THREE.Mesh(markGeo, this.markMat.clone());   // own opacity, shared texture
       m.visible = false;
@@ -347,6 +349,8 @@ export class SoulPath {
       const segs = orig(x, z);
       for (const d of this._doorsNear(x, z)) { segs.push(...d.walls); if (!d.open) segs.push(d.seg); }
       if (this.stage.stage === 0) for (const st of this.chunkStuff.values()) for (const b of st.ward?.plan.boxes || [])
+        if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
+      for (const st of this.chunkStuff.values()) for (const b of st.props?.boxes || [])
         if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
       return segs;
     };
@@ -467,6 +471,9 @@ export class SoulPath {
     // ── scattered things: candles, teapots, cups. The closer the portal into
     // the next stage, the more of them, so they thicken into a trail.
     stuff.scatter = this._buildScatter(group, cx, cz);
+    stuff.reserved = taken;
+    if (cp) taken.add(cellKey(cellOf(cp.x), cellOf(cp.z)));
+    stuff.props = this._buildProps(group, cx, cz, taken);
 
     // ── presence doors on this chunk's west and north edge crossings.
     // Never in the spawn chunk, so nobody starts boxed in.
@@ -792,11 +799,51 @@ export class SoulPath {
   }
 
   // After a stage change the trail must lead to the next portal: rebuild it.
+  // Things the stage leaves along its corridors (props.js): spots against a
+  // wall on the corridor lattice, kept apart, clear of works, writings,
+  // posters, the hospital's islands, portals and grandmother's room; in the
+  // light also spots in the air for lace and cranes. Pure function of the
+  // chunk, the visit's seed and the stage.
+  _buildProps(group, cx, cz, reserved) {
+    const st = this.stage.stage, low = this.quality.tier === 0;
+    const rp = mulberry32(hash2i(SEED_PROPS ^ (st * 7919), cx, cz));
+    const ward = this._wardCells.get(cx + ':' + cz);
+    const avoid = [];
+    for (const p of portalPlan(cx, cz)) avoid.push([cellOf(p.x), cellOf(p.z), 2]);
+    if (st === 1) { const k = kitchenPlan(cx, cz); if (k) avoid.push([cellOf(k.x), cellOf(k.z), 5]); }
+    const free = (gi, gj) => !solidAtGlobal(gi, gj) && !reserved.has(cellKey(gi, gj)) && !ward?.has(cellKey(gi, gj))
+      && avoid.every(([ai, aj, r]) => Math.max(Math.abs(gi - ai), Math.abs(gj - aj)) > r);
+    const wallSpots = [], airSpots = [];
+    for (let j = 1; j < CHUNK - 1; j++) for (let i = 1; i < CHUNK - 1; i++) {
+      if (!EGG_BAND.has(i) && !EGG_BAND.has(j)) continue;              // corridor lattice only
+      const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+      if (!free(gi, gj)) continue;
+      airSpots.push({ gi, gj });
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+        if (solidAtGlobal(gi + di, gj + dj)) wallSpots.push({ gi, gj, di, dj });
+    }
+    const choose = (list, n, gap) => {
+      const out = [];
+      for (let tries = 0; tries < 60 && out.length < n && list.length; tries++) {
+        const s = list[Math.floor(rp() * list.length)];
+        if (out.every(o => Math.max(Math.abs(o.gi - s.gi), Math.abs(o.gj - s.gj)) >= gap)) out.push(s);
+      }
+      return out;
+    };
+    const nWall = st === 2 ? (low ? 3 : 5) : (low ? 4 : 7);
+    const walls = choose(wallSpots, nWall, 3).map(s => ({
+      x: centreOf(s.gi) + s.di * CELL / 2, z: centreOf(s.gj) + s.dj * CELL / 2, nx: -s.di, nz: -s.dj, r: rp() }));
+    const air = st === 2 ? choose(airSpots, low ? 2 : 4, 4).map(s => ({ x: centreOf(s.gi), z: centreOf(s.gj), r: rp() })) : [];
+    return this.props.build(group, st, walls, air);
+  }
+
   _rebuildScatter() {
     for (const [key, st] of this.chunkStuff) {
       st.scatter?.dispose();
       const [cx, cz] = key.split(':').map(Number);
       st.scatter = this._buildScatter(st.group, cx, cz);
+      st.props?.dispose();
+      st.props = this._buildProps(st.group, cx, cz, st.reserved || new Set());
     }
   }
 
@@ -1190,6 +1237,7 @@ export class SoulPath {
     this._time = time;
     this._tickMarks(time);
     this._tickCandles(time);
+    this.props.update(time, this.player.pos.x, this.player.pos.y);
     const P = this.player, cam = this.camera;
     const memoryStage = this.stage.stage === 1;   // grandmother's room only exists here
     const speed = P.vel.length();
