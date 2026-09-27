@@ -604,7 +604,8 @@ export function buildScatter(group, items) {
   return {
     count: items.length,
     lights: items.map(it => ({ x: it.x, y: 0.28, z: it.z, col: it.flame })), // for the walls to catch
-    dispose() { for (const name in meshes) { group.remove(meshes[name]); meshes[name].dispose(); } }, // frees instance buffers only
+    items, meshes,                     // soulpath dims flames in place: instance i is items[i]
+    dispose() { this.disposed = true; for (const name in meshes) { group.remove(meshes[name]); meshes[name].dispose(); } }, // frees instance buffers only
   };
 }
 
