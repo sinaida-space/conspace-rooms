@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { roundedBox } from './geom.js';
-import { CEIL_H } from './world.js';
+import { CEIL_H, CELL, solidAtGlobal } from './world.js';
 import { t, getLang } from './i18n.js';
 
 // rounded edges: radius a third of the thinnest side, capped at 4 cm
@@ -456,7 +456,13 @@ export function buildKitchen(parent, X, Z) {
   blob(1.3, 0.8, tv.x, 0.013, tv.z, 0.85);
 
   // ── a tear-off calendar on the back wall, opposite the television ──
+  // rooms differ in size: find the back wall behind it and hang it there
   const cal = { x: -0.9, y: 1.5, z: -2.05 };
+  group.updateMatrixWorld(true);
+  for (let t = 0.3; t < 7; t += 0.02) {
+    const p = group.localToWorld(new THREE.Vector3(cal.x, cal.y, -t));
+    if (solidAtGlobal(Math.floor(p.x / CELL), Math.floor(p.z / CELL))) { cal.z = -t + 0.035; break; }   // its back against the paper
+  }
   add(box(0.14, 0.2, 0.03), wood, cal.x, cal.y, cal.z);
   const calFace = add(new THREE.PlaneGeometry(0.13, 0.19), new THREE.MeshBasicMaterial({ map: T.calendar, fog: true }), cal.x, cal.y, cal.z + 0.017, false);
   calFace.receiveShadow = false;
