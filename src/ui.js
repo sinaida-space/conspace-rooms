@@ -190,6 +190,8 @@ export class UI {
         buttons.forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
         this.selectedMode = btn.dataset.mode;
+        // the choice is made: bring ВОЙТИ into view
+        $('btn-enter')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
       });
     });
   }

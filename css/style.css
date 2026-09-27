@@ -202,10 +202,13 @@ body::after {
 }
 #mode-select button.mode-secondary .mode-legend { color: var(--dim); }
 #mode-select button.mode-secondary:hover { border-color: var(--fg); }
-#mode-select button.mode-secondary.selected {
-  color: var(--fg); background: rgba(63,138,90,0.18); border-color: var(--dim);
+/* every mode, chosen or pressed, inverts the same way: bright ground, dark type */
+#mode-select button.selected, #mode-select button.mode-secondary.selected,
+#mode-select button:active, #welcome .btn-enter:active {
+  color: var(--bg); background: var(--accent); border-color: var(--accent);
 }
-#mode-select button.mode-secondary.selected .mode-legend { color: var(--dim); }
+#mode-select button.mode-secondary.selected .mode-legend,
+#mode-select button:active .mode-legend { color: rgba(1,8,5,0.75); }
 
 .gesture-note {
   color: var(--dim);
