@@ -734,7 +734,15 @@ export class SoulPath {
     let i = 0;
     const type = setInterval(() => { tEl.textContent = text.slice(0, ++i); if (i >= text.length) clearInterval(type); }, 45);
     requestAnimationFrame(() => el.classList.add('visible'));
-    setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 1200); }, 11000);
+    // a tap anywhere but the controls puts it away; otherwise it fades on its own
+    const close = () => {
+      removeEventListener('pointerdown', onTap, true);
+      clearInterval(type);
+      el.classList.remove('visible'); setTimeout(() => el.remove(), 1200);
+    };
+    const onTap = e => { if (!e.target.closest?.('button, #pad, #hud-toolbar, a')) close(); };
+    setTimeout(() => { if (el.isConnected) addEventListener('pointerdown', onTap, true); }, 400);   // not the tap that set it off
+    setTimeout(() => { if (el.isConnected && el.classList.contains('visible')) close(); }, 11000);
   }
 
   _writeOn(w) {
