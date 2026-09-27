@@ -622,17 +622,6 @@ vec4 troffer(vec2 m){
   return vec4(mix(metal * 0.5, metal, 1.0 - inner), glow);
 }
 
-// MEMORY: a fabric pendant shade seen from below: dark rim, glowing inside,
-// a small hot bulb at the centre.
-vec4 pendant(vec2 m){
-  float r = length(m);
-  if (r > 0.3) return vec4(0.0);
-  float rim = smoothstep(0.26, 0.28, r);
-  float inside = smoothstep(0.26, 0.04, r);
-  float bulb = smoothstep(0.075, 0.03, r);
-  return vec4(vec3(0.05, 0.02, 0.02), mix(0.25 + 0.5 * inside, 0.05, rim) + bulb);
-}
-
 // ACCEPTANCE: a square frosted panel flush with the ceiling, soft edges.
 vec4 frosted(vec2 m){
   vec2 a = abs(m);
@@ -676,7 +665,7 @@ void main(){
   vec4 fx = vec4(0.0);
   if (on > 0.5) {
     if (z.x > 0.001) fx += z.x * troffer(m);
-    if (z.y > 0.001) fx += z.y * pendant(m);
+    // MEMORY: no disc painted here; a real chandelier hangs below (chandeliers.js)
     if (z.z > 0.001) fx += z.z * frosted(m);
   }
   float body = step(0.001, fx.r + fx.g + fx.b + fx.a);

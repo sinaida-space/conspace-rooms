@@ -3,6 +3,7 @@ import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, 
 import { zoneWeights, ORIGIN, ZONE } from './zones.js';
 import { t, getLang } from './i18n.js';
 import { boardTexture, museumTexture, carpetTexture } from './boards.js';
+import { createChandeliers } from './chandeliers.js';
 import { EYE_HEIGHT } from './player.js';
 import { buildKitchen, createKitchenRig, buildScatter, tickCandles } from './kitchen.js';
 import { baroqueFrame } from './frames.js';
@@ -272,7 +273,8 @@ export class SoulPath {
     this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
     this.roses = createRoseCounter(this.total);
     this.petals = createPetals(scene, camera, quality);
-    this.props = createPropKit(atmo);   // what each stage leaves along its corridors
+    this.props = createPropKit(atmo);
+    this.chandeliers = createChandeliers(scene);   // grandmother's ice-glass chandeliers, red rooms only   // what each stage leaves along its corridors
     this.roses.set(0, t('rosesLabel', { n: 0, total: this.total }));
     this.finale = null;
     this.chunkStuff = new Map();    // chunk key -> { group, writings[], doors[], kitchen }
@@ -1358,6 +1360,7 @@ export class SoulPath {
     this._tickMarks(time);
     this._tickCandles(time);
     this.props.update(time, this.player.pos.x, this.player.pos.y);
+    this.chandeliers.update(time, this.camera.position, this.stage.stage === 1);
     const P = this.player, cam = this.camera;
     const memoryStage = this.stage.stage === 1;   // grandmother's room only exists here
     const speed = P.vel.length();
