@@ -365,6 +365,8 @@ export class SoulPath {
       for (const d of this._doorsNear(x, z)) { segs.push(...d.walls); if (!d.open) segs.push(d.seg); }
       if (this.stage.stage === 0) for (const st of this.chunkStuff.values()) for (const b of (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || []))
         if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
+      if (this.stage.stage === 1) for (const st of this.chunkStuff.values()) for (const b of st.toyBoxes || [])
+        if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
       for (const st of this.chunkStuff.values()) for (const b of st.props?.boxes || [])
         if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
       return segs;
@@ -490,13 +492,28 @@ export class SoulPath {
     };
     // under most of grandmother's rooms a big one, the television and table on it
     const bigRug = kRoom && rr() < 0.7;                 // laid below, once the room shows where its television stands
-    for (let k = 0, n = stuff.rugs.length + 1 + (rr() < 0.5 ? 1 : 0); k < 12 && stuff.rugs.length < n; k++) {
+    for (let k = 0, n = stuff.rugs.length + (rr() < 0.6 ? 1 : 0); k < 12 && stuff.rugs.length < n; k++) {   // one rug, and not in every chunk
       const gi = cx * CHUNK + 3 + Math.floor(rr() * (CHUNK - 6)), gj = cz * CHUNK + 3 + Math.floor(rr() * (CHUNK - 6));   // clear of the chunk's edges: no rug meets a neighbour's
       let open = true;
       for (let b = -2; b <= 2 && open; b++) for (let a = -1; a <= 1 && open; a++) if (solidAtGlobal(gi + a, gj + b)) open = false;
       if (!open || (kRoom && Math.hypot(centreOf(gi) - kRoom.x, centreOf(gj) - kRoom.z) < 4.5)) continue;
       if (stuff.rugs.some(m => Math.abs(m.position.x - centreOf(gi)) < 2.6 && Math.abs(m.position.z - centreOf(gj)) < 3.8)) continue;   // never over another rug   // not over grandmother's room
-      addRug(centreOf(gi), centreOf(gj), 1.8, 3.0, (rr() - 0.5) * 0.3);   // long side along z, where the room is open
+      const rx = centreOf(gi), rz = centreOf(gj);
+      addRug(rx, rz, 1.8, 3.0, (rr() - 0.5) * 0.3);   // long side along z, where the room is open
+      // and a child's things on it and round it, as if play had just stopped
+      const names = ['nevalyashka', 'pyramid', 'yula', 'matryoshki', 'ball', 'horse'];
+      const toys = [];
+      for (let t = 0, n = 3 + Math.floor(rr() * 3); t < n; t++) {
+        const name = names[Math.floor(rr() * names.length)];
+        const on = t < 2;                                  // a couple on the rug, the rest strayed off it
+        const x = rx + (rr() - 0.5) * (on ? 1.2 : 2.8), z = rz + (rr() - 0.5) * (on ? 2.2 : 4.0);
+        if (solidAtGlobal(cellOf(x), cellOf(z)) || toys.some(o => Math.hypot(o.x - x, o.z - z) < 0.5)) continue;
+        toys.push({ name, x, z, yaw: rr() * 6.283 });
+      }
+      const tk = this.props.toys(group, toys);
+      stuff.toys = (stuff.toys || []).concat(tk.meshes);
+      for (const m of tk.meshes) m.visible = this.stage.stage === 1;
+      stuff.toyBoxes = (stuff.toyBoxes || []).concat(tk.boxes);
     }
 
     // ── the hospital's leftovers: one small island in some rooms, off the
@@ -1625,7 +1642,7 @@ export class SoulPath {
       const target = { fear: +(this.stage.stage === 0), memory: +(this.stage.stage === 1), accept: +(this.stage.stage === 2) };
       for (const st of this.chunkStuff.values()) for (const w of st.writings) { w.zone = target; this._writeOn(w); }
       for (const st of this.chunkStuff.values()) for (const p of st.posters || []) this._printPoster(p);
-      for (const st of this.chunkStuff.values()) for (const m of (st.carpets || []).concat(st.rugs || [])) m.visible = this.stage.stage === 1;
+      for (const st of this.chunkStuff.values()) for (const m of (st.carpets || []).concat(st.rugs || [], st.toys || [])) m.visible = this.stage.stage === 1;
       this._rebuildScatter();
       for (const st of this.chunkStuff.values()) if (st.ward) st.ward.group.visible = this.stage.stage === 0;
       for (const st of this.chunkStuff.values()) if (st.beds) st.beds.group.visible = this.stage.stage === 0;

@@ -443,6 +443,28 @@ export function createPropKit(atmo) {
         dispose() { for (const m of meshes) { group.remove(m); m.geometry.dispose(); } },
       };
     },
+    // A child's corner in the red rooms: toys left on and round a rug.
+    // items: [{ name, x, z, yaw }] from MEMORY. One mesh, their shadows.
+    toys(group, items) {
+      const parts = [], feet = [], boxes = [];
+      for (const it of items) {
+        const d = MEMORY[it.name], geo = geoOf(1, it.name);
+        if (!geo.boundingBox) geo.computeBoundingBox();
+        parts.push(geo.clone().applyMatrix4(M(it.x, 0.004, it.z, 0, it.yaw)));
+        feet.push({ x: it.x, z: it.z, w: d.w, d: d.depth, rot: it.yaw, k: 0.7, h: geo.boundingBox.max.y });
+        if (d.solid) boxes.push(box(it.x, it.z, d.w, d.depth, it.yaw));
+      }
+      const meshes = [];
+      if (parts.length) {
+        const m = new THREE.Mesh(mergeGeometries(parts), mat);
+        for (const p of parts) p.dispose();
+        m.userData.keepMaterial = true;
+        group.add(m); meshes.push(m);
+      }
+      const shade = contactShadows(feet);
+      if (shade) { group.add(shade); meshes.push(shade); }
+      return { meshes, boxes };
+    },
     update(time, px, pz) { uniforms.uTime.value = time; uniforms.uPlayer.value.set(px, 0, pz); },
   };
 }
