@@ -259,7 +259,6 @@ function posterTexture(text, n, stage) {
   g.fillText(line, 48, y);
   g.font = '18px "Departure Mono", monospace';
   g.fillText('> _', 48, H - 70);
-  g.fillText('[ ENTER ]', W - 170, H - 70);
   g.shadowBlur = 0;
   for (let yy = 0; yy < H; yy += 3) { g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, yy, W, 1); } // scanlines of the print
   for (let i = 0; i < 1400; i++) { g.fillStyle = `rgba(255,255,255,${Math.random() * 0.05})`; g.fillRect(Math.random() * W, Math.random() * H, 2, 2); }
