@@ -276,9 +276,28 @@ const TULLE_FRAG = /* glsl */`
 #include <common>
 #include <fog_pars_fragment>
 varying vec2 vUv;
+// Lace tulle: a fine net, gathered into soft folds, a band of lace flowers
+// above a scalloped hem, sprigs scattered over the rest. Where the folds
+// crowd the cloth doubles and reads denser.
+float ring(vec2 p, float r, float w){ return smoothstep(w, 0.0, abs(length(p) - r)); }
 void main(){
-  float weave = 0.75 + 0.25 * sin(vUv.x * 420.0) * sin(vUv.y * 380.0);
-  gl_FragColor = vec4(vec3(0.9, 0.9, 0.88) + 0.1 * weave, 0.45 * weave);   // a shade darker than the light, so the folds read
+  vec2 uv = vUv;
+  float hem = 0.018 + 0.016 * abs(sin(uv.x * 3.14159 * 26.0));      // scallops along the bottom
+  if (uv.y < hem) discard;
+  float folds = 0.5 + 0.5 * sin(uv.x * 58.0 + sin(uv.x * 11.0) * 2.4);
+  vec2 n = abs(fract(uv * vec2(260.0, 520.0)) - 0.5);                  // the net's threads
+  float net = smoothstep(0.36, 0.5, max(n.x, n.y));
+  // lace flowers: a band near the hem, sparse sprigs above
+  vec2 cell = vec2(1.0 / 13.0, 0.055);
+  vec2 q = (fract(uv / cell) - 0.5) * cell * vec2(1.0, 2.2) * 30.0;
+  float flower = max(ring(q, 0.42, 0.09), ring(q, 0.18, 0.08));
+  for (int k = 0; k < 6; k++) { float a = float(k) * 1.0472; flower = max(flower, ring(q - vec2(cos(a), sin(a)) * 0.62, 0.2, 0.07)); }
+  float band = smoothstep(0.24, 0.2, uv.y) * step(hem + 0.02, uv.y);
+  float sprig = step(0.8, fract(sin(dot(floor(uv / cell), vec2(12.9898, 78.233))) * 43758.5)) * step(0.3, uv.y);
+  float motif = flower * max(band, sprig * 0.8);
+  float a = 0.16 + 0.22 * net + 0.2 * folds + 0.4 * motif;
+  vec3 col = vec3(0.9, 0.9, 0.87) * (0.84 + 0.16 * folds) + 0.08 * motif;   // a shade darker than the light, so the folds read
+  gl_FragColor = vec4(col, a);
   #include <fog_fragment>
 }`;
 
@@ -308,7 +327,15 @@ export function createPropKit(atmo) {
     return geos.get(key);
   };
   const mat = atmo.prop({ vertexColors: true, rust: 0.15 });
-  const windowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true });
+  // the light of a window: soft toward the frame, never a white slab
+  const windowTex = (() => {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 96;
+    const g = c.getContext('2d'), gr = g.createRadialGradient(32, 40, 4, 32, 48, 60);
+    gr.addColorStop(0, '#dfe4dc'); gr.addColorStop(1, '#8e968f');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 96);
+    return new THREE.CanvasTexture(c);
+  })();
+  const windowMat = new THREE.MeshBasicMaterial({ map: windowTex, color: 0xc8cec8, fog: true });
   const uniforms = { uTime: { value: 0 }, uPlayer: { value: new THREE.Vector3() } };
   const fogU = THREE.UniformsLib.fog;
   const floatMat = new THREE.ShaderMaterial({
@@ -361,7 +388,15 @@ export function createPropKit(atmo) {
             const g = shape(put => put(new THREE.BoxGeometry(bw, bh, 0.03), 0xd8d2c4, 0.1));
             parts.push(g.applyMatrix4(M(s.x + s.nx * 0.03, by, s.z + s.nz * 0.03, 0, rot)));
           }
-          const tg = new THREE.PlaneGeometry(1.2, 2.5, 12, 20).applyMatrix4(M(s.x + s.nx * 0.14, 1.3, s.z + s.nz * 0.14, 0, rot));
+          // the rod the tulle hangs from: a brass-coloured pole on two
+          // brackets, a knob at each end, and small rings along it
+          parts.push(shape(put => {
+            put(cyl(0.012, 0.012, 1.55, 10), 0xb89a5a, 0.6, M(0, 0, 0, 0, 0, Math.PI / 2));
+            for (const x of [-0.8, 0.8]) put(sphere(0.028, 10, 8), 0xc9a862, 0.7, M(x, 0, 0));
+            for (const x of [-0.62, 0.62]) put(new THREE.BoxGeometry(0.018, 0.018, 0.16), 0x8a7440, 0.5, M(x, 0, -0.08));
+            for (let k = 0; k < 11; k++) put(new THREE.TorusGeometry(0.02, 0.004, 4, 10), 0xb89a5a, 0.6, M(-0.55 + k * 0.11, -0.005, 0, 0, Math.PI / 2));
+          }).applyMatrix4(M(s.x + s.nx * 0.16, 2.6, s.z + s.nz * 0.16, 0, rot)));
+          const tg = new THREE.PlaneGeometry(1.2, 2.5, 12, 20).applyMatrix4(M(s.x + s.nx * 0.14, 1.33, s.z + s.nz * 0.14, 0, rot));
           tg.setAttribute('aPhase', new THREE.Float32BufferAttribute(new Array(tg.attributes.position.count).fill(s.r * 40), 1));
           tulles.push(tg);
           continue;
