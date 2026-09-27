@@ -217,17 +217,16 @@ export class UI {
     const labels = t('padLabels');
     el.innerHTML = `
       <div class="pad-arrows">
-        <div class="pad-v tape">
+        <div class="pad-lift"><div class="pad-v tape">
           <button type="button" data-key="ArrowUp" aria-label="${labels[0]}">▲</button>
-          <button type="button" data-key="ArrowDown" aria-label="${labels[1]}">▼</button>
-        </div>
-        <div class="pad-h tape">
+        </div></div>
+        <div class="pad-lift pad-top"><div class="pad-h tape">
           <button type="button" data-key="ArrowLeft" aria-label="${labels[2]}">◄</button>
-          <span></span>
+          <button type="button" data-key="ArrowDown" aria-label="${labels[1]}">▼</button>
           <button type="button" data-key="ArrowRight" aria-label="${labels[3]}">►</button>
-        </div>
+        </div></div>
       </div>
-      <button type="button" class="pad-inspect"><span class="pi-open">${t('padInspect')}</span><span class="pi-close">${t('padBack')}</span></button>`;
+      <div class="pad-inspect-lift"><button type="button" class="pad-inspect"><span class="pi-open">${t('padInspect')}</span><span class="pi-close">${t('padBack')}</span></button></div>`;
     for (const b of el.querySelectorAll('[data-key]')) {
       const set = v => e => {
         e.preventDefault();
