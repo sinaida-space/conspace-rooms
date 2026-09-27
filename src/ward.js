@@ -183,6 +183,37 @@ export function wardPlan(cx, cz, reserved, withModels = true) {
   return { anchor, items, sign, lamp, cells, boxes, shadow };
 }
 
+// A ward in the open: where a room is wide (every cell two steps round a
+// spot is open floor), hospital beds stand in a row, a bed's width apart,
+// each a little askew. Up to four a chunk, only in rooms, never on the
+// corridor lattice or on cells something else has taken.
+export function bedsPlan(cx, cz, reserved) {
+  const r = mulberry32(hash2i(SEED_WARD ^ 0x5bed, cx, cz));
+  if (r() > 0.7) return null;
+  const open = (gi, gj) => !solidAtGlobal(gi, gj) && !reserved.has(cellKey(gi, gj));
+  const spots = [];
+  for (let j = 2; j < CHUNK - 2; j++) for (let i = 2; i < CHUNK - 2; i++) {
+    const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+    if (onBand(gi, gj) || Math.hypot(centre(gi) - ORIGIN.x, centre(gj) - ORIGIN.z) < 6) continue;
+    let ok = true;
+    for (let b = -2; b <= 2 && ok; b++) for (let a = -2; a <= 2 && ok; a++) if (!open(gi + a, gj + b)) ok = false;
+    if (ok) spots.push([gi, gj]);
+  }
+  if (!spots.length) return null;
+  const [gi0, gj0] = spots[Math.floor(r() * spots.length)];
+  const alongX = r() < 0.5;                                  // the row runs along x or along z
+  const beds = [], cells = new Set();
+  for (let k = -1; k <= 2 && beds.length < 4; k++) {
+    const gi = gi0 + (alongX ? k : 0), gj = gj0 + (alongX ? 0 : k);
+    if (!spots.some(([a, b]) => a === gi && b === gj) && k !== 0) continue;
+    const x = centre(gi), z = centre(gj);
+    const rot = (alongX ? Math.PI / 2 : 0) + (r() - 0.5) * 0.3;   // side by side across the row, each pulled a little askew
+    beds.push({ x, z, rot, flip: r() < 0.5, sheet: r() < 0.6, box: orientedBox(x, z, 2.0, 0.92, rot) });
+    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) cells.add(cellKey(gi + a, gj + b));
+  }
+  return beds.length ? { beds, cells, boxes: beds.map(b => b.box) } : null;
+}
+
 // Four wall segments around a w×d rectangle turned by rot (local X is w).
 function orientedBox(x, z, w, d, rot) {
   const c = Math.cos(rot), s = Math.sin(rot);
@@ -509,6 +540,35 @@ export function createWardKit(atmo, quality) {
 
   return {
     withModels,
+    // a row of beds from bedsPlan: the model where it has loaded (a couch
+    // stands in on the lowest tier), a sheet on some, a shadow under each
+    buildBeds(group, plan) {
+      const geos = [];
+      const shade = contactShadows(plan.beds.map(b => ({ x: b.x, z: b.z, w: 2.0, d: 0.92, rot: b.rot, h: 0.75 })));
+      if (shade) group.add(shade);
+      for (const b of plan.beds) {
+        if (!withModels) geos.push(...place(ANCHOR_DRAW.gurney(), b.x, 0, b.z, b.rot));
+        else if (b.sheet) geos.push(...place(sheetParts(), b.x, 0, b.z, b.rot + (b.flip ? Math.PI : 0)));
+      }
+      if (geos.length) {
+        const mesh = new THREE.Mesh(mergeGeometries(geos), bodyMat);
+        for (const g of geos) g.dispose();
+        mesh.userData.keepMaterial = true;
+        group.add(mesh);
+      }
+      if (!withModels) return;
+      const add = m => {
+        if (!m || group.userData.gone) return;
+        for (const b of plan.beds) {
+          const mesh = new THREE.Mesh(m.bed.geometry, m.bed.material);
+          mesh.position.set(b.x, 0, b.z);
+          mesh.rotation.set(0, b.rot + (b.flip ? Math.PI : 0), 0);
+          mesh.userData.keep = true;
+          group.add(mesh);
+        }
+      };
+      if (ready) add(ready); else models.then(add).catch(() => {});
+    },
     build(group, plan) {
       const geos = [];
       const { anchor } = plan;

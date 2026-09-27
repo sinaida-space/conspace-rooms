@@ -8,7 +8,7 @@ import { buildKitchen, createKitchenRig, buildScatter, tickCandles } from './kit
 import { baroqueFrame } from './frames.js';
 import { buildDoorway, buildLightRays } from './doorway.js';
 import { artworkSlots } from './artworks.js';
-import { createWardKit, wardPlan, reserveSlot, reserveAround, cellKey } from './ward.js';
+import { createWardKit, wardPlan, bedsPlan, reserveSlot, reserveAround, cellKey } from './ward.js';
 import { buildClockNook } from './eggs.js';
 import { createRoseCounter, buildRoseArch, findArchSpot, GRAIN_OPEN_MS } from './roses.js';
 import { showCard } from './card.js';
@@ -323,7 +323,7 @@ export class SoulPath {
     world.wallSegmentsNear = (x, z) => {
       const segs = orig(x, z);
       for (const d of this._doorsNear(x, z)) { segs.push(...d.walls); if (!d.open) segs.push(d.seg); }
-      if (this.stage.stage === 0) for (const st of this.chunkStuff.values()) for (const b of st.ward?.plan.boxes || [])
+      if (this.stage.stage === 0) for (const st of this.chunkStuff.values()) for (const b of (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || []))
         if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
       for (const st of this.chunkStuff.values()) for (const b of st.props?.boxes || [])
         if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
@@ -348,6 +348,7 @@ export class SoulPath {
       this.scene.remove(stuff.group);
       stuff.group.userData.gone = true;               // a model still loading must not land here
       if (stuff.ward) stuff.ward.group.userData.gone = true;
+      if (stuff.beds) stuff.beds.group.userData.gone = true;
       this._wardCells.delete(key);
       stuff.group.traverse(o => {
         if (o.userData.keep) return;                  // shared scatter geometry and materials
@@ -447,6 +448,20 @@ export class SoulPath {
       wg.visible = this.stage.stage === 0;
       stuff.ward = { group: wg, plan };
       this._wardCells.set(cx + ':' + cz, plan.cells);
+      for (const c of plan.cells) taken.add(c);
+    }
+    // ── a row of beds wherever a room opens wide (hospital only)
+    const bp = bedsPlan(cx, cz, taken);
+    if (bp) {
+      const bg = new THREE.Group();
+      group.add(bg);
+      this.ward.buildBeds(bg, bp);
+      bg.visible = this.stage.stage === 0;
+      stuff.beds = { group: bg, plan: bp };
+      for (const c of bp.cells) taken.add(c);
+      const wc = this._wardCells.get(cx + ':' + cz) || new Set();   // candles and props keep off the beds too
+      for (const c of bp.cells) wc.add(c);
+      this._wardCells.set(cx + ':' + cz, wc);
     }
 
     // ── the clock nook: a nightstand against a corridor wall, memory ring only
@@ -576,7 +591,7 @@ export class SoulPath {
     const blocked = (x, z) => {
       for (const st of this.chunkStuff.values()) {
         for (const d of st.doors) for (const sg of [d.seg, ...d.walls]) if (segDist(x, z, sg.a, sg.b) < 0.6) return true;
-        for (const b of st.ward?.plan.boxes || []) if (Math.hypot(b.x - x, b.z - z) < b.r + 0.3) return true;
+        for (const b of (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || [])) if (Math.hypot(b.x - x, b.z - z) < b.r + 0.3) return true;
       }
       return false;
     };
@@ -1388,6 +1403,7 @@ export class SoulPath {
       for (const st of this.chunkStuff.values()) for (const m of st.carpets || []) m.visible = this.stage.stage === 1;
       this._rebuildScatter();
       for (const st of this.chunkStuff.values()) if (st.ward) st.ward.group.visible = this.stage.stage === 0;
+      for (const st of this.chunkStuff.values()) if (st.beds) st.beds.group.visible = this.stage.stage === 0;
     }
 
     // grandmother's room: light the nearest one, let candles and picture breathe
