@@ -5,6 +5,15 @@ import { UI, detectCapabilities } from './ui.js';
 import { t, applyStatic, setLang, langFromUrl } from './i18n.js';
 import { mixZone, SoulStage } from './zones.js';
 import { createClip, clipSupported } from './clip.js';
+import { installBugReport, setBugSource, bugTick, bugFrame } from './bugreport.js';
+
+installBugReport();   // R R R anywhere: a picture of the state to screenshot and send
+// F: full screen, on every screen and in every mode
+addEventListener('keydown', e => {
+  if (e.code !== 'KeyF' || e.repeat || e.metaKey || e.ctrlKey || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+});
 
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 scrollTo(0, 0);
@@ -77,6 +86,7 @@ async function boot() {
 
   const stage = new SoulStage(); // advanced only by walking through portals
   window.__app = { scene, camera, renderer, quality, stage };
+  setBugSource(canvas);
 
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight);
@@ -92,6 +102,7 @@ async function boot() {
     const dt = Math.min(clock.getDelta(), 0.05);
     elapsed += dt;
     quality.govern(dt);
+    bugTick(dt);
     audio = audio ?? window.__app.audio;
     let speed = 0;
     if (player) {
@@ -130,6 +141,7 @@ async function boot() {
     if (post) post.render(scene, camera, dt, elapsed, speed);
     else renderer.render(scene, camera);
     window.__app.clip?.frame();   // copy the frame while the drawing buffer still holds it
+    bugFrame();
   };
   renderer.setAnimationLoop(frame);
   window.__app.frame = frame;   // dev hook: step the world by hand (headless checks, hidden tabs)

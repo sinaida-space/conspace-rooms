@@ -33,11 +33,7 @@ export function createGallery() {
   const show = (text) => { if (text) line.textContent = text; attract.classList.remove('gone'); };
   const hide = () => attract.classList.add('gone');
 
-  addEventListener('keydown', e => {                 // F: fullscreen, for setups without a kiosk flag
-    if (e.code !== 'KeyF' || e.repeat) return;
-    if (document.fullscreenElement) document.exitFullscreen?.();
-    else document.documentElement.requestFullscreen?.().catch(() => {});
-  });
+  // F for full screen, for setups without a kiosk flag, is in main.js (every mode)
 
   return {
     params,
