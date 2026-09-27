@@ -18,7 +18,6 @@ any keyboard layout; the presses must come within three seconds.
 ## Secrets in the walk
 
 - **Walk backwards for 30 seconds** and you shrink to a child's height. Walk forwards for 25 seconds to grow back.
-- **Stand still for a minute in the light (acceptance stage)** and a nineteenth frame appears.
 - **Turn around** in front of a wall writing: some of them change behind your back.
 - **Stand still near a door** (up to 4.5 m away) for two seconds: it creaks open for a moment, then slams.
 - **All 18 works seen:** the arch of roses; walking through it opens the card of every question the souls asked.

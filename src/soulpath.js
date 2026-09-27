@@ -44,8 +44,7 @@ import { createPropKit } from './props.js';
 //                   away, and walking through it ends the walk with the card
 //                   of every question the souls asked (roses.js, card.js)
 //   secrets         walk backwards long enough and you shrink to a child's
-//                   height; grandmother's kitchen hides in the memory zone; in
-//                   acceptance, a minute of stillness hangs a nineteenth frame
+//                   height; grandmother's kitchen hides in the memory zone
 //
 // Integration: new SoulPath({...}) once the world exists, then update() every
 // frame after player/artworks updates.
@@ -72,7 +71,6 @@ const DOOR_HOLD = 4.2;           // seconds the light pours out before the door 
 const DOOR_SLAM = 0.22;          // seconds to slam shut
 const CHILD_AFTER = 30;          // seconds of walking backwards
 const CHILD_EYE = 0.98;
-const STILL_FOR_19 = 60;         // seconds of stillness in acceptance
 const SOUL_HOLD = 5;             // seconds a soul's question stays before another may open
 const SOUL_WALK = 3;             // metres walked between two souls
 const SOUL_STOP = 1.6;           // a soul drawn to a still visitor halts this far off
@@ -187,18 +185,6 @@ function scrawlTexture(text, zone) {
 }
 
 
-function placardTexture(lines) {
-  const c = document.createElement('canvas');
-  c.width = 320; c.height = 200;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#f4efe6'; ctx.fillRect(0, 0, c.width, c.height);
-  ctx.strokeStyle = '#c9c0ac'; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
-  ctx.textAlign = 'center'; ctx.fillStyle = '#171512';
-  ctx.font = '700 24px "Departure Mono", monospace'; ctx.fillText(lines[0], c.width / 2, 54);
-  ctx.font = '400 30px "Departure Mono", monospace'; ctx.fillText(lines[1], c.width / 2, 116);
-  ctx.fillStyle = '#8a8171'; ctx.font = '400 17px "Departure Mono", monospace'; ctx.fillText(lines[2], c.width / 2, c.height - 28);
-  return new THREE.CanvasTexture(c);
-}
 
 // Three or four thin scratches, slanted up and to the right, as if a nail was
 // dragged along the plaster in the direction of travel.
@@ -306,7 +292,6 @@ export class SoulPath {
 
     // secrets
     this._backT = 0; this._fwdT = 0; this.child = false;
-    this._stillT = 0; this.nineteenth = null;
     this._inKitchen = false;
     this._soulIdx = [0, 0, 0];            // next question per soul
     this._soulAt = -1e9; this._walked = SOUL_WALK; this._lastPos = null; // gate between souls
@@ -653,6 +638,7 @@ export class SoulPath {
   }
 
   _askSoul(cat, room, time) {
+    if (this.finale) return;                            // the tunnel has risen: no more questions
     this._soulAt = time; this._walked = 0;
     const qs = t('soulQuestions')[cat];
     const order = this._soulOrder(cat, qs.length);
@@ -691,6 +677,7 @@ export class SoulPath {
     arch.group.position.set(spot.x, 0, spot.z);
     arch.group.rotation.y = Math.atan2(-spot.dir[0], -spot.dir[1]);   // its face toward the visitor
     this.scene.add(arch.group);
+    arch.fitToWalls((x, z) => solidAtGlobal(cellOf(x), cellOf(z)));
     this.petals.stream({ x: spot.x, z: spot.z, dir: spot.dir, length: arch.length });
     // the view turns to the entrance itself (_updateFinale): the tunnel
     // keeps to the middle of the corridor, the visitor may not
@@ -1009,6 +996,7 @@ export class SoulPath {
     for (const r of this.roamers) { r.sprite.visible = false; r.tail.forEach(t => { t.visible = false; }); }
   }
   _askAccept(time) {
+    if (this.finale) return;
     this._soulAt = time; this._walked = 0;
     const qs = t('acceptQuestions');
     const order = this._soulOrder(3, qs.length);
@@ -1107,7 +1095,7 @@ export class SoulPath {
       if (dP > 26) { this._spawnBalloon(b); continue; }
       b.g.position.set(b.pos.x + Math.sin(time * 0.4 + b.seed) * 0.05, b.pos.y + Math.sin(time * 0.9 + b.seed) * 0.05, b.pos.z + Math.cos(time * 0.35 + b.seed) * 0.05);
       b.g.rotation.set(Math.sin(time * 0.6 + b.seed) * 0.06, time * 0.1 + b.seed, 0);   // turning slowly on its string
-      if (dP < 1.1 && this._soulReady(time)) {
+      if (dP < 1.1 && this._soulReady(time) && !this.finale) {
         b.gone = true; b.back = time + 16; b.rise = 0;
         this._soulAt = time; this._walked = 0;
         if (!this.asked.includes(b.text)) this.asked.push(b.text);
@@ -1618,14 +1606,6 @@ export class SoulPath {
       }
     }
 
-    // secret: a minute of stillness in acceptance hangs a nineteenth frame
-    if (!this.nineteenth && zone.accept > 0.7 && speed < 0.05 && !P.locked) this._stillT += dt;
-    else this._stillT = 0;
-    if (this._stillT > STILL_FOR_19) this._hangNineteenth(time);
-    if (this.nineteenth) {
-      this.nineteenth.canvas.material.color.setScalar(0.9 + 0.1 * Math.sin(time * 0.8));   // breathes with light
-    }
-
     // portals: cross-check, animate the veils, dim the ones already used
     const cur = { x: P.pos.x, z: P.pos.y };
     this._checkPortals(this._prevPos, cur);
@@ -1737,71 +1717,6 @@ export class SoulPath {
 
     // voices of the works nearby
     this._updateVoices(zone);
-  }
-
-  // Find the wall straight ahead and hang an empty frame on it.
-  _hangNineteenth() {
-    const P = this.player;
-    // straight ahead if there is a wall there, otherwise the nearest one to the side
-    for (const off of [0, 0.4, -0.4, 0.9, -0.9, 1.57, -1.57, 3.14]) {
-      if (this._hangAt(P.yaw + off)) return;
-    }
-    this._stillT = 0; // nothing to hang it on; try again after another minute
-  }
-
-  _hangAt(yaw) {
-    const P = this.player;
-    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-    let pi = cellOf(P.pos.x), pj = cellOf(P.pos.y);
-    for (let s = 0.2; s < 9; s += 0.1) {
-      const x = P.pos.x + fx * s, z = P.pos.y + fz * s;
-      const gi = cellOf(x), gj = cellOf(z);
-      if (solidAtGlobal(gi, gj)) {
-        // face normal points back into the open cell we came from
-        const nx = gi !== pi ? Math.sign(pi - gi) : 0, nz = gj !== pj ? Math.sign(pj - gj) : 0;
-        if (!nx === !nz) return false;                  // hit a corner diagonally: no flat face to hang on
-        const wx = nx ? (nx > 0 ? (gi + 1) * CELL : gi * CELL) : x;
-        const wz = nz ? (nz > 0 ? (gj + 1) * CELL : gj * CELL) : z;
-        // the whole frame and its placard need flat wall behind and open
-        // floor before them, and no work close by: otherwise look elsewhere
-        const tx = nz, tz = -nx;                        // along the wall, toward the placard
-        for (let u = -0.75; u <= 1.1; u += 0.15) {
-          const bx = wx + tx * u - nx * 0.05, bz = wz + tz * u - nz * 0.05;      // just inside the wall
-          const ox = wx + tx * u + nx * 0.3, oz = wz + tz * u + nz * 0.3;        // just in front of it
-          if (!solidAtGlobal(cellOf(bx), cellOf(bz)) || solidAtGlobal(cellOf(ox), cellOf(oz))) return false;
-        }
-        if (this.artworks.active.some(a => Math.hypot(a.centerWorld.x - wx, a.centerWorld.z - wz) < 2.2)) return false;
-        const g = new THREE.Group();
-        g.position.set(wx + nx * 0.012, 1.55, wz + nz * 0.012);
-        g.rotation.y = Math.atan2(nx, nz);
-        // an empty primed canvas, lit from inside: the visitor is the work
-        const cv = document.createElement('canvas'); cv.width = 256; cv.height = 340;
-        const cg = cv.getContext('2d'), grad = cg.createRadialGradient(128, 150, 10, 128, 170, 220);
-        grad.addColorStop(0, '#fbfaf3'); grad.addColorStop(1, '#d9d8cc');
-        cg.fillStyle = grad; cg.fillRect(0, 0, 256, 340);
-        for (let i = 0; i < 4000; i++) { cg.fillStyle = `rgba(120,110,90,${Math.random() * 0.06})`; cg.fillRect(Math.random() * 256, Math.random() * 340, 1, 1); }   // linen
-        const canvas = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.45),
-          new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), color: 0xffffff, fog: false }));
-        g.add(canvas);
-        const frame = new THREE.Mesh(new THREE.BoxGeometry(1.22, 1.57, 0.05), this.artworks.frameMat);
-        frame.position.z = -0.03;
-        frame.userData.keepMaterial = true;
-        g.add(frame);
-        const shade = new THREE.Mesh(new THREE.PlaneGeometry(1.72, 2.12), this.artworks.shadowMat);
-        shade.position.set(0, -0.07, -0.009);
-        g.add(shade);
-        const plac = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.2),
-          new THREE.MeshBasicMaterial({ map: placardTexture(['UVALISS', t('youLabel'), 'SOULS · 19']) }));
-        plac.position.set(0.55 + 0.06 + 0.1 + 0.17, -0.2, 0.002);
-        g.add(plac);
-        this.scene.add(g);
-        this.nineteenth = { group: g, canvas };
-        this.audio?.chime();
-        return true;
-      }
-      pi = gi; pj = gj;
-    }
-    return false;
   }
 
   _updateVoices(zone) {

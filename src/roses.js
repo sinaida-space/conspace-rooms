@@ -427,6 +427,29 @@ export function buildRoseArch(text) {
     group: g,
     halfWidth: HALF - 0.1,
     length: LENGTH,
+    // once placed: pull in every rose and leaf that would sink into a wall
+    // (sprites have no depth of their own), toward the tunnel's middle
+    fitToWalls(isSolid) {
+      g.updateMatrixWorld(true);
+      const v = new THREE.Vector3();
+      const blocked = () => {
+        for (const [ox, oz] of [[0, 0], [0.2, 0], [-0.2, 0], [0, 0.2], [0, -0.2]]) if (isSolid(v.x + ox, v.z + oz)) return true;
+        return false;
+      };
+      for (const pts of [rosePts, leafPts]) {
+        const p = pts.geometry.attributes.position;
+        for (let i = 0; i < p.count; i++) {
+          let x = p.getX(i);
+          for (let k = 0; k < 12; k++) {
+            v.set(x, p.getY(i), p.getZ(i)).applyMatrix4(g.matrixWorld);
+            if (!blocked()) break;
+            x *= 0.9;                                    // step in toward the middle
+          }
+          p.setX(i, x);
+        }
+        p.needsUpdate = true;
+      }
+    },
     update(dt, time) {
       grow = Math.min(1, grow + dt / 3.2);
       arches.forEach((ag, a) => {                     // the arches rise one after another
