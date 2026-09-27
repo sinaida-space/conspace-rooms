@@ -8,8 +8,10 @@ import { baroqueFrame } from './frames.js';
 import { buildDoorway, buildLightRays } from './doorway.js';
 import { artworkSlots } from './artworks.js';
 import { createWardKit, wardPlan, reserveSlot, reserveAround, cellKey } from './ward.js';
-import { createRoseCounter, buildRoseArch, findArchSpot } from './roses.js';
+import { buildClockNook } from './eggs.js';
+import { createRoseCounter, buildRoseArch, findArchSpot, GRAIN_OPEN_MS } from './roses.js';
 import { showCard } from './card.js';
+import { createPetals } from './petals.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
 // Everything that makes the labyrinth respond to the visitor on the way from
@@ -72,6 +74,8 @@ const SEED_PORTAL = CONSPACE_SEED ^ 0x9047;
 const SEED_SCATTER = CONSPACE_SEED ^ 0x5ca7;
 const SEED_POSTER = CONSPACE_SEED ^ 0x7057;
 const SEED_SOULQ = CONSPACE_SEED ^ 0x50a1;
+const SEED_EGG = CONSPACE_SEED ^ 0xe66c;
+const EGG_BAND = new Set([4, 5, 10, 11]);   // the corridor lattice, mirrored from world.js
 const SOUL_COLORS = [0xffd27a, 0x5dff8a, 0xd0202a]; // someone close · a child · a grown-up
 
 // Portals of one chunk as a pure function, so any chunk can ask where the
@@ -104,6 +108,29 @@ function kitchenPlan(cx, cz) {
     minX: (cx * CHUNK + room.x0) * CELL, maxX: (cx * CHUNK + room.x1 + 1) * CELL,
     minZ: (cz * CHUNK + room.y0) * CELL, maxZ: (cz * CHUNK + room.y1 + 1) * CELL,
   };
+}
+
+// A quiet nightstand and clock, memory ring only: about one chunk in three,
+// tucked against a wall on the corridor lattice, clear of any chunk edge
+// (where presence doors live) and of anything already reserved (artwork
+// walls, writings, posters). Pure function of the chunk and the visit's seed.
+function clockPlan(cx, cz, reserved) {
+  const cxm = (cx * CHUNK + 8) * CELL, czm = (cz * CHUNK + 8) * CELL;
+  if (zoneWeights(cxm, czm).memory <= 0.3) return null;   // as deep as the kitchen
+  const re = mulberry32(hash2i(SEED_EGG, cx, cz));
+  if (re() > 1 / 3) return null;
+  const gi0 = cx * CHUNK, gj0 = cz * CHUNK;
+  const sites = [];
+  for (let j = 1; j < CHUNK - 1; j++) for (let i = 1; i < CHUNK - 1; i++) {
+    if (!EGG_BAND.has(i) && !EGG_BAND.has(j)) continue;              // corridor lattice only
+    const gi = gi0 + i, gj = gj0 + j;
+    if (solidAtGlobal(gi, gj) || reserved.has(cellKey(gi, gj))) continue;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+      if (solidAtGlobal(gi + di, gj + dj)) sites.push({ gi, gj, nx: -di, nz: -dj });
+  }
+  if (!sites.length) return null;
+  const s = sites[Math.floor(re() * sites.length)];
+  return { x: centreOf(s.gi) - s.nx * 0.38, z: centreOf(s.gj) - s.nz * 0.38, rot: Math.atan2(s.nx, s.nz) };   // back 2 cm off the wall face (CELL/2 − depth/2)
 }
 
 // ── small helpers ───────────────────────────────────────────────────────────
@@ -240,7 +267,7 @@ function posterTexture(text, n, stage) {
 // ── SoulPath ────────────────────────────────────────────────────────────────
 export class SoulPath {
   constructor({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo }) {
-    Object.assign(this, { scene, world, player, camera, artworks, audio, post, quality, stage });
+    Object.assign(this, { scene, world, player, camera, artworks, audio, post, quality, stage, atmo });
     this.ward = createWardKit(atmo, quality);   // what the hospital left behind (fear stage only)
     this._wardCells = new Map();                // chunk key -> cells the island owns
     this._lastStage = stage.stage;
@@ -250,6 +277,7 @@ export class SoulPath {
     this.asked = [];                // what the souls asked, in order, for the card
     this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
     this.roses = createRoseCounter(this.total);
+    this.petals = createPetals(scene, camera, quality);
     this.roses.set(0, t('rosesLabel', { n: 0, total: this.total }));
     this.finale = null;
     this.chunkStuff = new Map();    // chunk key -> { group, writings[], doors[], kitchen }
@@ -323,6 +351,10 @@ export class SoulPath {
         this.chunkStuff.set(key, this._buildChunk(cx, cz));
       }
     }
+    // the clock nook only exists in the memory stage, like the ward's islands
+    // in the fear stage; re-check every frame, cheap since it is one flag
+    const memStage = this.stage.stage === 1;
+    for (const stuff of this.chunkStuff.values()) if (stuff.egg) stuff.egg.group.visible = memStage;
     for (const [key, stuff] of this.chunkStuff) {
       if (this.world.chunks.has(key)) continue;
       this.scene.remove(stuff.group);
@@ -342,7 +374,7 @@ export class SoulPath {
     const group = new THREE.Group();
     group.name = 'soul_' + cx + '_' + cz;
     this.scene.add(group);
-    const stuff = { group, writings: [], doors: [], kitchen: null, portals: [] };
+    const stuff = { group, writings: [], doors: [], kitchen: null, portals: [], egg: null };
 
     // ── writings: about half the chunks get one, on a deterministic wall run
     const rw = mulberry32(hash2i(SEED_WRITING, cx, cz));
@@ -411,6 +443,16 @@ export class SoulPath {
       wg.visible = this.stage.stage === 0;
       stuff.ward = { group: wg, plan };
       this._wardCells.set(cx + ':' + cz, plan.cells);
+    }
+
+    // ── the clock nook: a nightstand against a corridor wall, memory ring only
+    const cp = clockPlan(cx, cz, taken);
+    if (cp) {
+      const eg = new THREE.Group();
+      group.add(eg);
+      buildClockNook(eg, cp.x, cp.z, cp.rot, this.atmo);
+      eg.visible = this.stage.stage === 1;
+      stuff.egg = { group: eg };
     }
 
     // ── scattered things: candles, teapots, cups. The closer the portal into
@@ -512,6 +554,7 @@ export class SoulPath {
   // The view turns a little toward open floor, and a couple of steps away an
   // arch of roses grows out of it with light pouring through.
   _beginFinale() {
+    this.roses.shed(); this.audio?.finale?.();
     const P = this.player;
     // doors and the hospital's furniture stand in the way too
     const segDist = (x, z, a, b) => {
@@ -535,10 +578,10 @@ export class SoulPath {
     arch.group.position.set(spot.x, 0, spot.z);
     arch.group.rotation.y = Math.atan2(-spot.dir[0], -spot.dir[1]);   // its face toward the visitor
     this.scene.add(arch.group);
+    this.petals.stream({ x: spot.x, z: spot.z, dir: spot.dir, length: arch.length });
     // the view turns to the entrance itself (_updateFinale): the tunnel
     // keeps to the middle of the corridor, the visitor may not
     this.finale = { arch, spot, from: P.yaw, t: 0, side: null };
-    this.audio?.doorLight?.(9);
     this.post?.burst?.(0.4);
   }
 
@@ -564,14 +607,14 @@ export class SoulPath {
   _endWalk() {
     this._carded = true;
     this.player.locked = true;
-    this.audio?.chime?.();
+    this.audio?.silence?.();
     showCard({
       questions: this.asked,
       strings: {
         heading: t('cardHeading'), empty: t('cardEmpty'), boot: t('cardBoot'),
         save: t('cardSave'), back: t('cardBack'), again: t('walkAgain'),
       },
-      onBack: () => { this.player.locked = false; this._carded = false; },
+      onBack: () => { this.player.locked = false; this._carded = false; this.audio?.unsilence?.(); },
       onAgain: () => location.reload(),
     });
   }
@@ -1051,6 +1094,7 @@ export class SoulPath {
   // ── per-frame ───────────────────────────────────────────────────────────
   update(dt, time, zone) {
     this._sync();
+    this.petals.update(dt, time);
     const P = this.player, cam = this.camera;
     const memoryStage = this.stage.stage === 1;   // grandmother's room only exists here
     const speed = P.vel.length();
@@ -1066,6 +1110,7 @@ export class SoulPath {
     }
     if (this.artworks.inspecting) this.seen.add(this.artworks.inspecting.art.id);
     if (this.seen.size !== this._seenShown) {
+      if (this._seenShown === 0 && this.seen.size > 0) setTimeout(() => this.petals.sparkle(), GRAIN_OPEN_MS); // the grain opens: sparkles spill from the corner
       this._seenShown = this.seen.size;
       this.roses.set(this.seen.size, t('rosesLabel', { n: this.seen.size, total: this.total }));
     }

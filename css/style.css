@@ -470,13 +470,13 @@ body:has(#pad) #artwork-prompt { bottom: calc(max(16px, env(safe-area-inset-bott
 }
 #roses.visible { opacity: 1; }
 .roses svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 1.2px rgba(1, 8, 5, 0.95)) drop-shadow(0 0 3px rgba(1, 8, 5, 0.5)); }   /* reads on whitewash too */
-.roses .rstem { fill: none; stroke: #3c8f5a; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.4s ease; }
+.roses .rstem { fill: none; stroke: #3c8f5a; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.4s ease, opacity 1s ease; }
 .roses [data-leaf], .roses [data-bud], .roses [data-bloom] {
   opacity: 0; transform: scale(0.3); transform-box: fill-box; transform-origin: center;
   transition: opacity 0.9s ease, transform 0.9s ease;
 }
 .roses .on { opacity: 1; transform: scale(1); }
-.roses .rl { fill: #4fa36c; }
+.roses .rl { fill: #4fa36c; transition: fill 1.2s ease; }
 .roses .rr { fill: #c3141c; }
 .roses .rd { fill: #8e0f15; }
 .roses .rc { fill: none; stroke: #f0707a; stroke-width: 0.6; }
@@ -487,6 +487,42 @@ body:has(#pad) #artwork-prompt { bottom: calc(max(16px, env(safe-area-inset-bott
 @keyframes rose-glow {
   from { filter: drop-shadow(0 0 1.2px rgba(1, 8, 5, 0.95)) drop-shadow(0 0 3px rgba(255, 70, 80, 0.6)) drop-shadow(0 0 7px rgba(57, 255, 106, 0.3)); }
   to { filter: drop-shadow(0 0 1.2px rgba(1, 8, 5, 0.95)) drop-shadow(0 0 6px rgba(255, 70, 80, 0.95)) drop-shadow(0 0 16px rgba(57, 255, 106, 0.6)); }
+}
+
+/* the wheat grain at the stem's root: closed and whole at n = 0, splits into
+   a faint husk at the first work seen (John 12:24, hidden) */
+.roses .grain { transform-box: fill-box; }
+.roses .gr-halo { fill: #e0b060; opacity: 0.35; filter: blur(2.2px); transition: opacity 0.8s ease; }
+.roses .gr-husk { fill: #c99a4a; stroke: #8a6423; stroke-width: 0.25; transform-box: fill-box; transform-origin: center; transition: transform 0.4s ease, opacity 1s ease; }
+.roses .gr-crease { stroke: #8a6423; stroke-width: 0.35; opacity: 0.6; transition: opacity 0.4s ease; }
+.roses .grain.glow .gr-halo { animation: grain-pulse 0.6s ease; }
+.roses .grain.open .gr-husk-l { transform: translate(-0.9px, 0.5px) rotate(-8deg); }
+.roses .grain.open .gr-husk-r { transform: translate(0.9px, 0.5px) rotate(8deg); }
+.roses .grain.open .gr-husk { opacity: 0.4; }
+.roses .grain.open .gr-crease { opacity: 0; }
+.roses .grain.open .gr-halo { opacity: 0.15; }
+@keyframes grain-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.9; } }
+
+/* the finale: the rose sheds. Petals fall away with their own delay and
+   rotation, leaves dry, stems dim, and one whole grain glows faintly again */
+.roses.shed .rl { fill: #8a6a35; }
+.roses.shed [data-bloom] { animation-duration: 1.8s; animation-timing-function: ease-in; animation-fill-mode: forwards; }
+.roses.shed [data-bloom="0"] { animation-name: rose-fall-a; animation-delay: 0s; }
+.roses.shed [data-bloom="1"] { animation-name: rose-fall-b; animation-delay: 0.15s; animation-duration: 2.2s; }
+.roses.shed [data-bloom="2"] { animation-name: rose-fall-a; animation-delay: 0.3s; animation-duration: 1.6s; }
+.roses.shed [data-bloom="3"] { animation-name: rose-fall-b; animation-delay: 0.45s; animation-duration: 2.4s; }
+@keyframes rose-fall-a { to { transform: scale(1) translate(9px, 15px) rotate(46deg); opacity: 0; } }
+@keyframes rose-fall-b { to { transform: scale(1) translate(13px, 18px) rotate(-38deg); opacity: 0; } }
+.roses.shed .grain .gr-husk-l, .roses.shed .grain .gr-husk-r { transform: translate(0, 0) rotate(0deg); transition: transform 0.6s ease 2s; }
+.roses.shed .grain .gr-husk { opacity: 1; transition: opacity 0.8s ease 2s; }
+.roses.shed .grain .gr-crease { opacity: 0.6; transition: opacity 0.6s ease 2s; }
+.roses.shed .grain .gr-halo { opacity: 0.5; transition: opacity 1s ease 2s; animation: grain-pulse 2.6s ease-in-out 2.2s infinite alternate; }
+
+@media (prefers-reduced-motion: reduce) {
+  .roses .grain.open .gr-husk-l, .roses .grain.open .gr-husk-r,
+  .roses.shed .grain .gr-husk-l, .roses.shed .grain .gr-husk-r { transform: none; }
+  .roses.shed [data-bloom] { animation-name: rose-fall-fade; }
+  @keyframes rose-fall-fade { to { opacity: 0; } }
 }
 
 /* the end of a walk: the card of questions */

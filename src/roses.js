@@ -40,18 +40,55 @@ function bloom(x, y) {
     `<path d="M0 0 C1.4 -1.2 2.2 0.4 1 1.4 C-0.6 2.4 -2.4 0.8 -1.6 -0.8 C-0.8 -2.4 1.6 -2.6 2.6 -1" class="rc"/></g>`;
 }
 
+// the wheat grain at the stem's root (John 12:24, hidden): closed and whole
+// at n = 0, splits open at the first work, sheds and returns whole at the finale
+export const GRAIN_OPEN_MS = 1000;   // set(1): glow (600 ms) then open (400 ms) — the orchestrator starts sparkles here
+export const SHED_MS = 3000;         // api.shed(): petals fall, leaves dry, stems dim, the grain returns
+function grain() {
+  return `<g class="grain" data-grain>
+    <ellipse class="gr-halo" cx="3" cy="0" rx="6" ry="4"/>
+    <g transform="translate(3 0) rotate(-12)">
+      <path class="gr-husk gr-husk-l" d="M0 -1.8 A3 1.8 0 0 0 0 1.8Z"/>
+      <path class="gr-husk gr-husk-r" d="M0 -1.8 A3 1.8 0 0 1 0 1.8Z"/>
+      <line class="gr-crease" x1="0" y1="-1.7" x2="0" y2="1.7"/>
+    </g>
+  </g>`;
+}
+
 export function createRoseCounter(total = 18) {
   const el = document.createElement('div');
   el.id = 'roses';
   el.className = 'roses';
   el.setAttribute('role', 'img');
   el.innerHTML = `<svg viewBox="-2 -2 54 84" aria-hidden="true">
+    ${grain()}
     ${STEMS.map(([d], i) => `<path d="${d}" pathLength="1" class="rstem" data-i="${i}"/>`).join('')}
     ${LEAVES.map(([x, y, a], i) => `<g data-leaf="${i}">${leaf(x, y, a)}</g>`).join('')}
     ${BUDS.map(([x, y], i) => `<g data-bud="${i}">${bud(x, y)}</g><g data-bloom="${i}">${bloom(x, y)}</g>`).join('')}
   </svg>`;
   document.body.appendChild(el);
+  const grainEl = el.querySelector('.grain');
   let shown = -1;
+  // reveal the parts for n (the grain itself is handled by set(), below)
+  const draw = n => {
+    const grew = shown >= 0 && n > shown;
+    shown = n;
+    const k = n * 18 / total;                    // the drawing is laid out for eighteen
+    const dim = el.classList.contains('shed') ? 0.25 : 1;   // stems already shed stay dim, even if this draw lands after
+    el.querySelectorAll('.rstem').forEach(p => {
+      const [, from, whole] = STEMS[+p.dataset.i];
+      const f = Math.max(0, Math.min(1, (k - from + 0.5) / (whole - from + 0.5)));
+      p.style.strokeDashoffset = String(1 - f);
+      p.style.opacity = String((f > 0 ? 1 : 0) * dim);           // no round cap dot before it grows
+    });
+    LEAVES.forEach(([, , , from], i) => el.querySelector(`[data-leaf="${i}"]`).classList.toggle('on', k >= from));
+    BUDS.forEach(([, , shows, opens], i) => {
+      el.querySelector(`[data-bud="${i}"]`).classList.toggle('on', k >= shows && k < opens);
+      el.querySelector(`[data-bloom="${i}"]`).classList.toggle('on', k >= opens);
+    });
+    el.classList.toggle('full', n >= total);
+    if (grew) { el.classList.remove('grew'); void el.offsetWidth; el.classList.add('grew'); }
+  };
   const api = {
     el,
     set(n, label) {
@@ -59,22 +96,19 @@ export function createRoseCounter(total = 18) {
       if (label) el.setAttribute('aria-label', label);
       el.title = label || '';
       if (n === shown) return;
-      const grew = shown >= 0 && n > shown;
-      shown = n;
-      const k = n * 18 / total;                    // the drawing is laid out for eighteen
-      el.querySelectorAll('.rstem').forEach(p => {
-        const [, from, whole] = STEMS[+p.dataset.i];
-        const f = Math.max(0, Math.min(1, (k - from + 0.5) / (whole - from + 0.5)));
-        p.style.strokeDashoffset = String(1 - f);
-        p.style.opacity = f > 0 ? '1' : '0';                       // no round cap dot before it grows
-      });
-      LEAVES.forEach(([, , , from], i) => el.querySelector(`[data-leaf="${i}"]`).classList.toggle('on', k >= from));
-      BUDS.forEach(([, , shows, opens], i) => {
-        el.querySelector(`[data-bud="${i}"]`).classList.toggle('on', k >= shows && k < opens);
-        el.querySelector(`[data-bloom="${i}"]`).classList.toggle('on', k >= opens);
-      });
-      el.classList.toggle('full', n >= total);
-      if (grew) { el.classList.remove('grew'); void el.offsetWidth; el.classList.add('grew'); }
+      const firstGrowth = shown === 0 && n > 0;   // the grain wakes for the first work, then opens
+      if (firstGrowth) {
+        grainEl.classList.add('glow');
+        setTimeout(() => grainEl.classList.add('open'), 600);
+        setTimeout(() => draw(n), GRAIN_OPEN_MS);
+        return;
+      }
+      draw(n);
+    },
+    // the finale: the bloom sheds, the leaves dry, the stems dim, one grain returns
+    shed() {
+      el.classList.add('shed');
+      el.querySelectorAll('.rstem').forEach(p => { p.style.opacity = String(parseFloat(p.style.opacity || '1') * 0.25); });
     },
     remove() { el.remove(); },
   };
@@ -207,7 +241,7 @@ const GLOW_FRAG = /* glsl */`
 uniform float uK; varying vec2 vP;
 void main(){
   float d = length((vP - vec2(0.0, 1.3)) / vec2(0.95, 1.6));
-  gl_FragColor = vec4(vec3(1.0, 0.96, 0.88) * uK * (0.35 + 0.65 * smoothstep(1.1, 0.0, d)), 1.0);
+  gl_FragColor = vec4(vec3(1.0, 0.86, 0.58) * uK * (0.35 + 0.65 * smoothstep(1.1, 0.0, d)), 1.0);
 }`;
 
 export function buildRoseArch(text) {

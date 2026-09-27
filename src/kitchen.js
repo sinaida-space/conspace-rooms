@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { roundedBox } from './geom.js';
 import { CEIL_H } from './world.js';
+import { t, getLang } from './i18n.js';
 
 // rounded edges: radius a third of the thinnest side, capped at 4 cm
 const box = (w, h, d) => roundedBox(w, h, d, Math.min(0.04, Math.min(w, h, d) * 0.3));
@@ -16,7 +17,7 @@ const box = (w, h, d) => roundedBox(w, h, d, Math.min(0.04, Math.min(w, h, d) * 
 // shadow maps.
 
 // ── canvas textures, generated once and shared by every room ────────────────
-let TEX = null;
+let TEX = null, TEX_LANG = null;
 function canvasTex(w, h, draw, repeat) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -63,7 +64,9 @@ function wear(g, w, h, { rings = 4, pale = 'rgba(255,235,200,', dark = 'rgba(20,
 }
 
 function textures() {
-  if (TEX) return TEX;
+  const lang = getLang();
+  if (TEX && TEX_LANG === lang) return TEX;
+  TEX_LANG = lang;
   TEX = {
     // dark varnished wood: wavy grain lines over a brown ground
     wood: canvasTex(256, 256, (g, w, h) => {
@@ -169,6 +172,30 @@ function textures() {
       const r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
       r.addColorStop(0, 'rgba(255,120,60,0.9)'); r.addColorStop(0.3, 'rgba(255,40,20,0.35)'); r.addColorStop(1, 'rgba(255,0,0,0)');
       g.fillStyle = r; g.fillRect(0, 0, w, h);
+    }),
+    // a tear-off calendar's top sheet: the month small, a big date below
+    calendar: canvasTex(140, 190, (g, w, h) => {
+      g.fillStyle = '#e9e2c8'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#5a4a30'; g.textAlign = 'center'; g.font = '700 16px "Arial Narrow", Arial, sans-serif';
+      g.fillText(t('eggMonth'), w / 2, 26);
+      g.strokeStyle = 'rgba(90,74,48,0.4)'; g.lineWidth = 1; g.beginPath(); g.moveTo(14, 40); g.lineTo(w - 14, 40); g.stroke();
+      g.fillStyle = '#1a1a1a'; g.font = '700 108px Georgia, serif'; g.textBaseline = 'middle';
+      g.fillText('24', w / 2, h * 0.62);
+      for (let i = 0; i < 5; i++) { g.fillStyle = `rgba(0,0,0,${0.05 + i * 0.02})`; g.fillRect(6 + i, h - 12 + i, w - 12 - 2 * i, 3); }
+    }),
+    // a closed hardback's cover: faded cloth, worn gilt initials, a volume number
+    book: canvasTex(160, 220, (g, w, h) => {
+      g.fillStyle = '#2f4f4a'; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.08})`; g.fillRect(Math.random() * w, Math.random() * h, 1, 1); }
+      const fade = g.createRadialGradient(w / 2, h / 2, 20, w / 2, h / 2, w * 0.75);
+      fade.addColorStop(0, 'rgba(255,255,240,0.05)'); fade.addColorStop(1, 'rgba(0,0,0,0.25)');
+      g.fillStyle = fade; g.fillRect(0, 0, w, h);
+      g.strokeStyle = 'rgba(180,150,70,0.55)'; g.lineWidth = 3; g.strokeRect(10, 10, w - 20, h - 20);
+      g.fillStyle = 'rgba(196,164,86,0.85)'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '700 30px Georgia, "Times New Roman", serif';
+      g.fillText(t('eggInitials'), w / 2, h * 0.42);
+      g.font = '16px Georgia, serif';
+      g.fillText('12:24', w / 2, h * 0.86);
     }),
   };
   return TEX;
@@ -421,6 +448,18 @@ export function buildKitchen(parent, X, Z) {
     ant.rotation.z = s * -0.45;
   }
   blob(1.3, 0.8, tv.x, 0.013, tv.z, 0.85);
+
+  // ── a tear-off calendar on the back wall, opposite the television ──
+  const cal = { x: -0.9, y: 1.5, z: -2.05 };
+  add(box(0.14, 0.2, 0.03), wood, cal.x, cal.y, cal.z);
+  const calFace = add(new THREE.PlaneGeometry(0.13, 0.19), new THREE.MeshBasicMaterial({ map: T.calendar, fog: true }), cal.x, cal.y, cal.z + 0.017, false);
+  calFace.receiveShadow = false;
+
+  // ── a closed hardback, faded cloth cover, left on top of the television ──
+  const bk = { x: -0.24, y: 1.04, z: tv.z - 0.02 };
+  add(box(0.08, 0.03, 0.16), std({ color: 0x2f4f4a, roughness: 0.75 }), bk.x, bk.y + 0.015, bk.z);
+  const cover = add(new THREE.PlaneGeometry(0.075, 0.155), new THREE.MeshBasicMaterial({ map: T.book, fog: true }), bk.x, bk.y + 0.031, bk.z, false);
+  cover.rotation.x = -Math.PI / 2;
 
   // ── the abazhur: a velvet lampshade low over the table ──
   const L = lampshade(shadeLook, 0.8 + rnd() * 0.4);
