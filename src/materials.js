@@ -350,13 +350,13 @@ vec3 fearWall(float h, float y, int oct, out float gloss){
 vec3 paper(vec2 q){ return texture2D(uWallpaper, vec2(q.x / PAPER_W, q.y / PAPER_H)).rgb; }
 float memoryHeight(float h, float y){
   vec3 c = paper(vec2(h, y));
-  float ink = smoothstep(0.02, 0.12, abs(dot(c - vec3(0.043, 0.122, 0.071), vec3(0.4, 0.4, 0.2))));
+  float ink = smoothstep(0.02, 0.12, abs(dot(c - vec3(0.086, 0.239, 0.141), vec3(0.4, 0.4, 0.2))));
   return 0.6 * ink + 0.05 * vnoise(vec2(h, y) * 180.0);   // raised ink + paper tooth
 }
 vec3 memoryWall(float h, float y, int oct, out float gloss){
   vec2 q = vec2(h, y);
   vec3 col = paper(q);
-  float ink = smoothstep(0.02, 0.12, abs(dot(col - vec3(0.043, 0.122, 0.071), vec3(0.4, 0.4, 0.2))));
+  float ink = smoothstep(0.02, 0.12, abs(dot(col - vec3(0.086, 0.239, 0.141), vec3(0.4, 0.4, 0.2))));
   float fibre = vnoise(q * vec2(90.0, 260.0)) * 0.5 + vnoise(q * 400.0) * 0.5;
   col *= 0.86 + 0.28 * fibre;
   // strip seams: a hairline shadow and a lifted edge catching light
@@ -517,7 +517,7 @@ vec3 fearFloor(vec2 p, int oct){
 
 // MEMORY: Soviet herringbone parquet, wide planks 11 × 44 cm. The pattern is a
 // lattice with steps (4, 4) and (1, −1) plank widths holding one flat and
-// one upright plank; each point finds its plank among the nine nearest
+// one upright plank; each point finds its plank among the nearest
 // cells. Every plank its own tone of honey and walnut, grain along it,
 // dark seams, varnish worn where feet go.
 vec3 memoryFloor(vec2 p, int oct){
@@ -526,15 +526,15 @@ vec3 memoryFloor(vec2 p, int oct){
   vec2 e1 = vec2(PL, PL), e2 = vec2(1.0, -1.0);
   float a = floor((q.x + q.y) / (2.0 * PL)), b = floor((q.x - q.y) * 0.5);
   vec2 id = vec2(0.0), loc = vec2(0.0);
-  for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
+  for (int i = -1; i <= 1; i++) for (int j = -2; j <= 2; j++) {   // an upright plank reaches PL/2 cells along e2
     vec2 cell = vec2(a + float(i), b + float(j));
     vec2 r = q - cell.x * e1 - cell.y * e2;
     if (r.x >= 0.0 && r.x < PL && r.y >= 0.0 && r.y < 1.0) { id = cell; loc = r; }
     if (r.x >= PL - 1.0 && r.x < PL && r.y >= 1.0 && r.y < PL + 1.0) { id = cell + 0.5; loc = vec2(r.y - 1.0, r.x - PL + 1.0); }
   }
   float h = hash21(id * 1.73 + 0.31), h2 = hash21(id * 5.1 + 2.7);
-  vec3 wood = mix(vec3(0.17, 0.10, 0.05), vec3(0.38, 0.25, 0.13), h);
-  wood = mix(wood, vec3(0.26, 0.2, 0.14), step(0.86, h2) * 0.6);   // a replaced plank, greyer, never matched   // old varnish, darkened
+  vec3 wood = mix(vec3(0.19, 0.14, 0.07), vec3(0.34, 0.26, 0.13), h);   // ochre and olive oak, darkened by the night
+  wood = mix(wood, vec3(0.22, 0.19, 0.13), step(0.86, h2) * 0.6);   // a replaced plank, greyer, never matched   // old varnish, darkened
   float grain = vnoise(vec2(loc.x * 2.2 + h * 20.0, loc.y * 16.0 + h * 7.0));
   wood *= 0.8 + 0.32 * grain;
   wood *= 0.93 + 0.07 * sin(loc.y * 22.0 + grain * 7.0);            // the rings, running along the plank
@@ -544,8 +544,12 @@ vec3 memoryFloor(vec2 p, int oct){
   wood *= mix(0.22, 1.0, seam);
   wood *= 0.9 + 0.1 * smoothstep(0.35, 0.0, loc.y) * step(0.7, h);   // a lifted edge catching the light
   // wear: varnish gone grey in the walked middle, scratches, stains
-  float worn = smoothstep(0.45, 0.75, fbm(p * 0.35 + 3.0, oct));
-  wood = mix(wood, wood * 0.75 + vec3(0.07, 0.06, 0.05), worn * 0.7);
+  float worn = smoothstep(0.4, 0.7, fbm(p * 0.35 + 3.0, oct));
+  wood = mix(wood, wood * 0.7 + vec3(0.07, 0.065, 0.055), worn * 0.8);     // varnish gone, the wood greyed
+  float rub = smoothstep(0.55, 0.9, vnoise(vec2(loc.x * 0.8 + h * 13.0, loc.y * 3.0)));   // pale rubbed streaks along the plank
+  wood += vec3(0.05, 0.04, 0.025) * rub * (0.4 + worn);
+  float grime = smoothstep(0.5, 0.8, fbm(p * 1.3 + 17.0, 3));             // dark dirt ground in, in blotches
+  wood *= 1.0 - 0.45 * grime;
   float scratch = smoothstep(0.965, 1.0, vnoise(vec2(p.x * 3.0 + p.y * 40.0, p.y * 2.0)));
   scratch += smoothstep(0.97, 1.0, vnoise(vec2(p.x * 45.0 - p.y * 8.0, p.x * 1.5)));
   wood += vec3(0.06, 0.05, 0.035) * scratch;

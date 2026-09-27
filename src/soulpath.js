@@ -108,13 +108,14 @@ function portalPlan(cx, cz) {
 }
 
 // Grandmother's room of one chunk (or null), as a pure function: a big enough
-// room, one chunk in seven, deep in the memory ring.
+// room, about one chunk in two, anywhere past the first steps, so the red
+// rooms soon lead to one and the souls come out.
 function kitchenPlan(cx, cz) {
   const room = chunkRooms(cx, cz).find(r => r.x1 - r.x0 >= 4 && r.y1 - r.y0 >= 4);
-  if (!room || hash2i(SEED_KITCHEN, cx, cz) % 5 !== 0) return null;
+  if (!room || hash2i(SEED_KITCHEN, cx, cz) % 2 !== 0) return null;
   const x = (cx * CHUNK + (room.x0 + room.x1 + 1) / 2) * CELL;
   const z = (cz * CHUNK + (room.y0 + room.y1 + 1) / 2) * CELL;
-  if (zoneWeights(x, z).memory <= 0.3) return null;   // from ~55 m out, just past the first portals
+  if (Math.hypot(x - ORIGIN.x, z - ORIGIN.z) < 14) return null;   // not in the very first room
   return {
     x, z,
     minX: (cx * CHUNK + room.x0) * CELL, maxX: (cx * CHUNK + room.x1 + 1) * CELL,
