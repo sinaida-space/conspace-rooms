@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CEIL_H, CELL, lampLineNear } from './world.js';
+import { CEIL_H, CELL, lampLineNear, solidAtGlobal } from './world.js';
 import { ZONE, ORIGIN } from './zones.js';
 
 // ── conspace-rooms · materials.js ───────────────────────────────────────────
@@ -48,6 +48,7 @@ uniform vec3  uTrail[4];   // xz of recent footsteps + strength (0..1)
 uniform vec3  uZone;      // stage weights (fear, memory, acceptance), set by the portal crossings
 uniform vec4  uCandle[8];     // the 8 candles nearest the visitor: xyz, w = flickering intensity
 uniform vec3  uCandleCol[8];  // their flame colours
+uniform vec4  uHaze[6];       // the fixtures in sight of the visitor: xyz centre of the glow, w = strength (flicker included)
 
 varying vec3 vWorldPos;
 varying vec3 vNormal;
@@ -187,6 +188,27 @@ void fixtureLightSpec(vec3 P, vec3 N, vec3 V, vec3 lightCol, float shin, out vec
   }
 }
 
+// Light scattered in the air under the fixtures in sight: the glow of each
+// is an upright ellipsoid hanging from the panel, integrated in closed form
+// along the ray from the eye to this fragment, so every surface behind a
+// lamp shows the haze in front of it. Six atans per fragment, no marching.
+vec3 hazeGlow(vec3 P, vec3 lightCol){
+  const vec3 S = vec3(1.5, 0.55, 1.5);                // taller than wide: a column of light
+  vec3 rd = P - cameraPosition;
+  float len = length(rd);
+  vec3 d = rd * S;
+  float A = dot(d, d), acc = 0.0;
+  for (int i = 0; i < 6; i++) {
+    float w = uHaze[i].w;
+    if (w <= 0.0) continue;
+    vec3 a = (cameraPosition - uHaze[i].xyz) * S;
+    float B = 2.0 * dot(a, d), C = dot(a, a) + 0.3;   // + softness, so the core never burns
+    float D = sqrt(max(4.0 * A * C - B * B, 1e-6));
+    acc += w * 2.0 / D * (atan((2.0 * A + B) / D) - atan(B / D));
+  }
+  return lightCol * acc * len * 0.07;
+}
+
 // gentle filmic rolloff so light pools don't clip to flat white
 vec3 rolloff(vec3 c){ return c / (c + vec3(0.75)) * 1.45; }
 `;
@@ -315,7 +337,7 @@ vec3 acceptWall(float h, float y, int oct, out float gloss){
 }
 
 float wallHeight(float h, float y, vec3 z){
-  float v = 0.0;
+  float v = 0.16 * vnoise(vec2(h, y) * 48.0) + 0.08 * vnoise(vec2(h, y) * 130.0);   // sand in the plaster, under every finish
   if (z.x > 0.001) v += z.x * fearHeight(h, y);
   if (z.y > 0.001) v += z.y * memoryHeight(h, y);
   if (z.z > 0.001) v += z.z * acceptHeight(h, y);
@@ -350,11 +372,18 @@ void main(){
   // ridges, plaster), so highlights break up the way they do on a real wall
   vec3 T = alongZ ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
   vec3 Nb = N;
-  if (uTier > 1) {                                      // relief only on the high tier
-    float e = 0.004, h0 = wallHeight(h, y, z);
+  if (uTier > 0) {                                      // relief on the mid and high tiers
+    float e = 0.003, h0 = wallHeight(h, y, z);
     float du = (wallHeight(h + e, y, z) - h0) / e, dv = (wallHeight(h, y + e, z) - h0) / e;
-    Nb = normalize(N - (T * du + vec3(0.0, 1.0, 0.0) * dv) * 0.006);
+    Nb = normalize(N - (T * du + vec3(0.0, 1.0, 0.0) * dv) * 0.008);
   }
+  // grain in the colour too, so the wall is rough on every tier: fine sand,
+  // small pits where the plaster blew, faint trowel drags
+  float sand = vnoise(vec2(h, y) * 90.0);
+  float pit = smoothstep(0.83, 0.9, vnoise(vec2(h, y) * 38.0 + 11.0));
+  float drag = vnoise(vec2(h * 3.0, y * 40.0));
+  col *= (0.94 + 0.1 * sand) * (1.0 - 0.12 * pit) * (0.975 + 0.04 * drag);
+  gloss *= 0.75 + 0.35 * sand;                          // paint lies unevenly: the shine breaks up
 
   // corners where wall meets floor and ceiling collect shadow; the edge of
   // the grime is ragged, and damp runs down from the top in streaks, so the
@@ -377,6 +406,7 @@ void main(){
   vec3 spec = sSum * gloss * mix(0.25, 0.9, z.x) * ao;
   vec3 lit = rolloff(diffuse + spec + cl * 0.05 * ao); // a little warm haze on the plaster right by a flame
   lit += z.z * (0.06 + 0.7 * lace) * LIGHT_ACC * 0.5;  // acceptance walls glow from inside, brightest at the lace rims
+  lit += hazeGlow(vWorldPos, L);
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
 }
@@ -483,6 +513,7 @@ void main(){
   vec3 clf = candleLight(vWorldPos, N);
   vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L + z.y * FILL_MEM * 1.2 + clf) + clf * 0.04);
   lit += z.z * 0.05 * LIGHT_ACC;
+  lit += hazeGlow(vWorldPos, L);
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
 }
@@ -545,7 +576,7 @@ vec4 troffer(vec2 m){
   }
   float louvre = 0.85 + 0.15 * step(0.5, fract(m.x * 6.0));   // slats
   float glow = inner * (0.35 + 0.65 * clamp(tubes, 0.0, 1.0)) * louvre;
-  return vec4(mix(metal * 0.5, metal, 1.0 - inner), glow);
+  return vec4(mix(vec3(0.5, 0.53, 0.5), metal, 1.0 - inner), glow);   // inside, a milky diffuser: pale even when the tubes die
 }
 
 // MEMORY: a fabric pendant shade seen from below: dark rim, glowing inside,
@@ -595,7 +626,9 @@ void main(){
   int ix = nearestLine(p.x / ${CELL.toFixed(2)}, bx), iz = nearestLine(p.y / ${CELL.toFixed(2)}, bz);
   vec2 lampC = (vec2(bx + LINES[ix], bz + LINES[iz]) + 0.5) * ${CELL.toFixed(2)};
   vec2 dl = p - lampC;
-  lit += L * exp(-dot(dl, dl) * 1.6) * 0.18 * fl * boost;
+  float flL = 1.0;                                      // the halo dims with its own lamp, not with this cell
+  if (abs(bx + LINES[ix] - uFlickerTile.x) < 0.5 && abs(bz + LINES[iz] - uFlickerTile.y) < 0.5) flL = uFlickerAmt;
+  lit += L * exp(-dot(dl, dl) * 1.6) * 0.18 * flL * boost;
 
   vec4 fx = vec4(0.0);
   if (on > 0.5) {
@@ -606,6 +639,7 @@ void main(){
   float body = step(0.001, fx.r + fx.g + fx.b + fx.a);
   vec3 col = mix(lit, fx.rgb * (0.3 + 0.7 * L), body * 0.9);  // housing / shade
   col += L * 2.4 * fx.a * fl * boost;                          // emitted light
+  col += hazeGlow(vWorldPos, L);
   gl_FragColor = vec4(col, 1.0);
   #include <fog_fragment>
 }
@@ -695,13 +729,27 @@ void main(){
     float fl = step(0.12, vnoise(vec2(uTime * 7.0, uSeed)));        // now and then it dies for a blink
     lit += base * uGlow * (0.75 + 0.25 * fl);
   }
-  gl_FragColor = vec4(rolloff(lit), 1.0);
+  gl_FragColor = vec4(rolloff(lit) + hazeGlow(vWorldPos, L), 1.0);
   #include <fog_fragment>
 }
 `;
 
 // ── factory ─────────────────────────────────────────────────────────────────
 function rand(lo, hi) { return lo + Math.random() * (hi - lo); }
+
+const HAZE_N = 6;
+const HAZE_Y = CEIL_H - 0.95;   // centre of the glow: it hangs from the panel down to about shoulder height
+
+// Is the open floor between two points free of walls? Marched on the cell
+// grid in 0.3 m steps: good enough for a glow, cheap enough for every frame.
+function clearLine(x0, z0, x1, z1) {
+  const d = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(d / 0.3);
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    if (solidAtGlobal(Math.floor((x0 + (x1 - x0) * t) / CELL), Math.floor((z0 + (z1 - z0) * t) / CELL))) return false;
+  }
+  return true;
+}
 
 const TRAIL_N = 4;
 const TRAIL_EVERY = 2.4;   // metres walked between trail samples
@@ -718,7 +766,9 @@ export function createMaterials(quality) {
     uZone: { value: new THREE.Vector3(1, 0, 0) },
     uCandle: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, -100, 0, 0)) },
     uCandleCol: { value: Array.from({ length: 8 }, () => new THREE.Color(0, 0, 0)) },
+    uHaze: { value: Array.from({ length: HAZE_N }, () => new THREE.Vector4(0, -100, 0, 0)) },
   };
+  const hazeSeen = new Map();   // lamp cell key -> smoothed visibility, so a glow fades in as a corner opens
 
   const mk = (fragmentShader) => new THREE.ShaderMaterial({
     uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), shared),
@@ -797,6 +847,28 @@ export function createMaterials(quality) {
         } else if (idle <= 0) {
           idle = rand(20, 40);
         }
+      }
+      // the fixtures whose haze the visitor can see
+      const cand = [];
+      for (let kx = -2; kx <= 2; kx++) for (let kz = -2; kz <= 2; kz++) {
+        const gi = lampLineNear(camPos.x / CELL, kx), gj = lampLineNear(camPos.z / CELL, kz);
+        if (solidAtGlobal(gi, gj)) continue;
+        const x = (gi + 0.5) * CELL, zz = (gj + 0.5) * CELL, key = gi + ':' + gj;
+        const d = Math.hypot(x - camPos.x, zz - camPos.z);
+        if (d > 13 || cand.some(c => c.key === key)) continue;
+        const target = clearLine(camPos.x, camPos.z, x, zz) ? 1 : 0;
+        const v = (hazeSeen.get(key) ?? target) + (target - (hazeSeen.get(key) ?? target)) * Math.min(1, dt * 4);
+        hazeSeen.set(key, v);
+        cand.push({ key, gi, gj, x, z: zz, v, d });
+      }
+      if (hazeSeen.size > 80) for (const k of hazeSeen.keys()) if (!cand.some(c => c.key === k)) hazeSeen.delete(k);
+      cand.sort((a, b) => b.v / (1 + b.d) - a.v / (1 + a.d));
+      const ft = shared.uFlickerTile.value, famt = shared.uFlickerAmt.value;
+      for (let i = 0; i < HAZE_N; i++) {
+        const c = cand[i];
+        if (!c || c.v < 0.01) { shared.uHaze.value[i].w = 0; continue; }
+        const fl = c.gi === ft.x && c.gj === ft.y ? famt : 1;
+        shared.uHaze.value[i].set(c.x, HAZE_Y, c.z, c.v * fl * Math.min(1, (13 - c.d) / 3));
       }
     },
     // lights: [{ x, y, z, col }] nearest first; each gets its own flicker
