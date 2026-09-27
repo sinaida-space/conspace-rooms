@@ -17,16 +17,16 @@ import { buildLightRays } from './doorway.js';
 // One SVG, drawn once; the count only reveals parts of it.
 const STEMS = [                                   // [path, visible from n, whole at n]
   ['M3 0 C9 12 5 26 15 38 S28 58 24 76', 0.5, 7],
-  ['M11 26 C18 22 26 24 34 18', 2, 5],
-  ['M19 48 C26 48 34 54 44 52', 5, 9],
+  ['M11 26 C18 22 26 24 34 18', 2, 4],
+  ['M19 48 C26 48 34 54 44 52', 5, 8],
 ];
 const LEAVES = [                                  // [x, y, angle, from n]
   [7, 10, -30, 1], [10, 22, 40, 2], [14, 34, -35, 3], [19, 44, 35, 4], [23, 60, -40, 6],
   [22, 24, -60, 7], [29, 21, 30, 9], [26, 49, 60, 11], [36, 53, -30, 12], [25, 68, 45, 14],
   [4, 16, 20, 5], [17, 40, -70, 8], [31, 19, -40, 10], [40, 55, 50, 13], [27, 72, -20, 16], [12, 30, 80, 17],
 ];
-const BUDS = [                                    // [x, y, shows at, opens at]
-  [34, 17, 4, 5], [45, 51, 8, 10], [24, 76, 12, 15], [6, 4, 16, 18],
+const BUDS = [                                    // [stem, where on it (1 = its tip), side (0 at the tip, ±1 on a short stalk), shows at, opens at]
+  [1, 1, 0, 4, 5], [2, 1, 0, 8, 10], [0, 1, 0, 12, 15], [0, 0.2, 1, 16, 18],
 ];
 
 // A rose leaflet, 8 long: serrated edges (each tooth leans toward the tip),
@@ -106,10 +106,30 @@ export function createRoseCounter(total = 18) {
     <g class="rthorns"></g>
     <g filter="url(#rtex)">
     ${LEAVES.map(([x, y, a], i) => `<g data-leaf="${i}">${leaf(x, y, a)}</g>`).join('')}
-    ${BUDS.map(([x, y], i) => `<g data-bud="${i}">${bud(x, y)}</g><g data-bloom="${i}">${bloom(x, y)}</g>`).join('')}
+    ${BUDS.map((_, i) => `<g data-bud="${i}"><g class="rbp">${bud(0, 0)}</g></g><g data-bloom="${i}"><g class="rbp">${bloom(0, 0)}</g></g>`).join('')}
     </g>
   </svg>`;
   document.body.appendChild(el);
+  // buds and flowers grow out of the stems: at a tip the bud's stalk runs
+  // back along the stem; on the side a short stalk leaves the stem first
+  BUDS.forEach(([si, at, side], i) => {
+    const p = el.querySelectorAll('.rstem:not(.rstem-hi)')[si], L = p.getTotalLength?.() || 0;
+    if (!L) return;
+    const a = p.getPointAtLength(Math.min(L, at * L)), b = p.getPointAtLength(Math.max(0, Math.min(L, at * L) - 0.6));
+    let tx = a.x - b.x, ty = a.y - b.y; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+    let ox = a.x, oy = a.y;
+    if (side) {                                   // a stalk off to one side, leaning forward
+      const nx = -ty * side, ny = tx * side, sx = nx * 0.8 + tx * 0.6, sy = ny * 0.8 + ty * 0.6, sl = Math.hypot(sx, sy);
+      tx = sx / sl; ty = sy / sl;
+      const ex = a.x + tx * 3.2, ey = a.y + ty * 3.2;
+      el.querySelector(`[data-bud="${i}"]`).insertAdjacentHTML('afterbegin', `<path d="M${a.x.toFixed(2)} ${a.y.toFixed(2)} Q${(a.x + tx * 1.8 - ty * 0.6).toFixed(2)} ${(a.y + ty * 1.8 + tx * 0.6).toFixed(2)} ${ex.toFixed(2)} ${ey.toFixed(2)}" class="rsn rstalk"/>`);
+      el.querySelector(`[data-bloom="${i}"]`).insertAdjacentHTML('afterbegin', `<path d="M${a.x.toFixed(2)} ${a.y.toFixed(2)} L${ex.toFixed(2)} ${ey.toFixed(2)}" class="rsn rstalk"/>`);
+      ox = ex; oy = ey;
+    }
+    const rot = Math.atan2(tx, -ty) * 180 / Math.PI;     // the bud's own +y (its stalk) points back down the stem
+    el.querySelector(`[data-bud="${i}"] .rbp`).setAttribute('transform', `translate(${(ox + tx * 5.3).toFixed(2)} ${(oy + ty * 5.3).toFixed(2)}) rotate(${rot.toFixed(1)})`);
+    el.querySelector(`[data-bloom="${i}"] .rbp`).setAttribute('transform', `translate(${(ox + tx * 3.2).toFixed(2)} ${(oy + ty * 3.2).toFixed(2)}) rotate(${rot.toFixed(1)})`);
+  });
   // thorns sit on the drawn stems: measured once the paths are in the page
   const thornG = el.querySelector('.rthorns'), stemEls = [...el.querySelectorAll('.rstem:not(.rstem-hi)')];
   for (const [si, at, side] of THORNS) {
