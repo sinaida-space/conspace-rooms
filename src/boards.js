@@ -202,13 +202,14 @@ export function carpetTexture(seed) {
 // The red ornamental carpet the red rooms once had wall to wall, now cut to
 // a rug 1.8 by 3 metres: a deep red field darkening to its border,
 // wavy cream medallions, small motifs between, wool pile, fringe at the ends.
-export function rugTexture(seed) {
+// pal: { field, dark, light } to take a lampshade's colours (kitchen.js SHADES)
+export function rugTexture(seed, pal = null) {
   const W = 432, H = 720, c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d'), r = rnd(seed * 7727 + 3);
-  const RED = '#5e0a0f', DARK = '#1f0608', CREAM = '#c9b199';
+  const RED = pal?.field || '#5e0a0f', DARK = pal?.dark || '#1f0608', CREAM = pal?.light || '#c9b199';
   g.fillStyle = RED; g.fillRect(0, 0, W, H);
   const edge = g.createRadialGradient(W / 2, H / 2, W * 0.3, W / 2, H / 2, H * 0.62);
-  edge.addColorStop(0, 'rgba(31,6,8,0)'); edge.addColorStop(1, 'rgba(31,6,8,0.75)');
+  edge.addColorStop(0, 'rgba(0,0,0,0)'); edge.addColorStop(1, 'rgba(0,0,0,0.6)');
   g.fillStyle = edge; g.fillRect(0, 0, W, H);
   g.strokeStyle = DARK; g.lineWidth = 16; g.strokeRect(14, 26, W - 28, H - 52);
   g.strokeStyle = CREAM; g.lineWidth = 2; g.strokeRect(26, 38, W - 52, H - 76);

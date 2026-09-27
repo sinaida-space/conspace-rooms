@@ -5,7 +5,7 @@ import { t, getLang } from './i18n.js';
 import { boardTexture, carpetTexture, rugTexture } from './boards.js';
 import { createChandeliers } from './chandeliers.js';
 import { EYE_HEIGHT } from './player.js';
-import { buildKitchen, createKitchenRig, buildScatter, tickCandles } from './kitchen.js';
+import { buildKitchen, createKitchenRig, buildScatter, tickCandles, shadeOf } from './kitchen.js';
 import { baroqueFrame } from './frames.js';
 import { buildDoorway, buildLightRays } from './doorway.js';
 import { artworkSlots } from './artworks.js';
@@ -478,19 +478,28 @@ export class SoulPath {
     // 3 metres, turned a little, wherever the floor is open enough round them
     stuff.rugs = [];
     const rr = mulberry32(hash2i(SEED_POSTER ^ 0x7a9, cx, cz));
-    for (let k = 0, n = 1 + (rr() < 0.5 ? 1 : 0); k < 12 && stuff.rugs.length < n; k++) {
-      const gi = cx * CHUNK + 2 + Math.floor(rr() * (CHUNK - 4)), gj = cz * CHUNK + 2 + Math.floor(rr() * (CHUNK - 4));
-      let open = true;
-      for (let b = -2; b <= 2 && open; b++) for (let a = -1; a <= 1 && open; a++) if (solidAtGlobal(gi + a, gj + b)) open = false;
-      if (!open) continue;
-      const rot = (rr() - 0.5) * 0.3;                     // long side along z, where the room is open
-      const mat = this.atmo.prop({ map: rugTexture(Math.floor(rr() * 1e6)), rust: 0 });
+    const kRoom = kitchenPlan(cx, cz);
+    const addRug = (x, z, w, d, rot, pal = null) => {
+      const mat = this.atmo.prop({ map: rugTexture(Math.floor(rr() * 1e6), pal), rust: 0 });
       mat.polygonOffset = true; mat.polygonOffsetFactor = -1; mat.polygonOffsetUnits = -1;
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 3.0).rotateX(-Math.PI / 2), mat);
-      mesh.position.set(centreOf(gi), 0.003, centreOf(gj)); mesh.rotation.y = rot;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), mat);
+      mesh.position.set(x, 0.003, z); mesh.rotation.y = rot;
       mesh.visible = this.stage.stage === 1;
       group.add(mesh);
       stuff.rugs.push(mesh);
+    };
+    // under most of grandmother's rooms a big one, the television and table on it
+    if (kRoom && rr() < 0.7) {                         // in the colours of the room's lampshade
+      const w = Math.min(kRoom.maxX - kRoom.minX - 0.6, 3.4), d = Math.min(kRoom.maxZ - kRoom.minZ - 0.6, 4.4);
+      const sh = shadeOf(kRoom.x, kRoom.z), hex = n => '#' + n.toString(16).padStart(6, '0');
+      if (w > 1.5 && d > 1.5) addRug(kRoom.x, kRoom.z, w, d, (rr() - 0.5) * 0.06, { field: sh.v[1], dark: sh.v[0], light: hex(sh.fringe) });
+    }
+    for (let k = 0, n = stuff.rugs.length + 1 + (rr() < 0.5 ? 1 : 0); k < 12 && stuff.rugs.length < n; k++) {
+      const gi = cx * CHUNK + 2 + Math.floor(rr() * (CHUNK - 4)), gj = cz * CHUNK + 2 + Math.floor(rr() * (CHUNK - 4));
+      let open = true;
+      for (let b = -2; b <= 2 && open; b++) for (let a = -1; a <= 1 && open; a++) if (solidAtGlobal(gi + a, gj + b)) open = false;
+      if (!open || (kRoom && Math.hypot(centreOf(gi) - kRoom.x, centreOf(gj) - kRoom.z) < 4.5)) continue;   // not over grandmother's room
+      addRug(centreOf(gi), centreOf(gj), 1.8, 3.0, (rr() - 0.5) * 0.3);   // long side along z, where the room is open
     }
 
     // ── the hospital's leftovers: one small island in some rooms, off the

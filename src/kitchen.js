@@ -222,6 +222,12 @@ const SHADES = [                       // velvet: fold, body, ridge; fringe; lin
   { v: ['#040818', '#12245a', '#2f4a8e'], fringe: 0xb8893e, glow: 0x8a6aa0, sheen: 0xa8c0ff },   // midnight
   { v: ['#3a1002', '#b04a0c', '#e87f2a'], fringe: 0xc8342a, glow: 0xf0902a, sheen: 0xffc080 },   // orange silk
 ];
+// The lampshade a room at (X, Z) will have: buildKitchen draws the same
+// three numbers before it picks, so a rug laid first can match it.
+export function shadeOf(X, Z) {
+  const r = roomRand(X, Z); r(); r(); r();
+  return SHADES[Math.floor(r() * SHADES.length)];
+}
 const CLOTH_TINTS = [0xffffff, 0xd8f0e0, 0xf6e6c0, 0xe8d0d0, 0xd0dcf0];
 function roomRand(x, z) {
   let h = Math.imul(Math.round(x * 10) | 0, 0x27d4eb2d) ^ Math.imul(Math.round(z * 10) | 0, 0x85ebca6b) ^ 0x5bd1e995;
