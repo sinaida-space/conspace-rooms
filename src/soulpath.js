@@ -491,10 +491,11 @@ export class SoulPath {
     // under most of grandmother's rooms a big one, the television and table on it
     const bigRug = kRoom && rr() < 0.7;                 // laid below, once the room shows where its television stands
     for (let k = 0, n = stuff.rugs.length + 1 + (rr() < 0.5 ? 1 : 0); k < 12 && stuff.rugs.length < n; k++) {
-      const gi = cx * CHUNK + 2 + Math.floor(rr() * (CHUNK - 4)), gj = cz * CHUNK + 2 + Math.floor(rr() * (CHUNK - 4));
+      const gi = cx * CHUNK + 3 + Math.floor(rr() * (CHUNK - 6)), gj = cz * CHUNK + 3 + Math.floor(rr() * (CHUNK - 6));   // clear of the chunk's edges: no rug meets a neighbour's
       let open = true;
       for (let b = -2; b <= 2 && open; b++) for (let a = -1; a <= 1 && open; a++) if (solidAtGlobal(gi + a, gj + b)) open = false;
-      if (!open || (kRoom && Math.hypot(centreOf(gi) - kRoom.x, centreOf(gj) - kRoom.z) < 4.5)) continue;   // not over grandmother's room
+      if (!open || (kRoom && Math.hypot(centreOf(gi) - kRoom.x, centreOf(gj) - kRoom.z) < 4.5)) continue;
+      if (stuff.rugs.some(m => Math.abs(m.position.x - centreOf(gi)) < 2.6 && Math.abs(m.position.z - centreOf(gj)) < 3.8)) continue;   // never over another rug   // not over grandmother's room
       addRug(centreOf(gi), centreOf(gj), 1.8, 3.0, (rr() - 0.5) * 0.3);   // long side along z, where the room is open
     }
 
