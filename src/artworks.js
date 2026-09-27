@@ -19,6 +19,8 @@ const PLACARD_Y = 1.35;        // placard centre height
 const DOLLY_DIST = 1.3;        // metres in front of the artwork during inspect, at least
 const DOLLY_MAX = 2.0;         // and at most: corridors are 2.4 m wide
 const DOLLY_TIME = 0.6;        // seconds
+const AUTO_DIST = 2.6;         // metres: on hands, passing this close to a work shows it by itself
+const AUTO_SHOW = 3;           // seconds each work stays; an open palm holds it longer
 
 // ── deterministic hashing (mirrors world.js's private hash family) ─────────
 function hash2i(seed, x, y) {
@@ -262,6 +264,12 @@ function ensureDom() {
   display: flex; align-items: flex-end; justify-content: center;
 }
 #inspect-overlay.visible { opacity: 1; }
+#inspect-overlay .auto-hold {
+  display: none; margin: 0 16px calc(3vh + var(--hud-h, 0px)); padding: 0.5em 1em;
+  font-family: 'Departure Mono', ui-monospace, monospace; font-size: 0.85em; letter-spacing: 0.04em;
+  color: #baffc9; background: rgba(1,8,5,0.9); border: 1px solid #3f8a5a; text-align: center;
+}
+body.auto-show #inspect-overlay .auto-hold { display: block; }
 `;
   document.head.appendChild(style);
 
@@ -271,8 +279,14 @@ function ensureDom() {
 
   const overlay = document.createElement('div');
   overlay.id = 'inspect-overlay';
+  const hold = document.createElement('p');
+  hold.className = 'auto-hold';
+  overlay.appendChild(hold);
   document.body.appendChild(overlay);
 }
+
+// a hung work by where it hangs: chunks rebuild their objects, the place stays
+const autoKey = a => `${a.art.id}@${a.centerWorld.x.toFixed(1)},${a.centerWorld.z.toFixed(1)}`;
 
 // ── Artworks ─────────────────────────────────────────────────────────────
 export class Artworks {
@@ -310,6 +324,8 @@ export class Artworks {
     this._animT = 0;
     this._prevPinch = false;
     this._pickPressed = false;
+    this._autoShown = new Set();     // works already shown by themselves on hands, once each
+    this._autoT = 0;
 
     router.on('pick', () => { this._pickPressed = true; });
     router.on('halt', () => { if (this.inspecting) this._closeInspect(); });
@@ -455,6 +471,7 @@ export class Artworks {
 
   // ── proximity, prompt, inspect ─────────────────────────────────────────
   update(dt) {
+    if (this.player.mode === 'hands' && this.player.hand.present) return this._updateAuto(dt);
     if (this.inspecting) {
       this._updateInspectAnim(dt);
       const pinchNow = !!(this.player.hand.present && this.player.hand.pinch);
@@ -472,6 +489,56 @@ export class Artworks {
     this._prevPinch = pinchNow;
     if (candidate && (this._pickPressed || pinchEdge)) this._openInspect(candidate);
     this._pickPressed = false;
+  }
+
+  // On hands nothing is pinched: a work shows itself as the visitor passes,
+  // for AUTO_SHOW seconds, and the next one near follows; an open palm (or
+  // both) holds the one on screen, E / click / Escape put it away.
+  _updateAuto(dt) {
+    this._prompt.classList.remove('visible');
+    document.body.classList.remove('can-inspect');
+    if (this.inspecting) {
+      this._updateInspectAnim(dt);
+      const hand = this.player.hand;
+      const holding = hand.stopped || /palm/.test(hand.left + hand.right);
+      if (!holding) this._autoT += dt;
+      if (this._pickPressed) this._autoT = AUTO_SHOW;
+      this._pickPressed = false;
+      if (this._autoT >= AUTO_SHOW) {
+        const next = this._findAuto();
+        if (next) this._showAuto(next);
+        else this._closeInspect();
+      }
+      return;
+    }
+    this._pickPressed = false;
+    if (this.player.auto || this.player.locked) return;       // a question board holds the walk
+    const next = this._findAuto();
+    if (next) this._showAuto(next);
+  }
+
+  _findAuto() {
+    const px = this.player.pos.x, pz = this.player.pos.y;
+    const fx = -Math.sin(this.player.yaw), fz = -Math.cos(this.player.yaw);
+    let best = null, bestD = Infinity;
+    for (const a of this.active) {
+      if (this._autoShown.has(autoKey(a)) || a === this.inspecting) continue;
+      const dx = a.centerWorld.x - px, dz = a.centerWorld.z - pz;
+      const d = Math.hypot(dx, dz);
+      if (d > AUTO_DIST || d < 1e-4) continue;
+      if ((dx * a.normal.x + dz * a.normal.z) / d > -0.2) continue;   // on our side of its wall
+      if ((fx * dx + fz * dz) / d < -0.3) continue;                    // not one already behind us
+      if (d < bestD) { bestD = d; best = a; }
+    }
+    return best;
+  }
+
+  _showAuto(a) {
+    this._autoShown.add(autoKey(a));
+    this._autoT = 0;
+    this._overlay.querySelector('.auto-hold').textContent = t('autoHold');
+    document.body.classList.add('auto-show');
+    this._openInspect(a);
   }
 
   _findCandidate() {
@@ -540,6 +607,7 @@ export class Artworks {
 
   _closeInspect() {
     this.inspecting = null;
+    document.body.classList.remove('auto-show');
     document.body.classList.remove('inspecting');
     this.player.locked = false;
     this._overlay.classList.remove('visible');
