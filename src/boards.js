@@ -1,12 +1,9 @@
 import * as THREE from 'three';
 
 // ── conspace-rooms · boards.js ──────────────────────────────────────────────
-// Where the walls ask their questions, a different thing in every stage:
-//   FEAR     a hospital notice board: cork in a wooden frame, a typed sheet
+// The hospital's notice boards, where the walls ask about fear: cork in a wooden frame, a typed sheet
 //            with the question pinned in the middle, older notices around it,
 //            pushpins, a strip of yellowed tape
-//   MEMORY   a museum piece: a gilt frame, a cream mount, the question set in
-//            a serif like a caption to a picture that is not there
 // and the Soviet wall carpets of grandmother's rooms. Every texture is drawn
 // once on a canvas; nothing is downloaded.
 
@@ -86,37 +83,6 @@ export function boardTexture(text, seed, lang) {
   pin(qx + 26, qy + 18); pin(qx + qw - 26, qy + 18);
   g.fillStyle = 'rgba(214,196,140,0.7)';                  // a strip of tape across a corner
   g.save(); g.translate(qx + qw - 30, qy + qh - 12); g.rotate(-0.6); g.fillRect(-40, -11, 80, 22); g.restore();
-  return tex(c);
-}
-
-// ── memory: the museum frame ────────────────────────────────────────────────
-export function museumTexture(text, n) {
-  const W = 480, H = 640, c = document.createElement('canvas'); c.width = W; c.height = H;
-  const g = c.getContext('2d');
-  // gilt frame: a dark outer step, a bright moulding, an inner bead
-  const gold = g.createLinearGradient(0, 0, W, H);
-  gold.addColorStop(0, '#f1d488'); gold.addColorStop(0.35, '#a8792f'); gold.addColorStop(0.6, '#e2bd6a'); gold.addColorStop(1, '#6e4a18');
-  g.fillStyle = '#3d2a10'; g.fillRect(0, 0, W, H);
-  g.fillStyle = gold; g.fillRect(8, 8, W - 16, H - 16);
-  for (let k = 0; k < 6; k++) {                           // mouldings
-    g.strokeStyle = k % 2 ? 'rgba(60,35,5,0.45)' : 'rgba(255,240,190,0.45)'; g.lineWidth = 3;
-    g.strokeRect(14 + k * 7, 14 + k * 7, W - 28 - k * 14, H - 28 - k * 14);
-  }
-  for (let i = 0; i < 1600; i++) { g.fillStyle = `rgba(60,35,5,${Math.random() * 0.18})`; g.fillRect(Math.random() * W, Math.random() * H, 2, 2); }   // worn gilt
-  // the mount, and the question where a picture would be
-  const m = 64;
-  g.fillStyle = '#efe7d3'; g.fillRect(m, m, W - 2 * m, H - 2 * m);
-  g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(m, m, W - 2 * m, 6); g.fillRect(m, m, 6, H - 2 * m);
-  g.strokeStyle = 'rgba(140,110,60,0.5)'; g.lineWidth = 1.5; g.strokeRect(m + 26, m + 26, W - 2 * m - 52, H - 2 * m - 52);
-  g.fillStyle = '#2b2118'; g.font = 'italic 30px Georgia, "Times New Roman", serif';
-  let lines = 1, line = '';                               // count the lines first, to centre them
-  for (const w of text.split(' ')) { const t = line ? line + ' ' + w : w; if (g.measureText(t).width > W - 2 * m - 90 && line) { lines++; line = w; } else line = t; }
-  wrap(g, text, W / 2, H / 2 - (lines - 1) * 20, W - 2 * m - 90, 40, 'center');
-  g.font = '15px Georgia, serif'; g.fillStyle = 'rgba(60,45,30,0.7)';
-  g.fillText(`№ ${n}`, W / 2, H - m - 44);
-  const fade = g.createRadialGradient(W / 2, H / 2, H * 0.2, W / 2, H / 2, H * 0.7);   // age at the edges of the mount
-  fade.addColorStop(0, 'rgba(0,0,0,0)'); fade.addColorStop(1, 'rgba(90,60,20,0.18)');
-  g.fillStyle = fade; g.fillRect(m, m, W - 2 * m, H - 2 * m);
   return tex(c);
 }
 

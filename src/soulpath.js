@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, mulberry32 } from './world.js';
 import { zoneWeights, ORIGIN, ZONE } from './zones.js';
 import { t, getLang } from './i18n.js';
-import { boardTexture, museumTexture, carpetTexture } from './boards.js';
+import { boardTexture, carpetTexture } from './boards.js';
 import { createChandeliers } from './chandeliers.js';
 import { EYE_HEIGHT } from './player.js';
 import { buildKitchen, createKitchenRig, buildScatter, tickCandles } from './kitchen.js';
@@ -36,8 +36,8 @@ import { createPropKit } from './props.js';
 //                   someone close (gold), of a child (green), of a grown-up
 //                   (deep red). Walk into one and it scatters; its question
 //                   types itself on the television and across the screen.
-//   posters         the walls' questions: notice boards in the hospital, framed
-//                   pieces in grandmother's rooms (boards.js), each
+//   posters         the walls' questions: notice boards in the hospital
+//                   (boards.js), each
 //                   asking one question
 //   roses           every work seen grows the rose in the top-left corner;
 //                   with all of them an arch of roses opens a couple of steps
@@ -419,9 +419,8 @@ export class SoulPath {
       usedEdges.add(pp.edge);
     }
 
-    // ── the walls' questions: a notice board in the hospital, a framed piece
-    // in grandmother's rooms (boards.js); one or two a chunk, never on a
-    // work's wall. And a Soviet carpet on some walls of the red rooms.
+    // ── the walls' questions: a notice board in the hospital (boards.js),
+    // one or two a chunk, never on a work's wall. And a Soviet carpet on some walls of the red rooms.
     const rpo = mulberry32(hash2i(SEED_POSTER, cx, cz));
     stuff.posters = []; stuff.carpets = [];
     const hung = new Set(artworkSlots(cx, cz, this.world.getWallSlots(cx, cz)).map(sl => sl.cellKey));
@@ -547,14 +546,13 @@ export class SoulPath {
 
   _printPoster(p) {
     const st = this.stage.stage, u = p.mesh.material.uniforms;
-    p.mesh.visible = st < 2;                          // in the light the clouds carry the questions
-    if (st === 2) return;
-    const list = st === 0 ? t('fearQuestions').concat(t('posterQuestions')) : t('memoryQuestions');
-    const i = p.q % list.length;
+    p.mesh.visible = st === 0;                        // past the hospital the souls, clouds and balloons ask
+    if (st !== 0) return;
+    const list = t('fearQuestions').concat(t('posterQuestions'));
     const old = u.uMap.value;
-    u.uMap.value = st === 0 ? boardTexture(list[i], p.q + 1, getLang()) : museumTexture(list[i], i + 1);
+    u.uMap.value = boardTexture(list[p.q % list.length], p.q + 1, getLang());
     u.uHasMap.value = 1;
-    if (st === 0) p.mesh.scale.set(1.55, 0.85, 1); else p.mesh.scale.set(0.95, 0.95, 1);   // a wide board, an upright frame
+    p.mesh.scale.set(1.55, 0.85, 1);                  // a wide board
     old?.dispose();
   }
 

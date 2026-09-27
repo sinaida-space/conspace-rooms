@@ -219,21 +219,6 @@ const STRINGS = {
       'Which diagnosis do~you give yourself before any doctor could?',
       'Who taught you to~fear exactly this?',
     ],
-    // memory: framed like museum pieces in grandmother's rooms
-    memoryQuestions: [
-      'Whose voice would you know among thousands, even now that it~is gone?',
-      'Which thing from that house is still with you?',
-      'What smelled most of~childhood?',
-      'Which evening would you live again without changing a~word?',
-      'What were you told when it~hurt, and~who said it?',
-      'Which photograph are~you afraid to~find, and~afraid to~lose?',
-      'Which song takes you back to~one particular kitchen?',
-      'What did~you not~manage to~ask while there was still someone to~ask?',
-      'Which recipe died with a~person?',
-      'Where does memory live when there is no~one left to~tell it~to?',
-      'Which gesture from that time do~your hands still repeat?',
-      'Who was the first to~call you by~a~tender name?',
-    ],
     // acceptance: carried by the clouds adrift in the light
     acceptQuestions: [
       'What can you forgive yourself right now?',
@@ -502,21 +487,6 @@ const STRINGS = {
       'Что~ты сделаешь в~первый день без~этого страха?',
       'Какой диагноз ты~ставишь себе раньше любого врача?',
       'Кто~научил тебя бояться именно этого?',
-    ],
-    // память: в~рамках, как~музейные работы, в~бабушкиных комнатах
-    memoryQuestions: [
-      'Чей голос ты~узнаешь из~тысячи, даже теперь, когда его нет?',
-      'Какая вещь из~того дома до~сих пор с~тобой?',
-      'Что~пахло детством сильнее всего?',
-      'Какой вечер хочется прожить ещё раз, не~меняя ни~слова?',
-      'Что~тебе говорили, когда было больно, и~кто~это говорил?',
-      'Какую фотографию страшно найти и~страшно потерять?',
-      'Какая песня возвращает тебя в~одну конкретную кухню?',
-      'О~чём не~удалось спросить, пока было у~кого?',
-      'Какой рецепт ушёл вместе с~человеком?',
-      'Где живёт память, когда её больше некому рассказать?',
-      'Какой жест из~того времени до~сих пор повторяют твои руки?',
-      'Кто~первым назвал тебя ласково?',
     ],
     // принятие: их~несут облака, плывущие в~свете
     acceptQuestions: [
