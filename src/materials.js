@@ -619,7 +619,7 @@ vec4 troffer(vec2 m){
   }
   float louvre = 0.85 + 0.15 * step(0.5, fract(m.x * 6.0));   // slats
   float glow = inner * (0.35 + 0.65 * clamp(tubes, 0.0, 1.0)) * louvre;
-  return vec4(mix(vec3(0.5, 0.53, 0.5), metal, 1.0 - inner), glow);   // inside, a milky diffuser: pale even when the tubes die
+  return vec4(mix(metal * 0.5, metal, 1.0 - inner), glow);
 }
 
 // MEMORY: a fabric pendant shade seen from below: dark rim, glowing inside,
@@ -765,7 +765,7 @@ void main(){
   vec3 V = normalize(cameraPosition - vWorldPos);
   vec3 d, s;
   fixtureLightSpec(vWorldPos, N, V, L, 48.0, d, s);
-  vec3 cl = candleLight(vWorldPos, N);
+  vec3 cl = candleLight(vWorldPos, N) * 0.4;          // a flame beside a thing warms it, it must not make it a beacon
   float ao = mix(0.5, 1.0, smoothstep(0.0, 0.3, vWorldPos.y));    // contact shade on the floor
   vec3 lit = base * (d + 0.05 * L + z.y * FILL_MEM * 1.4 + cl) * ao + s * vCol.a * ao * (1.0 - rusted);   // rust has no shine
   if (uGlow > 0.0) {
