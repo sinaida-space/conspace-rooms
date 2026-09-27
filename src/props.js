@@ -1,0 +1,409 @@
+import * as THREE from 'three';
+import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
+import { roundedBox } from './geom.js';
+
+// ── conspace-rooms · props.js ───────────────────────────────────────────────
+// Things left along the corridors, so that hardly a corridor is quite empty.
+// Each stage leaves its own:
+//   FEAR       a tube chair, a bucket and mop, bottles, a cardboard box, an
+//              oxygen cylinder
+//   MEMORY     the toys every Soviet child had (неваляшка, пирамидка, юла,
+//              матрёшки, a two-colour ball, a rocking horse), slippers, a
+//              stool, jars of preserves, a tied stack of newspapers
+//   ACCEPTANCE furniture under white sheets, windows with nothing but light
+//              behind a breathing tulle, lace napkins adrift in the air and
+//              paper cranes circling under the ceiling, shy of the visitor
+// Every shape is built once from primitives (no downloads) and baked with
+// vertex colours (rgb + gloss in alpha, as in ward.js and eggs.js). A chunk
+// merges all of its grounded things into one mesh lit by atmo.prop(), plus
+// at most three more draw calls in the light: windows, tulle, floaters.
+// Where they stand is decided in soulpath.js (_buildProps).
+
+const SHEET = 0xeeeee8, STEEL = 0xa9adab, WOOD = 0x6a4424, WOOD_PALE = 0xd8b070;
+
+function M(x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) {
+  return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
+}
+const lathe = (pts, seg = 16) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
+const cyl = (rt, rb, h, seg = 12) => new THREE.CylinderGeometry(rt, rb, h, seg);
+const sphere = (r, w = 14, h = 10) => new THREE.SphereGeometry(r, w, h);
+
+// one shape: primitives with colour and gloss, merged in local space. Local
+// +z faces the corridor, the back rests toward the wall, y = 0 is the floor.
+function shape(build, crumple = 0) {
+  const parts = [];
+  const put = (geo, hex, gloss, m) => {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    if (g !== geo) geo.dispose();
+    if (m) g.applyMatrix4(m);
+    const cc = new THREE.Color().setHex(hex, THREE.LinearSRGBColorSpace);
+    const col = new Float32Array(g.attributes.position.count * 4);
+    for (let i = 0; i < g.attributes.position.count; i++) col.set([cc.r, cc.g, cc.b, gloss], i * 4);
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+    parts.push(g);
+  };
+  build(put);
+  const geo = mergeGeometries(parts);
+  for (const g of parts) g.dispose();
+  if (crumple) {                                   // cloth: soft folds pushed along the normals
+    const p = geo.attributes.position, n = geo.attributes.normal;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const f = crumple * (Math.sin(x * 23 + y * 7) * Math.sin(z * 19 - y * 11) + 0.5 * Math.sin(y * 31 + x * 13));
+      p.setXYZ(i, x + n.getX(i) * f, y + Math.max(0, n.getY(i)) * f * 0.3, z + n.getZ(i) * f);
+    }
+    geo.computeVertexNormals();
+  }
+  return geo;
+}
+
+// ── fear ────────────────────────────────────────────────────────────────────
+const FEAR = {
+  chair: { depth: 0.45, w: 0.45, solid: true, build: put => {
+    for (const [x, z] of [[-0.19, -0.18], [0.19, -0.18], [-0.19, 0.18], [0.19, 0.18]]) put(cyl(0.011, 0.011, 0.45, 8), STEEL, 0.5, M(x, 0.225, z));
+    for (const x of [-0.19, 0.19]) put(cyl(0.011, 0.011, 0.42, 8), STEEL, 0.5, M(x, 0.66, -0.19));
+    put(roundedBox(0.42, 0.04, 0.4, 0.012), 0x3b4a3a, 0.35, M(0, 0.47, 0));
+    put(roundedBox(0.42, 0.24, 0.03, 0.01), 0x3b4a3a, 0.35, M(0, 0.76, -0.19));
+  } },
+  bucket: { depth: 0.3, w: 0.4, build: put => {
+    put(cyl(0.14, 0.11, 0.26, 16), 0xc9c7bb, 0.4, M(0.05, 0.13, 0));
+    put(new THREE.TorusGeometry(0.14, 0.008, 6, 20), 0x2b3a66, 0.5, M(0.05, 0.26, 0, Math.PI / 2));
+    put(new THREE.CircleGeometry(0.13, 16), 0x2e302a, 0.7, M(0.05, 0.262, 0, -Math.PI / 2));   // grey water
+    put(cyl(0.012, 0.012, 1.3, 6), 0x6a4a2a, 0.2, M(0.05, 0.62, -0.08, -0.26, 0, 0.12));    // the mop leans on the wall
+    put(roundedBox(0.26, 0.05, 0.1, 0.02), 0x77726a, 0.05, M(0.08, 0.025, 0.02, 0, 0.4, 0));
+  } },
+  bottles: { depth: 0.2, w: 0.35, build: put => {
+    const bottle = (x, z, hex, lying) => {
+      const m = lying ? M(x, 0.035, z, 0, 0.7, Math.PI / 2) : M(x, 0, z);
+      put(cyl(0.035, 0.035, 0.16, 10), hex, 0.85, m.clone().multiply(M(0, 0.08, 0)));
+      put(cyl(0.012, 0.03, 0.06, 8), hex, 0.85, m.clone().multiply(M(0, 0.19, 0)));
+    };
+    bottle(-0.1, 0, 0x3a2008); bottle(0, -0.03, 0x1f3a1a); bottle(0.09, 0.02, 0x9aa89c); bottle(0.05, 0.1, 0x3a2008, true);
+  } },
+  box: { depth: 0.34, w: 0.42, solid: true, build: put => {
+    put(roundedBox(0.4, 0.3, 0.32, 0.006), 0x8a6a42, 0.05, M(0, 0.15, 0, 0, 0.1, 0));
+    put(new THREE.BoxGeometry(0.4, 0.005, 0.15), 0x7d5f3a, 0.05, M(0, 0.33, 0.2, -1.0, 0.1, 0));
+    put(new THREE.BoxGeometry(0.4, 0.005, 0.15), 0x7d5f3a, 0.05, M(0, 0.33, -0.2, 1.1, 0.1, 0));
+  } },
+  oxygen: { depth: 0.22, w: 0.22, build: put => {
+    put(cyl(0.09, 0.09, 1.0, 16), 0x2a4f8a, 0.5, M(0, 0.5, 0, -0.07));
+    put(sphere(0.09, 16, 8), 0x2a4f8a, 0.5, M(0, 1.0, -0.035, -0.07, 0, 0, 1, 0.6, 1));
+    put(roundedBox(0.05, 0.08, 0.05, 0.01), STEEL, 0.6, M(0, 1.1, -0.04));
+  } },
+};
+
+// ── memory: the toys, and the house around them ─────────────────────────────
+const MEMORY = {
+  nevalyashka: { depth: 0.18, w: 0.2, toy: true, build: put => {
+    put(sphere(0.09, 18, 12), 0xc81e24, 0.6, M(0, 0.085, 0, 0, 0, 0, 1, 0.95, 1));
+    put(sphere(0.07, 14, 10), 0xf2e6d8, 0.4, M(0, 0.09, 0.055, 0, 0, 0, 1, 1, 0.45));
+    put(sphere(0.055, 14, 10), 0xf1c9a6, 0.4, M(0, 0.2, 0));
+    put(new THREE.SphereGeometry(0.06, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0xc81e24, 0.6, M(0, 0.205, -0.004));
+    for (const x of [-0.018, 0.018]) put(sphere(0.006, 6, 4), 0x2a1a14, 0.3, M(x, 0.21, 0.05));
+  } },
+  pyramid: { depth: 0.18, w: 0.18, toy: true, build: put => {
+    put(cyl(0.08, 0.085, 0.03, 16), WOOD_PALE, 0.3, M(0, 0.015, 0));
+    put(cyl(0.012, 0.012, 0.3, 8), WOOD_PALE, 0.3, M(0, 0.18, 0));
+    [0xd0202a, 0xf08a1a, 0xf2d21e, 0x2f9a3c, 0x2a5fb0, 0x7a3fa0].forEach((hex, i) =>
+      put(new THREE.TorusGeometry(0.072 - i * 0.008, 0.022 - i * 0.0015, 8, 18), hex, 0.55, M(0, 0.052 + i * 0.043, 0, Math.PI / 2)));
+    put(sphere(0.03), 0xd0202a, 0.6, M(0, 0.33, 0));
+  } },
+  yula: { depth: 0.26, w: 0.3, toy: true, build: put => {
+    const t = M(0, 0.1, 0, 0, 0.5, 0.55);                // lying on its side, as it fell
+    put(lathe([[0, 0], [0.02, 0.01], [0.1, 0.06], [0.112, 0.09], [0.08, 0.13], [0.02, 0.15], [0, 0.15]], 20), 0xc8202a, 0.7, t.clone().multiply(M(0, -0.08, 0)));
+    put(new THREE.TorusGeometry(0.105, 0.012, 6, 24), 0x2a5fb0, 0.7, t.clone().multiply(M(0, -0.005, 0, Math.PI / 2)));
+    put(new THREE.TorusGeometry(0.09, 0.01, 6, 24), 0xf2d21e, 0.7, t.clone().multiply(M(0, 0.03, 0, Math.PI / 2)));
+    put(cyl(0.008, 0.008, 0.1, 6), STEEL, 0.7, t.clone().multiply(M(0, 0.12, 0)));
+  } },
+  matryoshki: { depth: 0.16, w: 0.36, toy: true, build: put => {
+    [[1, -0.1], [0.78, 0.03], [0.58, 0.13]].forEach(([s, x]) => {
+      const m = M(x, 0, 0, 0, (x * 3) % 0.6 - 0.3, 0, s);
+      put(lathe([[0, 0], [0.06, 0], [0.075, 0.04], [0.07, 0.1], [0.05, 0.14], [0.055, 0.17], [0.045, 0.2], [0, 0.215]], 18), 0xb81c20, 0.7, m);
+      put(sphere(0.028, 10, 8), 0xf3d2b0, 0.4, m.clone().multiply(M(0, 0.166, 0.046, 0, 0, 0, 1, 1, 0.35)));
+      put(sphere(0.045, 10, 8), 0xf2c230, 0.6, m.clone().multiply(M(0, 0.07, 0.062, 0, 0, 0, 1, 1.25, 0.3)));
+    });
+  } },
+  ball: { depth: 0.2, w: 0.2, toy: true, build: put => {
+    put(new THREE.SphereGeometry(0.1, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0xc81e24, 0.7, M(0, 0.1, 0, 0.4, 0, 0.3));
+    put(new THREE.SphereGeometry(0.1, 18, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), 0x2a5fb0, 0.7, M(0, 0.1, 0, 0.4, 0, 0.3));
+    put(new THREE.TorusGeometry(0.1, 0.008, 6, 24), 0xf2efe6, 0.6, M(0, 0.1, 0, Math.PI / 2 + 0.4, 0, 0.3));
+  } },
+  horse: { depth: 0.3, w: 0.85, toy: true, solid: true, build: put => {
+    const arc = 1.0;
+    for (const z of [-0.1, 0.1]) put(new THREE.TorusGeometry(0.5, 0.016, 6, 20, arc), 0x7a4a24, 0.3, M(0, 0.516, z, 0, 0, -Math.PI / 2 - arc / 2));
+    for (const [x, z] of [[-0.16, -0.08], [0.16, -0.08], [-0.16, 0.08], [0.16, 0.08]]) put(cyl(0.018, 0.018, 0.34, 6), 0xe6d8bc, 0.3, M(x, 0.22, z * 1.1, z * 0.3, 0, x * -0.3));
+    put(roundedBox(0.45, 0.16, 0.14, 0.05), 0xe6d8bc, 0.35, M(0, 0.42, 0));
+    for (const [x, z] of [[-0.08, 0.071], [0.1, -0.071], [0.05, 0.071]]) put(sphere(0.03, 8, 6), 0x5a3a22, 0.3, M(x, 0.43, z, 0, 0, 0, 1, 1, 0.2));
+    put(roundedBox(0.1, 0.24, 0.1, 0.03), 0xe6d8bc, 0.35, M(0.23, 0.55, 0, 0, 0, -0.5));
+    put(roundedBox(0.2, 0.09, 0.09, 0.03), 0xe6d8bc, 0.35, M(0.31, 0.66, 0, 0, 0, -0.25));
+    put(new THREE.BoxGeometry(0.2, 0.05, 0.02), 0x3a2416, 0.2, M(0.2, 0.62, 0, 0, 0, -0.5));
+    put(roundedBox(0.15, 0.025, 0.16, 0.01), 0xb81c20, 0.5, M(0, 0.51, 0));
+    put(cyl(0.02, 0.005, 0.2, 6), 0x3a2416, 0.2, M(-0.26, 0.42, 0, 0, 0, 0.8));
+  } },
+  slippers: { depth: 0.3, w: 0.3, build: put => {
+    [[-0.07, 0.1], [0.08, -0.15]].forEach(([x, a]) => {
+      put(roundedBox(0.1, 0.05, 0.26, 0.03), 0x6a1f28, 0.3, M(x, 0.025, 0, 0, a));
+      put(roundedBox(0.105, 0.025, 0.09, 0.012), 0xd8c8b0, 0.1, M(x + Math.sin(a) * 0.05, 0.058, Math.cos(a) * 0.05, 0, a));
+    });
+  } },
+  stool: { depth: 0.32, w: 0.32, solid: true, build: put => {
+    put(roundedBox(0.32, 0.03, 0.32, 0.008), WOOD, 0.3, M(0, 0.45, 0));
+    for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) put(new THREE.BoxGeometry(0.03, 0.45, 0.03), WOOD, 0.3, M(x * 0.12, 0.22, z * 0.12, z * 0.06, 0, -x * 0.06));
+    for (const z of [-0.12, 0.12]) put(new THREE.BoxGeometry(0.26, 0.02, 0.02), WOOD, 0.3, M(0, 0.15, z));
+  } },
+  jars: { depth: 0.15, w: 0.3, build: put => {
+    [[-0.06, 0xc0601a], [0.08, 0x6a1420]].forEach(([x, hex]) => {
+      put(cyl(0.06, 0.06, 0.14, 14), hex, 0.9, M(x, 0.07, 0));
+      put(cyl(0.064, 0.064, 0.02, 14), 0xb0a060, 0.7, M(x, 0.15, 0));
+    });
+  } },
+  newspapers: { depth: 0.26, w: 0.36, build: put => {
+    put(roundedBox(0.35, 0.12, 0.25, 0.01), 0xcfc6ae, 0.05, M(0, 0.06, 0, 0, 0.15, 0));
+    put(new THREE.BoxGeometry(0.36, 0.125, 0.006), 0x4a3a2a, 0.1, M(0, 0.06, 0, 0, 0.15, 0));
+    put(new THREE.BoxGeometry(0.006, 0.125, 0.26), 0x4a3a2a, 0.1, M(0, 0.06, 0, 0, 0.15, 0));
+  } },
+};
+
+// ── acceptance: under sheets, in the light ─────────────────────────────────
+const LIGHT = {
+  chair: { depth: 0.5, w: 0.5, solid: true, crumple: 0.012, build: put => {
+    put(roundedBox(0.46, 0.08, 0.46, 0.03, 4), SHEET, 0.08, M(0, 0.47, 0));
+    put(roundedBox(0.46, 0.45, 0.1, 0.03, 4), SHEET, 0.08, M(0, 0.74, -0.19));
+    put(new THREE.CylinderGeometry(0.33, 0.37, 0.44, 12, 3, true), SHEET, 0.08, M(0, 0.22, 0, 0, Math.PI / 4));
+  } },
+  armchair: { depth: 0.75, w: 0.85, solid: true, crumple: 0.018, build: put => {
+    put(roundedBox(0.82, 0.48, 0.7, 0.12, 4), SHEET, 0.08, M(0, 0.24, 0));
+    put(roundedBox(0.82, 0.5, 0.22, 0.08, 4), SHEET, 0.08, M(0, 0.7, -0.24));
+    for (const x of [-0.34, 0.34]) put(roundedBox(0.16, 0.2, 0.7, 0.07, 3), SHEET, 0.08, M(x, 0.56, 0));
+  } },
+  mirror: { depth: 0.36, w: 0.72, solid: true, crumple: 0.01, build: put => {
+    put(roundedBox(0.7, 1.7, 0.12, 0.04, 4), SHEET, 0.08, M(0, 0.9, 0, -0.08));
+    put(new THREE.CylinderGeometry(0.38, 0.46, 0.06, 14, 1), SHEET, 0.08, M(0, 0.03, 0.06, 0, 0, 0, 1, 1, 0.55));
+  } },
+  piano: { depth: 0.6, w: 1.3, solid: true, crumple: 0.016, build: put => {
+    put(roundedBox(1.3, 1.1, 0.55, 0.06, 4), SHEET, 0.08, M(0, 0.55, 0));
+    put(new THREE.CylinderGeometry(0.7, 0.76, 0.3, 16, 2, true), SHEET, 0.08, M(0, 0.15, 0, 0, 0, 0, 1, 1, 0.45));
+  } },
+};
+
+// ── materials of the light ──────────────────────────────────────────────────
+function laceTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.translate(128, 128);
+  g.fillStyle = '#fff'; g.strokeStyle = '#fff';
+  g.beginPath(); g.arc(0, 0, 58, 0, 7); g.fill();                    // the linen centre (cranes sample it)
+  g.lineWidth = 3;
+  for (const r of [62, 84, 104]) { g.beginPath(); g.arc(0, 0, r, 0, 7); g.stroke(); }
+  for (let i = 0; i < 36; i++) {                                       // spokes and petals of thread
+    const a = i / 36 * Math.PI * 2;
+    g.beginPath(); g.moveTo(Math.cos(a) * 62, Math.sin(a) * 62); g.lineTo(Math.cos(a) * 104, Math.sin(a) * 104); g.stroke();
+    g.beginPath(); g.ellipse(Math.cos(a + 0.087) * 94, Math.sin(a + 0.087) * 94, 6, 3, a, 0, 7); g.fill();
+  }
+  for (let i = 0; i < 24; i++) {                                       // the scalloped edge
+    const a = i / 24 * Math.PI * 2;
+    g.beginPath(); g.arc(Math.cos(a) * 112, Math.sin(a) * 112, 13, a - 1.6, a + 1.6); g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const FLOAT_VERT = /* glsl */`
+#include <common>
+#include <fog_pars_vertex>
+attribute vec3 aCenter;
+attribute vec3 aFloat;          // phase, kind (0 lace, 1 crane), wing (1 at the tips)
+uniform float uTime;
+uniform vec3 uPlayer;
+varying vec2 vUv;
+varying float vShade;
+vec2 turn(vec2 v, float a){ return vec2(v.x * cos(a) - v.y * sin(a), v.x * sin(a) + v.y * cos(a)); }
+void main(){
+  vec3 p = position, c = aCenter;
+  float ph = aFloat.x, t = uTime;
+  if (aFloat.y < 0.5) {                     // lace: a slow turn and a breath up and down
+    p.xz = turn(p.xz, t * 0.15 + ph);
+    c.y += sin(t * 0.6 + ph) * 0.08;
+    vShade = 1.0;
+  } else {                                  // crane: circling, wings beating slowly
+    float a = t * 0.35 + ph;
+    p.y += aFloat.z * sin(t * 5.0 + ph * 3.0) * 0.05;
+    p.xz = turn(p.xz, a + 1.5708);
+    c += vec3(cos(a) * 0.5, sin(t * 0.8 + ph) * 0.08, sin(a) * 0.5);
+    vShade = 0.74 + 0.2 * aFloat.z;          // paper in the light: a little grey, so it reads against it
+  }
+  // shy of the visitor: rise and drift away when they come close
+  vec2 d = c.xz - uPlayer.xz;
+  float shy = smoothstep(3.2, 1.0, length(d));
+  c.y = min(c.y + shy * 0.45, 3.0);
+  c.xz += normalize(d + 1e-4) * shy * 0.35;
+  vUv = uv;
+  vec4 mvPosition = modelViewMatrix * vec4(c + p, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}`;
+const FLOAT_FRAG = /* glsl */`
+#include <common>
+#include <fog_pars_fragment>
+uniform sampler2D uMap;
+varying vec2 vUv;
+varying float vShade;
+void main(){
+  if (texture2D(uMap, vUv).a < 0.4) discard;
+  gl_FragColor = vec4(vec3(1.0, 0.985, 0.95) * vShade, 1.0);
+  #include <fog_fragment>
+}`;
+
+const TULLE_VERT = /* glsl */`
+#include <common>
+#include <fog_pars_vertex>
+attribute float aPhase;
+uniform float uTime;
+varying vec2 vUv;
+void main(){
+  float hang = 1.0 - uv.y;                  // pinned at the rail, free at the hem
+  float k = (position.x + position.z) * 4.0;
+  float breath = sin(uTime * 0.9 + k + aPhase) * 0.07 + sin(uTime * 0.53 + k * 2.3) * 0.03;
+  vec3 p = position + normal * (hang * breath + sin(k * 4.5) * 0.02);
+  vUv = uv;
+  vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}`;
+const TULLE_FRAG = /* glsl */`
+#include <common>
+#include <fog_pars_fragment>
+varying vec2 vUv;
+void main(){
+  float weave = 0.75 + 0.25 * sin(vUv.x * 420.0) * sin(vUv.y * 380.0);
+  gl_FragColor = vec4(vec3(0.9, 0.9, 0.88) + 0.1 * weave, 0.45 * weave);   // a shade darker than the light, so the folds read
+  #include <fog_fragment>
+}`;
+
+// a paper crane, nose along +x: body, two wings (tips flagged), neck, tail
+function craneGeometry() {
+  const P = [], W = [];
+  const tri = (a, b, c, w = [0, 0, 0]) => { P.push(...a, ...b, ...c); W.push(...w); };
+  tri([0.1, 0, 0], [0, 0.03, 0], [-0.1, 0, 0]);                              // body ridge
+  tri([0.1, 0, 0], [-0.1, 0, 0], [0, -0.02, 0]);
+  tri([0.05, 0.01, 0], [-0.05, 0.01, 0], [0, 0.03, 0.16], [0, 0, 1]);       // wings
+  tri([0.05, 0.01, 0], [-0.05, 0.01, 0], [0, 0.03, -0.16], [0, 0, 1]);
+  tri([0.06, 0, 0], [0.1, 0, 0], [0.16, 0.1, 0]);                           // neck and head
+  tri([-0.06, 0, 0], [-0.1, 0, 0], [-0.16, 0.08, 0]);                       // tail
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(P.length / 3 * 2).fill(0.5), 2));
+  g.userData.wing = W;
+  return g;
+}
+
+// ── the kit ─────────────────────────────────────────────────────────────────
+export function createPropKit(atmo) {
+  const geos = new Map();
+  const geoOf = (stage, name) => {
+    const key = stage + name;
+    if (!geos.has(key)) { const d = [FEAR, MEMORY, LIGHT][stage][name]; geos.set(key, shape(d.build, d.crumple || 0)); }
+    return geos.get(key);
+  };
+  const mat = atmo.prop({ vertexColors: true, rust: 0.15 });
+  const windowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true });
+  const uniforms = { uTime: { value: 0 }, uPlayer: { value: new THREE.Vector3() } };
+  const fogU = THREE.UniformsLib.fog;
+  const floatMat = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([fogU, { uMap: { value: laceTexture() } }]),
+    vertexShader: FLOAT_VERT, fragmentShader: FLOAT_FRAG, side: THREE.DoubleSide, fog: true });
+  floatMat.uniforms.uTime = uniforms.uTime; floatMat.uniforms.uPlayer = uniforms.uPlayer;
+  const tulleMat = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([fogU, {}]),
+    vertexShader: TULLE_VERT, fragmentShader: TULLE_FRAG, side: THREE.DoubleSide, fog: true,
+    transparent: true, depthWrite: false });
+  tulleMat.uniforms.uTime = uniforms.uTime;
+  const crane = craneGeometry(), lace = new THREE.PlaneGeometry(0.42, 0.42).rotateX(-Math.PI / 2 + 0.25).toNonIndexed();
+
+  // kinds a stage can leave on the floor, with weights
+  const KINDS = [
+    [['chair', 3], ['bucket', 2], ['bottles', 3], ['box', 2], ['oxygen', 1]],
+    [['nevalyashka', 3], ['pyramid', 3], ['yula', 2], ['matryoshki', 3], ['ball', 2], ['horse', 1.5], ['slippers', 2], ['stool', 1.5], ['jars', 1.5], ['newspapers', 1]],
+    [['chair', 3], ['armchair', 2], ['mirror', 1.5], ['piano', 1], ['window', 3]],
+  ];
+  const pick = (stage, r) => {
+    const list = KINDS[stage], total = list.reduce((s, [, w]) => s + w, 0);
+    let x = r * total;
+    for (const [name, w] of list) { if ((x -= w) <= 0) return name; }
+    return list[0][0];
+  };
+
+  // The collision footprint of a prop, as ward.js's boxes: four wall segments.
+  const box = (x, z, w, d, rot) => {
+    const c = Math.cos(rot), s = Math.sin(rot);
+    const P = (u, v) => ({ x: x + u * c + v * s, z: z - u * s + v * c });
+    const a = P(-w / 2, -d / 2), b = P(w / 2, -d / 2), e = P(w / 2, d / 2), f = P(-w / 2, d / 2);
+    const seg = (p, q) => { const mx = (p.x + q.x) / 2 - x, mz = (p.z + q.z) / 2 - z, l = Math.hypot(mx, mz) || 1; return { a: p, b: q, nx: mx / l, nz: mz / l }; };
+    return { x, z, r: Math.hypot(w, d) / 2, segs: [seg(a, b), seg(b, e), seg(e, f), seg(f, a)] };
+  };
+
+  return {
+    // group: the chunk's group · stage: 0 fear, 1 memory, 2 light · walls:
+    // [{ x, z, nx, nz, r }] floor spots against a wall (x, z = the wall face
+    // point, n = into the corridor, r = a random 0..1) · air: [{ x, z, r }]
+    // cell centres for things that float (light only)
+    build(group, stage, walls, air) {
+      const parts = [], windows = [], tulles = [], floats = [], boxes = [];
+      for (const s of walls) {
+        const name = pick(stage, s.r);
+        const rot = Math.atan2(s.nx, s.nz);
+        if (name === 'window') {                   // light where a window should be, tulle before it
+          const wm = M(s.x + s.nx * 0.012, 1.7, s.z + s.nz * 0.012, 0, rot);
+          windows.push(new THREE.PlaneGeometry(0.9, 1.3).applyMatrix4(wm));
+          for (const [bw, bh, by] of [[0.95, 0.05, 2.37], [0.95, 0.05, 1.03], [0.04, 1.3, 1.7]]) {
+            const g = shape(put => put(new THREE.BoxGeometry(bw, bh, 0.03), 0xd8d2c4, 0.1));
+            parts.push(g.applyMatrix4(M(s.x + s.nx * 0.03, by, s.z + s.nz * 0.03, 0, rot)));
+          }
+          const tg = new THREE.PlaneGeometry(1.2, 2.5, 12, 20).applyMatrix4(M(s.x + s.nx * 0.14, 1.3, s.z + s.nz * 0.14, 0, rot));
+          tg.setAttribute('aPhase', new THREE.Float32BufferAttribute(new Array(tg.attributes.position.count).fill(s.r * 40), 1));
+          tulles.push(tg);
+          continue;
+        }
+        const d = [FEAR, MEMORY, LIGHT][stage][name];
+        const off = 0.02 + d.depth / 2 + (d.toy ? 0.05 + s.r * 0.25 : 0);   // toys lie a little further out, as dropped
+        const x = s.x + s.nx * off, z = s.z + s.nz * off;
+        const yaw = rot + (d.toy ? (s.r * 97 % 1 - 0.5) * 1.2 : (s.r * 53 % 1 - 0.5) * 0.25);
+        parts.push(geoOf(stage, name).clone().applyMatrix4(M(x, 0, z, 0, yaw)));
+        if (d.solid) boxes.push(box(x, z, d.w, d.depth, yaw));
+      }
+      for (const a of air) {                        // lace alone, cranes in threes
+        const cranes = a.r > 0.6, n = cranes ? 3 : 1;
+        for (let k = 0; k < n; k++) {
+          const src = cranes ? crane : lace;
+          const g = src.clone(), cnt = g.attributes.position.count;
+          const cy = cranes ? 2.45 + k * 0.12 : 1.95 + a.r * 0.5;
+          g.setAttribute('aCenter', new THREE.Float32BufferAttribute(Array.from({ length: cnt }, () => [a.x, cy, a.z]).flat(), 3));
+          const wing = src.userData.wing || [];
+          g.setAttribute('aFloat', new THREE.Float32BufferAttribute(Array.from({ length: cnt }, (_, i) =>
+            [a.r * 50 + k * 2.1, cranes ? 1 : 0, wing[i] || 0]).flat(), 3));
+          if (!g.attributes.normal) g.computeVertexNormals();
+          floats.push(g);
+        }
+      }
+      const meshes = [];
+      const add = (list, material) => {
+        if (!list.length) return;
+        const g = mergeGeometries(list);
+        for (const l of list) l.dispose();
+        const m = new THREE.Mesh(g, material);
+        m.userData.keepMaterial = true;             // shared: the chunk's disposal frees only the geometry
+        m.frustumCulled = material !== floatMat;    // floaters move in the shader, away from their bounds
+        group.add(m); meshes.push(m);
+      };
+      add(parts, mat); add(windows, windowMat); add(tulles, tulleMat); add(floats, floatMat);
+      return {
+        boxes, walls, air, count: walls.length + air.length,
+        dispose() { for (const m of meshes) { group.remove(m); m.geometry.dispose(); } },
+      };
+    },
+    update(time, px, pz) { uniforms.uTime.value = time; uniforms.uPlayer.value.set(px, 0, pz); },
+  };
+}
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

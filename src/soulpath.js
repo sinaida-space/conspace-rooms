@@ -12,6 +12,7 @@ import { buildClockNook } from './eggs.js';
 import { createRoseCounter, buildRoseArch, findArchSpot, GRAIN_OPEN_MS } from './roses.js';
 import { showCard } from './card.js';
 import { createPetals } from './petals.js';
+import { createPropKit } from './props.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
 // Everything that makes the labyrinth respond to the visitor on the way from
@@ -50,7 +51,12 @@ const MARK_COLOR = 0xb3141a;
 const MARK_Y = 1.1;              // hand height, metres
 const ROUTE_CELLS = 30;          // how much of the route gets marks (~36 m)
 const MARK_EVERY = 2;            // cells between marks
-const MARK_POOL = 14;
+const MARK_POOL = 28;             // marks stay where they were scratched, so the pool is larger
+const CANDLE_NEAR = 12;          // metres: candles within this of a work tell whether it is seen
+const CANDLE_DIE = 2.6;          // seconds a candle gutters before it is only an ember
+const EMBER = new THREE.Color(0x2e0c04);
+const MARK_FADE = 2.5;           // seconds a mark takes to fade once its work is seen
+const MARK_KEEP = 32;            // metres: marks further behind than this go back to the pool
 const REPATH_EVERY = 0.4;        // seconds
 const SEEN_DIST = 3.2;           // metres: an artwork this close and in view counts as seen
 
@@ -75,6 +81,7 @@ const SEED_SCATTER = CONSPACE_SEED ^ 0x5ca7;
 const SEED_POSTER = CONSPACE_SEED ^ 0x7057;
 const SEED_SOULQ = CONSPACE_SEED ^ 0x50a1;
 const SEED_EGG = CONSPACE_SEED ^ 0xe66c;
+const SEED_PROPS = CONSPACE_SEED ^ 0x9e05;
 const EGG_BAND = new Set([4, 5, 10, 11]);   // the corridor lattice, mirrored from world.js
 const SOUL_COLORS = [0xffd27a, 0x5dff8a, 0xd0202a]; // someone close · a child · a grown-up
 
@@ -190,26 +197,27 @@ function placardTexture(lines) {
 // Three or four thin scratches, slanted up and to the right, as if a nail was
 // dragged along the plaster in the direction of travel.
 function scratchTexture() {
+  // three nail scratches dragged along the plaster toward the right: each
+  // starts as a hairline and bites deeper as it goes, ending in a small
+  // chipped gouge. The way reads only to someone looking for it.
   const c = document.createElement('canvas');
   c.width = 256; c.height = 128;
   const ctx = c.getContext('2d');
-  ctx.strokeStyle = '#ffffff';
+  ctx.strokeStyle = '#ffffff'; ctx.fillStyle = '#ffffff';
   ctx.lineCap = 'round';
-  const n = 3 + Math.floor(Math.random() * 2);
-  for (let k = 0; k < n; k++) {
-    const y0 = 40 + k * 16 + Math.random() * 6;
-    const len = 150 + Math.random() * 70;
-    ctx.lineWidth = 2 + Math.random() * 2.5;
-    ctx.globalAlpha = 0.6 + Math.random() * 0.4;
-    ctx.beginPath();
-    let x = 20 + Math.random() * 16, y = y0 + 18;
-    ctx.moveTo(x, y);
-    while (x < 20 + len) { // jagged: many tiny segments with jitter
-      x += 6 + Math.random() * 6;
-      y -= 1.4 + (Math.random() - 0.5) * 2.2;
-      ctx.lineTo(x, y);
+  for (let k = 0; k < 3; k++) {
+    let x = 30 + k * 10 + Math.random() * 8, y = 48 + k * 15 + Math.random() * 4;
+    const end = 190 + k * 8 + Math.random() * 18;
+    while (x < end) {                                   // tapering: hairline to gouge
+      const t = (x - 30) / (end - 30);
+      const nx = x + 5 + Math.random() * 5, ny = y - 0.5 + (Math.random() - 0.5) * 1.8;
+      ctx.lineWidth = 0.6 + t * t * 4.2;
+      ctx.globalAlpha = 0.25 + t * 0.65;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(nx, ny); ctx.stroke();
+      x = nx; y = ny;
     }
-    ctx.stroke();
+    ctx.globalAlpha = 0.8;                              // the chip where the nail stopped
+    ctx.beginPath(); ctx.ellipse(x + 1, y + 1, 3.2, 2, 0.4, 0, 7); ctx.fill();
   }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -278,6 +286,7 @@ export class SoulPath {
     this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
     this.roses = createRoseCounter(this.total);
     this.petals = createPetals(scene, camera, quality);
+    this.props = createPropKit(atmo);   // what each stage leaves along its corridors
     this.roses.set(0, t('rosesLabel', { n: 0, total: this.total }));
     this.finale = null;
     this.chunkStuff = new Map();    // chunk key -> { group, writings[], doors[], kitchen }
@@ -291,9 +300,11 @@ export class SoulPath {
       map: scratchTexture(), color: MARK_COLOR, transparent: true, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -2, fog: true,
     });
+    const markGeo = new THREE.PlaneGeometry(0.5, 0.25);
     this.marks = Array.from({ length: MARK_POOL }, () => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.23), this.markMat);
+      const m = new THREE.Mesh(markGeo, this.markMat.clone());   // own opacity, shared texture
       m.visible = false;
+      m.userData = { key: null, goal: null, fadeAt: 0 };
       scene.add(m);
       return m;
     });
@@ -339,6 +350,8 @@ export class SoulPath {
       for (const d of this._doorsNear(x, z)) { segs.push(...d.walls); if (!d.open) segs.push(d.seg); }
       if (this.stage.stage === 0) for (const st of this.chunkStuff.values()) for (const b of st.ward?.plan.boxes || [])
         if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
+      for (const st of this.chunkStuff.values()) for (const b of st.props?.boxes || [])
+        if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
       return segs;
     };
   }
@@ -364,7 +377,7 @@ export class SoulPath {
       stuff.group.traverse(o => {
         if (o.userData.keep) return;                  // shared scatter geometry and materials
         o.geometry?.dispose();
-        if (o.material && o.material !== this.markMat && !o.userData.keepMaterial) { o.material.map?.dispose(); o.material.dispose(); }
+        if (o.material && o.material !== this.markMat && !this.marks.includes(o) && !o.userData.keepMaterial) { o.material.map?.dispose(); o.material.dispose(); }
       });
       this.chunkStuff.delete(key);
     }
@@ -458,6 +471,9 @@ export class SoulPath {
     // ── scattered things: candles, teapots, cups. The closer the portal into
     // the next stage, the more of them, so they thicken into a trail.
     stuff.scatter = this._buildScatter(group, cx, cz);
+    stuff.reserved = taken;
+    if (cp) taken.add(cellKey(cellOf(cp.x), cellOf(cp.z)));
+    stuff.props = this._buildProps(group, cx, cz, taken);
 
     // ── presence doors on this chunk's west and north edge crossings.
     // Never in the spawn chunk, so nobody starts boxed in.
@@ -749,6 +765,8 @@ export class SoulPath {
     if (st === 1) for (let dz = -5; dz <= 5; dz++) for (let dx = -5; dx <= 5; dx++) { const k = kitchenPlan(cx + dx, cz + dz); if (k) kitchens.push(k); }
     const seekRoom = st === 1 && !this.visitedRoom;   // red rooms: first the room, then the way on
     const near = (list, x, z) => { let d = Infinity; for (const p of list) d = Math.min(d, Math.hypot(p.x - x, p.z - z)); return d; };
+    const arts = this.artworks.active.map(a => ({ x: a.centerWorld.x, z: a.centerWorld.z, seen: this.seen.has(a.art.id) }));
+    const unseen = arts.filter(a => !a.seen);
     const prox = d => { const k = Math.max(0, Math.min(1, 1 - d / 45)); return k * k * (3 - 2 * k); };
     const YELLOW = new THREE.Color(0xffd27a), RED = new THREE.Color(0xff2a14), PALE_WAX = new THREE.Color(0xe6dac0), RED_WAX = new THREE.Color(0x8e1216);
     const items = [];
@@ -764,23 +782,68 @@ export class SoulPath {
       const z = centreOf(gj) + side[1] * 0.36 + (rnd() - 0.5) * 0.3;
       const pp = seekRoom ? 0 : prox(near(portals, x, z));
       const pk = st === 1 ? Math.max(0, Math.min(1, 1 - near(kitchens, x, z) / 70)) : 0;
-      if (r > 0.035 + 0.05 * Math.max(pp, pk)) continue;
+      // unseen works draw candles to them; around works already seen they are embers
+      const du = near(unseen, x, z), spent = du > CANDLE_NEAR && near(arts, x, z) < CANDLE_NEAR;
+      const pa = du < CANDLE_NEAR ? 1 - du / CANDLE_NEAR : 0;
+      if (r > 0.035 + 0.05 * Math.max(pp, pk) + 0.08 * pa) continue;
       const flame = st === 0 ? YELLOW.clone().lerp(RED, pp)
         : seekRoom ? YELLOW.clone().lerp(RED, pk)        // before the room: everything reddens toward it
           : st === 1 ? RED.clone().lerp(YELLOW, pp)      // after: the flame yellows toward the way into the light
             : new THREE.Color(0xfff4dc);
       const wax = st === 1 ? PALE_WAX.clone().lerp(RED_WAX, pk) : PALE_WAX.clone();
-      items.push({ type: 'candle', x, z, rot: rnd() * 6.28, flame, wax });
+      if (spent) flame.copy(EMBER);
+      else if (pa > 0) flame.multiplyScalar(1 + 0.35 * pa);   // brighter the closer the unseen work
+      items.push({ type: 'candle', x, z, rot: rnd() * 6.28, flame, wax, spent });
     }
     return buildScatter(group, items);
   }
 
   // After a stage change the trail must lead to the next portal: rebuild it.
+  // Things the stage leaves along its corridors (props.js): spots against a
+  // wall on the corridor lattice, kept apart, clear of works, writings,
+  // posters, the hospital's islands, portals and grandmother's room; in the
+  // light also spots in the air for lace and cranes. Pure function of the
+  // chunk, the visit's seed and the stage.
+  _buildProps(group, cx, cz, reserved) {
+    const st = this.stage.stage, low = this.quality.tier === 0;
+    const rp = mulberry32(hash2i(SEED_PROPS ^ (st * 7919), cx, cz));
+    const ward = this._wardCells.get(cx + ':' + cz);
+    const avoid = [];
+    for (const p of portalPlan(cx, cz)) avoid.push([cellOf(p.x), cellOf(p.z), 2]);
+    if (st === 1) { const k = kitchenPlan(cx, cz); if (k) avoid.push([cellOf(k.x), cellOf(k.z), 5]); }
+    const free = (gi, gj) => !solidAtGlobal(gi, gj) && !reserved.has(cellKey(gi, gj)) && !ward?.has(cellKey(gi, gj))
+      && avoid.every(([ai, aj, r]) => Math.max(Math.abs(gi - ai), Math.abs(gj - aj)) > r);
+    const wallSpots = [], airSpots = [];
+    for (let j = 1; j < CHUNK - 1; j++) for (let i = 1; i < CHUNK - 1; i++) {
+      if (!EGG_BAND.has(i) && !EGG_BAND.has(j)) continue;              // corridor lattice only
+      const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+      if (!free(gi, gj)) continue;
+      airSpots.push({ gi, gj });
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+        if (solidAtGlobal(gi + di, gj + dj)) wallSpots.push({ gi, gj, di, dj });
+    }
+    const choose = (list, n, gap) => {
+      const out = [];
+      for (let tries = 0; tries < 60 && out.length < n && list.length; tries++) {
+        const s = list[Math.floor(rp() * list.length)];
+        if (out.every(o => Math.max(Math.abs(o.gi - s.gi), Math.abs(o.gj - s.gj)) >= gap)) out.push(s);
+      }
+      return out;
+    };
+    const nWall = st === 2 ? (low ? 3 : 5) : (low ? 4 : 7);
+    const walls = choose(wallSpots, nWall, 3).map(s => ({
+      x: centreOf(s.gi) + s.di * CELL / 2, z: centreOf(s.gj) + s.dj * CELL / 2, nx: -s.di, nz: -s.dj, r: rp() }));
+    const air = st === 2 ? choose(airSpots, low ? 2 : 4, 4).map(s => ({ x: centreOf(s.gi), z: centreOf(s.gj), r: rp() })) : [];
+    return this.props.build(group, st, walls, air);
+  }
+
   _rebuildScatter() {
     for (const [key, st] of this.chunkStuff) {
       st.scatter?.dispose();
       const [cx, cz] = key.split(':').map(Number);
       st.scatter = this._buildScatter(st.group, cx, cz);
+      st.props?.dispose();
+      st.props = this._buildProps(st.group, cx, cz, st.reserved || new Set());
     }
   }
 
@@ -1043,12 +1106,18 @@ export class SoulPath {
   _updateMarks() {
     const p = this.player.pos;
     const gi = cellOf(p.x), gj = cellOf(p.y);
-    // target: nearest artwork not yet seen; else onward, away from spawn
-    let target = null, td = Infinity;
-    for (const a of this.artworks.active) {
-      if (this.seen.has(a.art.id)) continue;
-      const d = Math.hypot(a.centerWorld.x - p.x, a.centerWorld.z - p.y);
-      if (d < td) { td = d; target = a; }
+    // target: the work the marks already lead to, until it is seen; then the
+    // nearest one not yet seen; else onward, away from spawn. Holding the
+    // target keeps the arrows from swinging between two works.
+    let target = this._markTarget;
+    if (!target || this.seen.has(target.art.id) || !this.artworks.active.includes(target)) {
+      target = null; let td = Infinity;
+      for (const a of this.artworks.active) {
+        if (this.seen.has(a.art.id)) continue;
+        const d = Math.hypot(a.centerWorld.x - p.x, a.centerWorld.z - p.y);
+        if (d < td) { td = d; target = a; }
+      }
+      this._markTarget = target;
     }
     let goalFn, goalKey;
     if (target) {
@@ -1067,10 +1136,22 @@ export class SoulPath {
     if (pathKey === this._pathKey) return;
     this._pathKey = pathKey;
 
+    // marks toward another goal fade out where they are; nothing jumps
+    for (const m of this.marks) if (m.visible && m.userData.goal !== goalKey && !m.userData.fadeAt) m.userData.fadeAt = this._time || 0.001;
+
+    const byKey = new Map();
+    for (const m of this.marks) if (m.visible && m.userData.key) byKey.set(m.userData.key, m);
+    const spare = () => {
+      let best = this.marks.find(m => !m.visible), far = -1;
+      if (best) return best;
+      for (const m of this.marks) {                    // else the mark furthest behind
+        const d = Math.hypot(m.position.x - p.x, m.position.z - p.y);
+        if (d > far && d > 8) { far = d; best = m; }
+      }
+      return best;
+    };
     const cells = this._route(goalFn, gi, gj).slice(0, ROUTE_CELLS);
-    this.marks.forEach(m => { m.visible = false; });
-    let used = 0;
-    for (let k = 2; k < cells.length - 1 && used < this.marks.length; k += MARK_EVERY) {
+    for (let k = 2; k < cells.length - 1; k += MARK_EVERY) {
       const [i, j] = cells[k], [ni, nj] = cells[k + 1];
       const di = ni - i, dj = nj - j;
       // a wall beside this step: left or right of the direction of travel
@@ -1078,16 +1159,74 @@ export class SoulPath {
       const side = sides.find(([si, sj]) => solidAtGlobal(i + si, j + sj));
       if (!side) continue;
       const [si, sj] = side;
+      const key = `${i},${j},${si},${sj},${di},${dj}`;
+      const had = byKey.get(key);
+      if (had) { had.userData.goal = goalKey; had.userData.fadeAt = 0; had.material.opacity = 1; continue; }   // already scratched here
+      const m = spare();
+      if (!m) break;
       const nx = -si, nz = -sj;                         // wall normal, into the corridor
-      const m = this.marks[used++];
       m.position.set(
         si ? (si > 0 ? (i + 1) * CELL : i * CELL) + nx * 0.013 : centreOf(i),
         MARK_Y + (k % 2) * 0.12,
         sj ? (sj > 0 ? (j + 1) * CELL : j * CELL) + nz * 0.013 : centreOf(j));
       m.rotation.set(0, Math.atan2(nx, nz), 0);
-      // plane's local +x in world is (nz, -nx); mirror so the slant points onward
+      // plane's local +x in world is (nz, -nx); mirror so the arrow points onward
       m.scale.x = di * nz - dj * nx >= 0 ? 1 : -1;
+      Object.assign(m.userData, { key, goal: goalKey, fadeAt: 0 });
+      m.material.opacity = 1;
       m.visible = true;
+    }
+  }
+
+  // A work just seen: the candles around it, with nothing unseen left near,
+  // flicker and die down to embers (_tickCandles). Lights share the colour.
+  _gutterCandles(time) {
+    const arts = this.artworks.active.map(a => ({ x: a.centerWorld.x, z: a.centerWorld.z, seen: this.seen.has(a.art.id) }));
+    this._dying ??= [];
+    for (const st of this.chunkStuff.values()) {
+      const sc = st.scatter;
+      if (!sc?.items) continue;
+      sc.items.forEach((it, i) => {
+        if (it.spent) return;
+        let dA = Infinity, dU = Infinity;
+        for (const a of arts) { const d = Math.hypot(a.x - it.x, a.z - it.z); dA = Math.min(dA, d); if (!a.seen) dU = Math.min(dU, d); }
+        if (dA < CANDLE_NEAR && dU > CANDLE_NEAR) {
+          it.spent = true;
+          this._dying.push({ sc, i, it, base: it.flame.clone(), t0: time + Math.random() * 0.8 });
+        }
+      });
+    }
+  }
+
+  _tickCandles(time) {
+    if (!this._dying?.length) return;
+    this._dying = this._dying.filter(d => {
+      if (d.sc.disposed) return false;
+      const k = Math.max(0, (time - d.t0) / CANDLE_DIE);
+      const flick = 0.55 + 0.45 * Math.sin(time * 23 + d.i * 1.7) * Math.sin(time * 7.3 + d.i);
+      d.it.flame.copy(d.base).multiplyScalar(Math.max(0, 1 - k) * flick).lerp(EMBER, Math.min(1, k));
+      for (const name of ['flame', 'pool']) {
+        const m = d.sc.meshes[name];
+        if (!m) continue;
+        m.setColorAt(d.i, d.it.flame);
+        m.instanceColor.needsUpdate = true;
+      }
+      return k < 1;
+    });
+  }
+
+  // marks of a finished goal fade slowly; marks far behind return to the pool
+  _tickMarks(time) {
+    const p = this.player.pos;
+    for (const m of this.marks) {
+      if (!m.visible) continue;
+      if (m.userData.fadeAt) {
+        const k = (time - m.userData.fadeAt) / MARK_FADE;
+        m.material.opacity = Math.max(0, 1 - k);
+        if (k >= 1) { m.visible = false; m.userData.key = null; m.userData.fadeAt = 0; }
+      } else if (Math.hypot(m.position.x - p.x, m.position.z - p.y) > MARK_KEEP) {
+        m.visible = false; m.userData.key = null;
+      }
     }
   }
 
@@ -1095,6 +1234,10 @@ export class SoulPath {
   update(dt, time, zone) {
     this._sync();
     this.petals.update(dt, time);
+    this._time = time;
+    this._tickMarks(time);
+    this._tickCandles(time);
+    this.props.update(time, this.player.pos.x, this.player.pos.y);
     const P = this.player, cam = this.camera;
     const memoryStage = this.stage.stage === 1;   // grandmother's room only exists here
     const speed = P.vel.length();
@@ -1112,6 +1255,7 @@ export class SoulPath {
     if (this.seen.size !== this._seenShown) {
       if (this._seenShown === 0 && this.seen.size > 0) setTimeout(() => this.petals.sparkle(), GRAIN_OPEN_MS); // the grain opens: sparkles spill from the corner
       this._seenShown = this.seen.size;
+      this._gutterCandles(time);
       this.roses.set(this.seen.size, t('rosesLabel', { n: this.seen.size, total: this.total }));
     }
 

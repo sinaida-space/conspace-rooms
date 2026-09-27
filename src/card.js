@@ -57,7 +57,7 @@ export function drawCard(canvas, { questions, heading, empty, boot }) {
   const top = 480, bottom = H - 230, width = W - PAD * 2 - 90;
   const list = questions.length ? questions : [empty];
   let size = 46, blocks;
-  for (; size >= 22; size -= 2) {
+  for (; size >= 14; size -= 2) {                    // 25+ questions still fit above the footer
     g.font = `400 ${size}px ${FONT}`;
     blocks = list.map(q => wrap(g, q, width));
     const lines = blocks.reduce((s, b) => s + b.length, 0);
@@ -92,8 +92,8 @@ export function drawCard(canvas, { questions, heading, empty, boot }) {
 
   // the names, in the bottom corners
   g.font = `400 34px ${FONT}`; g.fillStyle = FG;
-  g.fillText('sinaida', PAD, H - 110);
-  const u = 'uvaliss'; g.fillText(u, W - PAD - g.measureText(u).width, H - 110);
+  g.fillText('@sin.ai.da', PAD, H - 110);            // the Instagram tags, so a saved card finds its way back
+  const u = '@uvaliss'; g.fillText(u, W - PAD - g.measureText(u).width, H - 110);
   g.fillStyle = DIM; const x = '×'; g.fillText(x, (W - g.measureText(x).width) / 2, H - 110);
 
   // CRT: scanlines, a faint phosphor grain, darker corners
