@@ -177,7 +177,8 @@ export function wardPlan(cx, cz, reserved, withModels = true) {
 
   // its footprint on the floor, for the contact shadow (shadows.js)
   const foot = tip && kind.type === 'drip' ? [1.9, 0.5] : tip && kind.type === 'wheelchair' ? [1.1, 1.1] : dims;
-  const shadow = { x: boxes[0].x, z: boxes[0].z, w: foot[0], d: foot[1], rot: anchor.rot, k: kind.type === 'drip' && !tip ? 0.5 : 1 };
+  const high = { bed: 0.75, gurney: 0.9, screen: 1.7, wheelchair: 0.95, drip: 1.9 }[kind.type];
+  const shadow = { x: boxes[0].x, z: boxes[0].z, w: foot[0], d: foot[1], rot: anchor.rot, k: kind.type === 'drip' && !tip ? 0.5 : 1, h: tip ? 0.4 : high };
 
   return { anchor, items, sign, lamp, cells, boxes, shadow };
 }

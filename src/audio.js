@@ -219,7 +219,49 @@ export class AudioEngine {
 
   // A presence door gives way for a moment, then slams.
   doorLight(seconds) { this.music?.light(seconds); }
-  doorSlam() { this.music?.slam(); }
+  doorSlam() {
+    this.music?.slam();
+    if (!this.ctx || this.muted) return;
+    // the wood of it: a hollow knock and a rattle of the latch after
+    const ctx = this.ctx, t = ctx.currentTime;
+    const len = ctx.sampleRate * 0.5, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    for (const [at, f, q, v, dur] of [[0, 420, 1.2, 0.55, 0.16], [0.09, 1700, 6, 0.08, 0.05], [0.16, 1900, 6, 0.05, 0.04]]) {
+      const s = ctx.createBufferSource(); s.buffer = buf;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(v, t + at); g.gain.exponentialRampToValueAtTime(0.0001, t + at + dur);
+      s.connect(bp); bp.connect(g); g.connect(this.master); s.start(t + at); s.stop(t + at + dur + 0.02);
+    }
+  }
+
+  // Old hinges giving way: a sawtooth whose pitch wanders as the leaf
+  // sticks and slips, chopped by the stick-slip itself, through two
+  // resonances of the wood.
+  doorCreak(seconds = 1.3) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    const curve = new Float32Array(40);
+    let f = 240 + Math.random() * 60;
+    for (let i = 0; i < curve.length; i++) { f = Math.max(150, Math.min(460, f + (Math.random() - 0.4) * 38)); curve[i] = f; }
+    o.frequency.setValueCurveAtTime(curve, t, seconds);
+    const amp = ctx.createGain(); amp.gain.value = 0.5;
+    const slip = ctx.createOscillator(); slip.type = 'square'; slip.frequency.setValueAtTime(22, t); slip.frequency.linearRampToValueAtTime(38, t + seconds);
+    const slipG = ctx.createGain(); slipG.gain.value = 0.5;
+    slip.connect(slipG); slipG.connect(amp.gain);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(0.07, t + 0.12);
+    env.gain.setValueAtTime(0.07, t + seconds * 0.6);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    for (const [fr, q] of [[1050, 3], [2500, 5]]) {
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fr; bp.Q.value = q;
+      amp.connect(bp); bp.connect(env);
+    }
+    o.connect(amp); env.connect(this.master);
+    o.start(t); slip.start(t); o.stop(t + seconds + 0.05); slip.stop(t + seconds + 0.05);
+  }
 
   // ── the finale: the chord, then silence for the card of questions ────────
   finale() { this.music?.resolve(); }

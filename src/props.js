@@ -370,9 +370,11 @@ export function createPropKit(atmo) {
         const off = 0.02 + d.depth / 2 + (d.toy ? 0.05 + s.r * 0.25 : 0);   // toys lie a little further out, as dropped
         const x = s.x + s.nx * off, z = s.z + s.nz * off;
         const yaw = rot + (d.toy ? (s.r * 97 % 1 - 0.5) * 1.2 : (s.r * 53 % 1 - 0.5) * 0.25);
-        parts.push(geoOf(stage, name).clone().applyMatrix4(M(x, 0, z, 0, yaw)));
+        const geo = geoOf(stage, name);
+        if (!geo.boundingBox) geo.computeBoundingBox();
+        parts.push(geo.clone().applyMatrix4(M(x, 0, z, 0, yaw)));
         if (d.solid) boxes.push(box(x, z, d.w, d.depth, yaw));
-        feet.push({ x, z, w: d.w, d: d.depth, rot: yaw, k: d.toy ? 0.7 : 1 });
+        feet.push({ x, z, w: d.w, d: d.depth, rot: yaw, k: d.toy ? 0.7 : 1, h: geo.boundingBox.max.y });
       }
       for (const a of air) {                        // lace alone, cranes in threes
         const cranes = a.r > 0.6, n = cranes ? 3 : 1;

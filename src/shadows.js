@@ -9,12 +9,14 @@ import { CELL, lampLineNear } from './world.js';
 // its shadow would fall. All of a chunk's footprints are one mesh that
 // multiplies the floor under it, so a chunk pays one draw call.
 //
-// A footprint: { x, z, w, d, rot, k } (rot as ward.js orientedBox: local X
-// is w; k darkness, 1 by default).
+// A footprint: { x, z, w, d, rot, k, h } (rot as ward.js orientedBox: local
+// X is w; k darkness, 1 by default; h height in metres). Beside the contact
+// shade every thing with a height casts a shadow along the floor, away from
+// the fixture, as long as similar triangles make it: h · far / (lamp − h).
 
 const VERT = /* glsl */`
 attribute vec2 aLocal;        // metres from the footprint's centre, in its own frame
-attribute vec3 aHalf;         // half width, half depth, darkness
+attribute vec3 aHalf;         // half width, half depth, darkness (negative: a cast shadow, fading along its length)
 varying vec2 vLocal;
 varying vec3 vHalf;
 varying float vDist;
@@ -34,7 +36,13 @@ void main(){
   float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);     // rounded-rectangle distance
   float core = 1.0 - smoothstep(-0.06, 0.05, sd);                // dense right under it
   float soft = 1.0 - smoothstep(-0.1, 0.34, sd);                 // and a wide soft falloff
-  float k = (0.38 * core + 0.42 * soft) * vHalf.z * (1.0 - smoothstep(12.0, 24.0, vDist));
+  float k = (0.5 * core + 0.4 * soft) * vHalf.z;
+  if (vHalf.z < 0.0) {                                             // cast: dense at the foot, thinning and blurring away
+    float along = clamp(vLocal.y / max(vHalf.y, 1e-3) * 0.5 + 0.5, 0.0, 1.0);
+    float wide = 1.0 - smoothstep(-0.02, 0.1 + 0.2 * along, sd);
+    k = -vHalf.z * wide * mix(0.72, 0.1, along);
+  }
+  k *= 1.0 - smoothstep(12.0, 24.0, vDist);
   gl_FragColor = vec4(vec3(1.0 - k), 1.0);                       // multiplied into the floor
 }`;
 
@@ -53,24 +61,34 @@ function shadowMaterial() {
 export function contactShadows(list) {
   if (!list.length) return null;
   const pos = [], local = [], half = [], idx = [];
-  for (const f of list) {
-    // away from the nearest fixture: the further off it, the longer the shadow
-    const lx = (lampLineNear(f.x / CELL) + 0.5) * CELL, lz = (lampLineNear(f.z / CELL) + 0.5) * CELL;
-    let ax = f.x - lx, az = f.z - lz;
-    const far = Math.hypot(ax, az);
-    if (far > 1e-3) { ax /= far; az /= far; }
-    const push = Math.min(0.22, far * 0.08);
-    const cx = f.x + ax * push, cz = f.z + az * push;
-    const c = Math.cos(f.rot), s = Math.sin(f.rot);
-    const hw = f.w / 2 + 0.04, hd = f.d / 2 + 0.04, m = 0.36;
+  const quad = (cx, cz, c, s, hw, hd, m, k) => {
     const base = pos.length / 3;
     for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
       const lu = u * (hw + m), lv = v * (hd + m);
       pos.push(cx + lu * c + lv * s, 0.006, cz - lu * s + lv * c);
       local.push(lu, lv);
-      half.push(hw, hd, f.k ?? 1);
+      half.push(hw, hd, k);
     }
     idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+  };
+  for (const f of list) {
+    // away from the nearest fixture
+    const lx = (lampLineNear(f.x / CELL) + 0.5) * CELL, lz = (lampLineNear(f.z / CELL) + 0.5) * CELL;
+    let ax = f.x - lx, az = f.z - lz;
+    const far = Math.hypot(ax, az);
+    if (far > 1e-3) { ax /= far; az /= far; } else { ax = 0; az = 1; }
+    const push = Math.min(0.12, far * 0.05);
+    const c = Math.cos(f.rot), s = Math.sin(f.rot);
+    quad(f.x + ax * push, f.z + az * push, c, s, f.w / 2 + 0.04, f.d / 2 + 0.04, 0.36, f.k ?? 1);
+    // the cast shadow: a strip from the foot away from the lamp, frame turned
+    // so that its local +v runs away from the light
+    const h = f.h || 0;
+    if (h > 0.15 && far > 0.3) {
+      const len = Math.min(1.8, h * far / Math.max(0.6, 3.1 - h));
+      const hw = Math.max(f.w, f.d) * 0.42, hl = len / 2;
+      const rot = Math.atan2(ax, az);                              // local +v (z) along (ax, az)
+      quad(f.x + ax * hl, f.z + az * hl, Math.cos(rot), Math.sin(rot), hw, hl, 0.25, -(f.k ?? 1));
+    }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

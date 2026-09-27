@@ -61,7 +61,8 @@ const REPATH_EVERY = 0.4;        // seconds
 const SEEN_DIST = 3.2;           // metres: an artwork this close and in view counts as seen
 
 const WRITING_Y = 0.72;          // child's height
-const DOOR_WAIT = 3.0;           // seconds of stillness that open a door
+const DOOR_WAIT = 2.0;           // seconds of stillness that open a door
+const DOOR_REACH = 4.5;          // metres: standing still this far from a door is enough
 const DOOR_EVERY = 0.0625;       // chance per chunk edge: about one door in eight chunks
 const DOOR_SWING = 1.15;         // radians the door gives way
 const DOOR_HOLD = 4.2;           // seconds the light pours out before the door slams
@@ -1307,7 +1308,7 @@ export class SoulPath {
       if (d.phase === 'done') continue;
       if (d.phase === 'wait') {
         if (this.finale) continue;                     // the way on is open now: doors keep still
-        const near = Math.hypot(d.x - P.pos.x, d.z - P.pos.y) < 2.8;
+        const near = Math.hypot(d.x - P.pos.x, d.z - P.pos.y) < DOOR_REACH;
         d.waitT = near && speed < 0.08 && !P.locked ? d.waitT + dt : Math.max(0, d.waitT - dt * 2);
         d.leaf.material.color.setScalar(0.8 + 0.2 * Math.min(1, d.waitT / DOOR_WAIT));
         if (d.waitT < DOOR_WAIT) continue;
@@ -1318,6 +1319,7 @@ export class SoulPath {
         d.rays.group.rotation.y = d.dir > 0 ? 0 : Math.PI;
         d.group.add(d.rays.group);
         this.audio?.doorLight?.(DOOR_HOLD + 1.5);
+        this.audio?.doorCreak?.(1.3);                  // the hinges, as it gives way
       }
       d.t += dt;
       let swing = 0, k = 0;

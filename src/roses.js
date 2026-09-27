@@ -29,16 +29,56 @@ const BUDS = [                                    // [x, y, shows at, opens at]
   [34, 17, 4, 5], [45, 51, 8, 10], [24, 76, 12, 15], [6, 4, 16, 18],
 ];
 
+// A rose leaflet, 8 long: serrated edges (each tooth leans toward the tip),
+// a midrib and a few veins running forward from it.
+const LEAF_PATH = (() => {
+  const top = [], bot = [], n = 9;
+  for (let i = 1; i < n; i++) {
+    const t = i / n, x = 8 * t, w = 2.5 * Math.pow(Math.sin(Math.PI * Math.pow(t, 0.85)), 0.9);
+    top.push(`${x.toFixed(2)} ${(-w).toFixed(2)}`, `${(x + 0.45).toFixed(2)} ${(-w * 0.78).toFixed(2)}`);
+    bot.unshift(`${(x + 0.45).toFixed(2)} ${(w * 0.78).toFixed(2)}`, `${x.toFixed(2)} ${w.toFixed(2)}`);
+  }
+  return `M0 0 L${top.join(' L')} L8.3 0 L${bot.join(' L')}Z`;
+})();
+const LEAF_VEINS = 'M0.3 0 L7.7 0 M2 0 L3.1 -1.3 M3.6 0 L4.7 -1.4 M5.2 0 L6.1 -1.1 M2 0 L3.1 1.3 M3.6 0 L4.7 1.4 M5.2 0 L6.1 1.1';
+
 function leaf(x, y, a) {
-  return `<path d="M0 0 C2.5 -2.6 6 -2.4 8 0 C6 2.4 2.5 2.6 0 0Z" transform="translate(${x} ${y}) rotate(${a}) scale(1.35)" class="rl"/>`;
+  return `<g transform="translate(${x} ${y}) rotate(${a}) scale(1.35)" class="rl-g"><path d="${LEAF_PATH}" class="rl"/><path d="${LEAF_VEINS}" class="rv"/></g>`;
 }
+// a closed bud: layered petals cupped in green sepals with long tips
 function bud(x, y) {
-  return `<g transform="translate(${x} ${y}) scale(1.2)" class="rb"><path d="M0 -3.4 C2.2 -1.6 2.2 1.8 0 2.6 C-2.2 1.8 -2.2 -1.6 0 -3.4Z" class="rr"/><path d="M-2.4 1.6 L0 3.4 L2.4 1.6" class="rs"/></g>`;
+  return `<g transform="translate(${x} ${y}) scale(1.2)" class="rb">` +
+    `<path d="M0 -3.6 C2.4 -1.8 2.3 1.9 0 2.7 C-2.3 1.9 -2.4 -1.8 0 -3.6Z" class="rp"/>` +
+    `<path d="M0.4 -3.2 C1.9 -1.6 1.6 1.4 0 2.4" class="rpe"/>` +
+    `<path d="M0 3.4 C-1.6 2.6 -2.6 0.6 -2.9 -1.6 C-1.9 -0.4 -1.1 1.2 0 1.9 C1.1 1.2 1.9 -0.4 2.9 -1.6 C2.6 0.6 1.6 2.6 0 3.4Z" class="rs"/>` +
+    `<path d="M0 3.4 L0 4.6" class="rsn"/></g>`;
 }
+// an open rose from above: five outer petals, five inner turned between
+// them, and a tight dark spiral at the heart
 function bloom(x, y) {
-  return `<g transform="translate(${x} ${y}) scale(1.25)" class="rf"><circle r="4.6" class="rr"/><circle r="3.2" class="rd"/>` +
-    `<path d="M0 0 C1.4 -1.2 2.2 0.4 1 1.4 C-0.6 2.4 -2.4 0.8 -1.6 -0.8 C-0.8 -2.4 1.6 -2.6 2.6 -1" class="rc"/></g>`;
+  const petal = (r, s, cls) => `<path d="M0 0 C-2.3 -0.9 -2.6 -4.1 0 -4.8 C2.6 -4.1 2.3 -0.9 0 0Z" transform="rotate(${r}) scale(${s})" class="${cls}"/>`;
+  const outer = [0, 72, 144, 216, 288].map(r => petal(r + 8, 1.05, 'rpo')).join('');
+  const inner = [36, 108, 180, 252, 324].map(r => petal(r, 0.72, 'rpi')).join('');
+  return `<g transform="translate(${x} ${y}) scale(0.9)" class="rf">${outer}${inner}` +
+    `<circle r="1.7" class="rd"/><path d="M0 0 C0.9 -0.7 1.5 0.3 0.7 1 C-0.3 1.6 -1.5 0.6 -1 -0.5 C-0.5 -1.5 1.1 -1.7 1.7 -0.7" class="rc"/></g>`;
 }
+// Gradients and a fine grain for the whole drawing: leaves lit from above,
+// petals deep at the base and bright at the rim, velvet pile over both.
+const DEFS = `<defs>
+  <linearGradient id="rgl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7cc98d"/><stop offset="0.5" stop-color="#4f9e68"/><stop offset="1" stop-color="#2c6a43"/></linearGradient>
+  <linearGradient id="rgs" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5fae77"/><stop offset="1" stop-color="#2b633f"/></linearGradient>
+  <radialGradient id="rgp" cx="0.5" cy="0.95" r="0.95"><stop offset="0" stop-color="#4a0508"/><stop offset="0.45" stop-color="#a8101a"/><stop offset="0.85" stop-color="#d8242e"/><stop offset="1" stop-color="#f5828a"/></radialGradient>
+  <radialGradient id="rgb" cx="0.4" cy="0.3" r="0.8"><stop offset="0" stop-color="#e53a44"/><stop offset="0.6" stop-color="#a8101a"/><stop offset="1" stop-color="#5a0609"/></radialGradient>
+  <filter id="rtex" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence type="fractalNoise" baseFrequency="2.2" numOctaves="2" seed="7" result="n"/>
+    <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.9 0 0 0 -0.25" result="spots"/>
+    <feComposite in="spots" in2="SourceGraphic" operator="in" result="grain"/>
+    <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="grain"/></feMerge>
+  </filter>
+</defs>`;
+// small thorns along each stem: [stem, where along it 0..1, side ±1]
+const THORNS = [[0, 0.1, 1], [0, 0.2, -1], [0, 0.31, 1], [0, 0.44, -1], [0, 0.55, 1], [0, 0.68, -1], [0, 0.8, 1], [0, 0.9, -1],
+  [1, 0.35, 1], [1, 0.7, -1], [2, 0.3, -1], [2, 0.62, 1]];
 
 // the wheat grain at the stem's root (John 12:24, hidden): closed and whole
 // at n = 0, splits open at the first work, sheds and returns whole at the finale
@@ -60,13 +100,28 @@ export function createRoseCounter(total = 18) {
   el.id = 'roses';
   el.className = 'roses';
   el.setAttribute('role', 'img');
-  el.innerHTML = `<svg viewBox="-2 -2 54 84" aria-hidden="true">
+  el.innerHTML = `<svg viewBox="-2 -2 54 84" aria-hidden="true">${DEFS}
     ${grain()}
-    ${STEMS.map(([d], i) => `<path d="${d}" pathLength="1" class="rstem" data-i="${i}"/>`).join('')}
+    ${STEMS.map(([d], i) => `<path d="${d}" pathLength="1" class="rstem" data-i="${i}"/><path d="${d}" pathLength="1" class="rstem rstem-hi" data-i="${i}" transform="translate(-0.45 -0.2)"/>`).join('')}
+    <g class="rthorns"></g>
+    <g filter="url(#rtex)">
     ${LEAVES.map(([x, y, a], i) => `<g data-leaf="${i}">${leaf(x, y, a)}</g>`).join('')}
     ${BUDS.map(([x, y], i) => `<g data-bud="${i}">${bud(x, y)}</g><g data-bloom="${i}">${bloom(x, y)}</g>`).join('')}
+    </g>
   </svg>`;
   document.body.appendChild(el);
+  // thorns sit on the drawn stems: measured once the paths are in the page
+  const thornG = el.querySelector('.rthorns'), stemEls = [...el.querySelectorAll('.rstem:not(.rstem-hi)')];
+  for (const [si, at, side] of THORNS) {
+    const p = stemEls[si], L = p.getTotalLength?.() || 0;
+    if (!L) continue;
+    const a = p.getPointAtLength(at * L), b = p.getPointAtLength(Math.min(L, at * L + 0.5));
+    const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1, tx = dx / l, ty = dy / l;
+    const nx = -ty * side, ny = tx * side;                     // off the stem, to one side
+    const base = 0.55, h = 1.35;                                // a small hooked thorn, leaning back down the stem
+    const d = `M${(a.x - tx * base).toFixed(2)} ${(a.y - ty * base).toFixed(2)} Q${(a.x + nx * h * 0.5).toFixed(2)} ${(a.y + ny * h * 0.5).toFixed(2)} ${(a.x + nx * h - tx * 0.6).toFixed(2)} ${(a.y + ny * h - ty * 0.6).toFixed(2)} L${(a.x + tx * base).toFixed(2)} ${(a.y + ty * base).toFixed(2)}Z`;
+    thornG.insertAdjacentHTML('beforeend', `<path d="${d}" class="rt" data-thorn="${si}" data-at="${at}"/>`);
+  }
   const grainEl = el.querySelector('.grain');
   let shown = -1;
   // reveal the parts for n (the grain itself is handled by set(), below)
@@ -80,6 +135,7 @@ export function createRoseCounter(total = 18) {
       const f = Math.max(0, Math.min(1, (k - from + 0.5) / (whole - from + 0.5)));
       p.style.strokeDashoffset = String(1 - f);
       p.style.opacity = String((f > 0 ? 1 : 0) * dim);           // no round cap dot before it grows
+      if (!p.classList.contains('rstem-hi')) el.querySelectorAll(`[data-thorn="${p.dataset.i}"]`).forEach(th => th.classList.toggle('on', f >= +th.dataset.at + 0.03));
     });
     LEAVES.forEach(([, , , from], i) => el.querySelector(`[data-leaf="${i}"]`).classList.toggle('on', k >= from));
     BUDS.forEach(([, , shows, opens], i) => {
