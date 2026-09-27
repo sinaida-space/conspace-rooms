@@ -217,10 +217,13 @@ export class UI {
     const labels = t('padLabels');
     el.innerHTML = `
       <div class="pad-arrows">
-        <button type="button" data-key="ArrowUp" class="pad-up" aria-label="${labels[0]}">▲</button>
-        <div class="pad-row tape">
-          <button type="button" data-key="ArrowLeft" aria-label="${labels[2]}">◄</button>
+        <div class="pad-v tape">
+          <button type="button" data-key="ArrowUp" aria-label="${labels[0]}">▲</button>
           <button type="button" data-key="ArrowDown" aria-label="${labels[1]}">▼</button>
+        </div>
+        <div class="pad-h tape">
+          <button type="button" data-key="ArrowLeft" aria-label="${labels[2]}">◄</button>
+          <span></span>
           <button type="button" data-key="ArrowRight" aria-label="${labels[3]}">►</button>
         </div>
       </div>
