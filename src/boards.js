@@ -200,10 +200,10 @@ export function carpetTexture(seed) {
 
 // ── memory: a rug on the parquet ────────────────────────────────────────────
 // The red ornamental carpet the red rooms once had wall to wall, now cut to
-// a rug about a metre by two: a deep red field darkening to its border,
+// a rug 1.8 by 3 metres: a deep red field darkening to its border,
 // wavy cream medallions, small motifs between, wool pile, fringe at the ends.
 export function rugTexture(seed) {
-  const W = 360, H = 720, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const W = 432, H = 720, c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d'), r = rnd(seed * 7727 + 3);
   const RED = '#5e0a0f', DARK = '#1f0608', CREAM = '#c9b199';
   g.fillStyle = RED; g.fillRect(0, 0, W, H);
