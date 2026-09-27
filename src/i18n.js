@@ -252,6 +252,7 @@ const STRINGS = {
       'What does “enough” mean to~you?',
     ],
     cloudLabel: 'A~CLOUD',
+    balloonLabel: 'A~BALLOON',
     posterQuestions: [
       'How many times have you already walked past this door?',
       'Who remembers you right now? Are you sure?',
@@ -535,6 +536,7 @@ const STRINGS = {
       'Что~для~тебя значит «достаточно»?',
     ],
     cloudLabel: 'ОБЛАКО',
+    balloonLabel: 'ШАРИК',
     posterQuestions: [
       'Сколько раз ты~уже проходишь мимо этой двери?',
       'Кто помнит тебя прямо сейчас? Точно?',

@@ -248,6 +248,24 @@ function cloudTexture() {
   return CLOUD;
 }
 
+// A balloon's skin: pale blue fading to white, a soft highlight, and the
+// question written once round its middle, facing out at u = 0.25 (+z).
+function balloonTexture(text) {
+  const W = 1024, H = 512, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const bg = g.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#f7fbfd'); bg.addColorStop(0.55, '#e4eef6'); bg.addColorStop(1, '#cddcea');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#6f8398'; g.textAlign = 'center';
+  g.font = 'italic 30px Georgia, "Times New Roman", serif';
+  const words = text.split(' '), lines = []; let line = '';
+  for (const w of words) { const t2 = line ? line + ' ' + w : w; if (g.measureText(t2).width > 300 && line) { lines.push(line); line = w; } else line = t2; }
+  lines.push(line);
+  lines.forEach((l, i) => g.fillText(l, W * 0.25, H / 2 - (lines.length - 1) * 18 + i * 36));
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4;
+  return tex;
+}
+
 let GLOW = null;
 function glowTexture() {
   if (GLOW) return GLOW;
@@ -942,18 +960,25 @@ export class SoulPath {
     this.audio?.whisper?.();
     this._say(t('cloudLabel'), text);
   }
+  // open floor a metre round (x, z): clouds and balloons keep clear of walls
+  _airClear(x, z, r = 1.0) {
+    for (const [dx, dz] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r], [r * 0.7, r * 0.7], [-r * 0.7, r * 0.7], [r * 0.7, -r * 0.7], [-r * 0.7, -r * 0.7]])
+      if (solidAtGlobal(cellOf(x + dx), cellOf(z + dz))) return false;
+    return true;
+  }
   _updateClouds(dt, time, speed) {
     const P = this.player;
+    this._updateBalloons(dt, time, speed);
     if (!this.clouds) {
       const tex = cloudTexture();
-      this.clouds = Array.from({ length: 7 }, (_, i) => {
+      this.clouds = Array.from({ length: 4 }, (_, i) => {
         const puffs = [1, 0.7, 0.62, 0.5].map((k, j) => {
           const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xf4f6f1, transparent: true, depthWrite: false, fog: true, opacity: 0 }));
-          sp.userData.k = k; sp.userData.off = new THREE.Vector3(j ? (Math.random() - 0.5) * 0.9 : 0, j ? (Math.random() - 0.4) * 0.25 : 0, j ? (Math.random() - 0.5) * 0.9 : 0);
+          sp.userData.k = k; sp.userData.off = new THREE.Vector3(j ? (Math.random() - 0.5) * 0.5 : 0, j ? (Math.random() - 0.4) * 0.18 : 0, j ? (Math.random() - 0.5) * 0.5 : 0);
           this.scene.add(sp);
           return sp;
         });
-        const c = { puffs, pos: new THREE.Vector3(), aim: new THREE.Vector3(), gone: false, back: 0, seed: Math.random() * 10, a: 0 };
+        const c = { puffs, pos: new THREE.Vector3(), aim: new THREE.Vector3(), home: new THREE.Vector3(), gone: false, back: 0, seed: Math.random() * 10, a: 0 };
         this._spawnCloud(c);
         return c;
       });
@@ -965,16 +990,18 @@ export class SoulPath {
       } else {
         const toP = new THREE.Vector3(P.pos.x - c.pos.x, 0, P.pos.y - c.pos.z), dP = toP.length();
         if (dP > 26) { this._spawnCloud(c); continue; }
-        if (c.pos.distanceTo(c.aim) < 0.3 || Math.random() < dt * 0.08) {
-          const nx = c.pos.x + (Math.random() - 0.5) * 7, nz = c.pos.z + (Math.random() - 0.5) * 7;
-          if (!solidAtGlobal(cellOf(nx), cellOf(nz))) c.aim.set(nx, 2.1 + Math.random() * 0.6, nz);
+        // they hang where they are and only drift a little; a still visitor
+        // draws one in, slowly, through open air only
+        if (c.pos.distanceTo(c.aim) < 0.2 || Math.random() < dt * 0.03) {
+          const nx = c.home.x + (Math.random() - 0.5) * 2.4, nz = c.home.z + (Math.random() - 0.5) * 2.4;
+          if (this._airClear(nx, nz)) c.aim.set(nx, 2.2 + Math.random() * 0.4, nz);
         }
         const drawn = speed < 0.1 && dP < 8;
-        const goal = drawn ? new THREE.Vector3(P.pos.x - toP.x / dP * 0.6, 1.75, P.pos.y - toP.z / dP * 0.6) : c.aim;
+        const goal = drawn ? new THREE.Vector3(P.pos.x - toP.x / dP * 0.6, 1.8, P.pos.y - toP.z / dP * 0.6) : c.aim;
         const step = goal.clone().sub(c.pos), len = step.length();
         if (len > 1e-3) {
-          step.multiplyScalar(Math.min(len, dt * (drawn ? 0.7 : 0.25)) / len);
-          if (!solidAtGlobal(cellOf(c.pos.x + step.x), cellOf(c.pos.z + step.z))) c.pos.add(step); else c.aim.copy(c.pos);
+          step.multiplyScalar(Math.min(len, dt * (drawn ? 0.35 : 0.08)) / len);
+          if (this._airClear(c.pos.x + step.x, c.pos.z + step.z, 0.8)) c.pos.add(step); else c.aim.copy(c.pos);
         }
         c.a = Math.min(1, c.a + dt * 0.4);
         if (dP < 1.2 && this._soulReady(time)) { c.gone = true; c.back = time + 14; this._askAccept(time); }
@@ -989,13 +1016,67 @@ export class SoulPath {
       }
     }
   }
+  // Balloons: pale, almost white blue, a question written round each in a
+  // soft hand. They float on their strings in open rooms; walk up to one
+  // and its question is asked; it lets go and rises away, and another
+  // appears elsewhere.
+  _updateBalloons(dt, time, speed) {
+    const P = this.player;
+    if (!this.balloons) {
+      const qs = t('acceptQuestions'), order = this._soulOrder(4, qs.length);
+      this.balloons = Array.from({ length: 5 }, (_, i) => {
+        const text = qs[order[i % qs.length]];
+        const g = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 28, 18), this.atmo.prop({ map: balloonTexture(text), color: 0xeef5fa, rust: 0 }));
+        body.scale.set(1, 1.18, 1);
+        const knot = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.04, 10), this.atmo.prop({ color: 0xdfe9f0, rust: 0 }));
+        knot.position.y = -0.245; knot.rotation.x = Math.PI;
+        const pts = Array.from({ length: 12 }, (_, k) => new THREE.Vector3(Math.sin(k * 0.7) * 0.02, -0.26 - k * 0.1, 0));
+        const string = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xc9d2d6, transparent: true, opacity: 0.7, fog: true }));
+        g.add(body, knot, string);
+        this.scene.add(g);
+        const b = { g, text, pos: new THREE.Vector3(), seed: Math.random() * 10, gone: false, back: 0, rise: 0 };
+        this._spawnBalloon(b);
+        return b;
+      });
+    }
+    for (const b of this.balloons) {
+      const dP = Math.hypot(P.pos.x - b.pos.x, P.pos.y - b.pos.z);
+      if (b.gone) {                                          // let go: it rises into the fog
+        b.rise += dt * 0.6; b.g.position.y = b.pos.y + b.rise * b.rise;
+        if (time > b.back) this._spawnBalloon(b);
+        continue;
+      }
+      if (dP > 26) { this._spawnBalloon(b); continue; }
+      b.g.position.set(b.pos.x + Math.sin(time * 0.4 + b.seed) * 0.05, b.pos.y + Math.sin(time * 0.9 + b.seed) * 0.05, b.pos.z + Math.cos(time * 0.35 + b.seed) * 0.05);
+      b.g.rotation.set(Math.sin(time * 0.6 + b.seed) * 0.06, Math.atan2(P.pos.x - b.pos.x, P.pos.y - b.pos.z), 0);   // its writing turns to the visitor
+      if (dP < 1.1 && this._soulReady(time)) {
+        b.gone = true; b.back = time + 16; b.rise = 0;
+        this._soulAt = time; this._walked = 0;
+        if (!this.asked.includes(b.text)) this.asked.push(b.text);
+        this.audio?.whisper?.();
+        this._say(t('balloonLabel'), b.text);
+      }
+    }
+  }
+  _spawnBalloon(b) {
+    const P = this.player;
+    for (let tries = 0; tries < 40; tries++) {
+      const a = Math.random() * 6.28, d = 5 + Math.random() * 12;
+      const x = P.pos.x + Math.cos(a) * d, z = P.pos.y + Math.sin(a) * d;
+      if (!this._airClear(x, z, 0.9)) continue;
+      b.pos.set(x, 1.7 + Math.random() * 0.5, z);
+      b.gone = false; b.rise = 0; b.g.position.copy(b.pos);
+      return;
+    }
+  }
   _spawnCloud(c) {
     const P = this.player;
     for (let tries = 0; tries < 40; tries++) {
       const a = Math.random() * 6.28, d = 6 + Math.random() * 12;
       const x = P.pos.x + Math.cos(a) * d, z = P.pos.y + Math.sin(a) * d;
-      if (solidAtGlobal(cellOf(x), cellOf(z))) continue;
-      c.pos.set(x, 2.1 + Math.random() * 0.6, z); c.aim = c.pos.clone();
+      if (!this._airClear(x, z, 1.1)) continue;          // only where a room opens up
+      c.pos.set(x, 2.2 + Math.random() * 0.4, z); c.aim = c.pos.clone(); c.home = c.pos.clone();
       c.gone = false; c.a = 0;
       return;
     }
@@ -1574,7 +1655,7 @@ export class SoulPath {
 
     // after grandmother's room the souls leave it and roam the corridors
     if (this.visitedRoom && this.stage.stage === 1) this._updateRoamers(dt, time, speed);
-    if (this.stage.stage === 2) { this._hideRoamers(); this._updateClouds(dt, time, speed); }
+    if (this.stage.stage === 2) { this._hideRoamers(); for (const b of this.balloons || []) b.g.visible = true; this._updateClouds(dt, time, speed); }
 
     // all the works seen: the arch of roses, once nothing else holds the view
     if (!this.finale && this.seen.size >= this.total && !P.locked) this._beginFinale();
