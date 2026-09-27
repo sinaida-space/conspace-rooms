@@ -69,11 +69,22 @@ export class Player {
     this.camera.updateProjectionMatrix();
   }
 
+  _releaseKeys() {
+    for (const k in this.keys) this.keys[k] = 0;
+  }
+
   _attach() {
     addEventListener('keydown', e => {
       this.keys[e.code] = 1;
     });
-    addEventListener('keyup', e => { this.keys[e.code] = 0; });
+    addEventListener('keyup', e => {
+      this.keys[e.code] = 0;
+      if (e.key === 'Meta') this._releaseKeys();      // macOS swallows the keyup of anything pressed with ⌘
+    });
+    // a keyup lost to another window (a click outside, an app switch, a
+    // shortcut) left a key held and the visitor walking on alone
+    addEventListener('blur', () => this._releaseKeys());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this._releaseKeys(); });
 
     // Mouse look by dragging: hold the button and move. No pointer lock, so the
     // cursor stays free for the toolbar and the first mouse event can never

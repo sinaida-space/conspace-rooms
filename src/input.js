@@ -22,7 +22,14 @@ export class InputRouter {
       if (e.code === 'KeyE' || e.code === 'Space') this.emit('pick');
       if (e.code === 'Escape') this.emit('halt');
     });
-    addEventListener('keyup', e => { keys[e.code] = 0; send(); });
+    addEventListener('keyup', e => {
+      keys[e.code] = 0;
+      if (e.key === 'Meta') for (const k in keys) keys[k] = 0;
+      send();
+    });
+    const release = () => { for (const k in keys) keys[k] = 0; send(); };
+    addEventListener('blur', release);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
     canvas.addEventListener('wheel', e => {
       e.preventDefault();
       this.emit('dive', e.deltaY > 0 ? 0.9 : -0.9);
