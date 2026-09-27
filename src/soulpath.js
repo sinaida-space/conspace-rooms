@@ -425,7 +425,7 @@ export class SoulPath {
     });
     const carpetWall = long[nPost];
     if (carpetWall && rpo() < 0.65) {
-      const mesh = onWall(carpetWall, 1.5, 2.1, 1.55, 0);
+      const mesh = onWall(carpetWall, 2.0, 1.46, 1.62, 0);     // landscape, as they hung over a sofa
       const seed = Math.floor(rpo() * 1e6);
       mesh.material.uniforms.uMap.value = carpetTexture(seed);
       mesh.material.uniforms.uHasMap.value = 1;

@@ -121,65 +121,114 @@ export function museumTexture(text, n) {
 }
 
 // ── memory: a Soviet wall carpet ────────────────────────────────────────────
-// Burgundy field, a big central medallion, borders of small repeats, cream
-// and indigo and black, a fringe along the short sides, the pile worn paler
-// where hands and shoulders brushed it.
+// The Persian pattern every Soviet flat hung over the sofa: a rust-red field,
+// a lobed medallion in navy, black and cream with a gilt contour, lobed
+// corner pieces, flowers strewn thick everywhere, a dark main border of
+// rosettes on a winding vine between thin guard stripes. Drawn in one
+// quarter and mirrored, as a weaver's cartoon would be; then the pile goes
+// soft and fibrous over all of it. Landscape, as it hung.
 export function carpetTexture(seed) {
-  const W = 512, H = 720, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const W = 768, H = 560, c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d'), r = rnd(seed * 104729 + 7);
-  const field = ['#7a1418', '#6a1016', '#8a2a1a'][Math.floor(r() * 3)], cream = '#e6d3b0', ink = '#1c1a2a', blue = '#2c3f6e', gold = '#c89a44';
-  g.fillStyle = field; g.fillRect(0, 0, W, H);
-  // borders: three bands of small repeats
-  const band = (k, col, step, shape) => {
-    g.fillStyle = col;
-    for (let x = k; x < W - k; x += step) { shape(x, k); shape(x, H - k - step); }
-    for (let y = k; y < H - k; y += step) { shape(k, y); shape(W - k - step, y); }
-  };
-  g.fillStyle = ink; g.fillRect(18, 18, W - 36, H - 36);
-  g.fillStyle = field; g.fillRect(52, 52, W - 104, H - 104);
-  band(22, cream, 26, (x, y) => { g.beginPath(); g.moveTo(x + 13, y + 2); g.lineTo(x + 24, y + 13); g.lineTo(x + 13, y + 24); g.lineTo(x + 2, y + 13); g.fill(); });
-  g.strokeStyle = gold; g.lineWidth = 3; g.strokeRect(58, 58, W - 116, H - 116);
-  g.fillStyle = blue; g.fillRect(66, 66, W - 132, H - 132);
-  g.fillStyle = field; g.fillRect(84, 84, W - 168, H - 168);
-  band(68, cream, 18, (x, y) => g.fillRect(x + 6, y + 6, 6, 6));
-  // the medallion: layered stepped diamonds
+  const RED = ['#a3301c', '#9a2a1d', '#b03a22'][Math.floor(r() * 3)], NAVY = '#1b2238', BLACK = '#17110f',
+    CREAM = '#f0e2c4', GOLD = '#d6a24c', BLUE = '#5d7fb0', ROSE = '#c24a3a', WINE = '#5e1a1c';
   const cx = W / 2, cy = H / 2;
-  const diamond = (rx, ry, col) => { g.fillStyle = col; g.beginPath(); g.moveTo(cx, cy - ry); g.lineTo(cx + rx, cy); g.lineTo(cx, cy + ry); g.lineTo(cx - rx, cy); g.closePath(); g.fill(); };
-  [[170, 250, ink], [150, 225, cream], [132, 200, blue], [110, 170, field], [86, 136, gold], [64, 104, ink], [44, 72, cream], [22, 38, field]]
-    .forEach(([rx, ry, col]) => diamond(rx, ry, col));
-  // corner pieces and scattered small motifs in the field
-  for (const [x, y] of [[110, 110], [W - 110, 110], [110, H - 110], [W - 110, H - 110]]) {
-    g.fillStyle = cream; g.beginPath(); g.moveTo(x, y - 26); g.lineTo(x + 26, y); g.lineTo(x, y + 26); g.lineTo(x - 26, y); g.fill();
-    g.fillStyle = blue; g.fillRect(x - 7, y - 7, 14, 14);
-  }
-  for (let i = 0; i < 26; i++) {
-    const x = 100 + r() * (W - 200), y = 100 + r() * (H - 200);
-    if (Math.abs(x - cx) / 180 + Math.abs(y - cy) / 260 < 1) continue;
-    g.fillStyle = [cream, gold, blue][i % 3]; g.fillRect(x - 5, y - 5, 10, 10);
-  }
+  // mirror a drawing into all four quarters
+  const quad = draw => { for (const [sx, sy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { g.save(); g.translate(cx, cy); g.scale(sx, sy); draw(); g.restore(); } };
+  const rosette = (x, y, rad, petal, core, n = 8) => {
+    g.fillStyle = petal;
+    for (let k = 0; k < n; k++) { const a = k / n * 6.283; g.beginPath(); g.ellipse(x + Math.cos(a) * rad * 0.55, y + Math.sin(a) * rad * 0.55, rad * 0.45, rad * 0.22, a, 0, 6.283); g.fill(); }
+    g.fillStyle = core; g.beginPath(); g.arc(x, y, rad * 0.28, 0, 6.283); g.fill();
+  };
+  const leaf = (x, y, len, ang, col) => { g.fillStyle = col; g.beginPath(); g.ellipse(x, y, len, len * 0.32, ang, 0, 6.283); g.fill(); };
+  const lobed = (rx, ry, lobes, depth, spike) => {    // a medallion outline: lobes with a small point on each
+    g.beginPath();
+    for (let i = 0; i <= 240; i++) {
+      const a = i / 240 * 6.283, l = Math.abs(Math.cos(a * lobes / 2));
+      const k = 1 - depth * (1 - Math.pow(l, 0.6)) + spike * Math.pow(l, 18);
+      const x = cx + Math.cos(a) * rx * k, y = cy + Math.sin(a) * ry * k;
+      i ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.closePath();
+  };
+  // field with abrash: the red drifts a little from row to row, as dye lots do
+  g.fillStyle = RED; g.fillRect(0, 0, W, H);
+  for (let y = 0; y < H; y += 6) { g.fillStyle = `rgba(${r() < 0.5 ? '60,10,5' : '255,140,90'},${r() * 0.06})`; g.fillRect(0, y, W, 6); }
+  // borders: guard, main, guard
+  const B = 62;
+  g.fillStyle = WINE; g.fillRect(0, 0, W, H);
+  g.fillStyle = CREAM; g.fillRect(6, 6, W - 12, H - 12);
+  g.fillStyle = BLACK; g.fillRect(12, 12, W - 24, H - 24);
+  g.fillStyle = RED; g.fillRect(B, B, W - 2 * B, H - 2 * B);
+  g.strokeStyle = GOLD; g.lineWidth = 3; g.strokeRect(B - 6, B - 6, W - 2 * B + 12, H - 2 * B + 12);
+  g.strokeStyle = CREAM; g.lineWidth = 2; g.strokeRect(B - 2, B - 2, W - 2 * B + 4, H - 2 * B + 4);
+  // main border: a winding gold vine with rosettes in its bays
+  const vine = (x0, y0, x1, y1) => {
+    const len = Math.hypot(x1 - x0, y1 - y0), ux = (x1 - x0) / len, uy = (y1 - y0) / len, nx = -uy, ny = ux, step = 34;
+    g.strokeStyle = GOLD; g.lineWidth = 2.5; g.beginPath();
+    for (let t = 0; t <= len; t += 3) { const w = Math.sin(t / step * Math.PI) * 9; const x = x0 + ux * t + nx * w, y = y0 + uy * t + ny * w; t ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.stroke();
+    for (let t = step / 2, i = 0; t < len; t += step, i++) {
+      const side = i % 2 ? 1 : -1, x = x0 + ux * t + nx * side * 7, y = y0 + uy * t + ny * side * 7;
+      rosette(x, y, 11, [CREAM, BLUE, ROSE][i % 3], i % 2 ? GOLD : BLACK, 6 + (i % 3));
+      leaf(x - ux * 14, y - uy * 14, 6, Math.atan2(uy, ux) + 0.6 * side, '#6f8a4a');
+    }
+  };
+  const m = (12 + B - 6) / 2;
+  vine(m, m, W - m, m); vine(m, H - m, W - m, H - m); vine(m, m + 20, m, H - m - 20); vine(W - m, m + 20, W - m, H - m - 20);
+  for (const [x, y] of [[m, m], [W - m, m], [m, H - m], [W - m, H - m]]) rosette(x, y, 16, CREAM, ROSE, 8);
+  // corner pieces: a quarter of a lobed shape in navy, flowers inside
+  quad(() => {
+    const X = W / 2 - B, Y = H / 2 - B;
+    g.fillStyle = NAVY; g.beginPath(); g.moveTo(X, Y);
+    for (let i = 0; i <= 40; i++) { const a = Math.PI + i / 40 * Math.PI / 2, l = 1 + 0.12 * Math.cos(a * 8); g.lineTo(X + Math.cos(a) * 130 * l, Y + Math.sin(a) * 105 * l); }
+    g.closePath(); g.fill();
+    g.strokeStyle = GOLD; g.lineWidth = 2.5; g.stroke();
+    for (let k = 0; k < 7; k++) rosette(X - 25 - r() * 80, Y - 20 - r() * 60, 7 + r() * 5, [CREAM, BLUE, GOLD][k % 3], ROSE, 6);
+  });
+  // the medallion, from the outside in
+  lobed(250, 190, 8, 0.28, 0.1); g.fillStyle = GOLD; g.fill();
+  lobed(242, 183, 8, 0.28, 0.1); g.fillStyle = NAVY; g.fill();
+  lobed(200, 150, 8, 0.3, 0.12); g.fillStyle = RED; g.fill(); g.strokeStyle = CREAM; g.lineWidth = 2; g.stroke();
+  lobed(150, 112, 6, 0.32, 0.14); g.fillStyle = BLACK; g.fill(); g.strokeStyle = GOLD; g.lineWidth = 2; g.stroke();
+  lobed(98, 74, 4, 0.42, 0.25); g.fillStyle = CREAM; g.fill();
+  lobed(64, 48, 4, 0.42, 0.25); g.fillStyle = ROSE; g.fill();
+  rosette(cx, cy, 26, CREAM, NAVY, 8); rosette(cx, cy, 11, GOLD, WINE, 6);
+  // pendants top and bottom of the medallion
+  for (const sy of [-1, 1]) { g.fillStyle = NAVY; g.beginPath(); g.ellipse(cx, cy + sy * 205, 26, 18, 0, 0, 6.283); g.fill(); rosette(cx, cy + sy * 205, 12, CREAM, ROSE, 6); }
+  // flowers strewn thick, mirrored: in the field, in the navy ring, in the black
+  quad(() => {
+    for (let k = 0; k < 230; k++) {
+      const x = r() * (W / 2 - B - 8), y = r() * (H / 2 - B - 8);
+      const e = (x / 250) ** 2 + (y / 190) ** 2;
+      const inRing = e < 1 && e > 0.66, inBlack = (x / 150) ** 2 + (y / 112) ** 2 < 1 && (x / 98) ** 2 + (y / 74) ** 2 > 1.1;
+      if (e < 1 && !inRing && !inBlack) continue;
+      const size = inRing || inBlack ? 5 + r() * 4 : 6 + r() * 6;
+      const col = inRing || inBlack ? [CREAM, GOLD, BLUE, ROSE][k % 4] : [CREAM, NAVY, GOLD, BLACK, BLUE][k % 5];
+      if (r() < 0.3) leaf(x, y, size, r() * 3, inRing || inBlack ? '#7c9656' : BLACK);
+      else rosette(x, y, size, col, r() < 0.5 ? WINE : GOLD, 5 + Math.floor(r() * 4));
+    }
+  });
   // pile: the pattern goes soft, as wool does, then thousands of short
   // fibres, each in the colour under it, a shade lighter or darker, leaning
   // every which way; the knots show as a faint grid
-  g.filter = 'blur(1.6px)'; g.drawImage(c, 0, 0); g.filter = 'none';
+  g.filter = 'blur(1.3px)'; g.drawImage(c, 0, 0); g.filter = 'none';
   const px = g.getImageData(0, 0, W, H).data;
   g.lineCap = 'round';
-  for (let i = 0; i < 42000; i++) {
+  for (let i = 0; i < 50000; i++) {
     const x = r() * W, y = r() * H, k = (Math.floor(y) * W + Math.floor(x)) * 4;
     const sh = r() < 0.5 ? 0.72 + r() * 0.2 : 1.1 + r() * 0.25;
-    g.strokeStyle = `rgba(${Math.min(255, px[k] * sh) | 0},${Math.min(255, px[k + 1] * sh) | 0},${Math.min(255, px[k + 2] * sh) | 0},0.55)`;
+    g.strokeStyle = `rgba(${Math.min(255, px[k] * sh) | 0},${Math.min(255, px[k + 1] * sh) | 0},${Math.min(255, px[k + 2] * sh) | 0},0.5)`;
     g.lineWidth = 0.8 + r() * 0.9;
     const a2 = r() * 6.283, l = 1.5 + r() * 3;
     g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a2) * l, y + Math.sin(a2) * l); g.stroke();
   }
-  g.fillStyle = 'rgba(0,0,0,0.06)';
+  g.fillStyle = 'rgba(0,0,0,0.05)';
   for (let x = 0; x < W; x += 4) g.fillRect(x, 0, 1, H);
   for (let y = 0; y < H; y += 4) g.fillRect(0, y, W, 1);
-  const wear = g.createRadialGradient(W * (0.3 + r() * 0.4), H * 0.62, 10, W * 0.5, H * 0.62, W * 0.5);
-  wear.addColorStop(0, 'rgba(255,230,200,0.14)'); wear.addColorStop(1, 'rgba(255,230,200,0)');
+  const wear = g.createRadialGradient(W * (0.35 + r() * 0.3), H * 0.6, 10, W * 0.5, H * 0.6, W * 0.45);   // paler where shoulders brushed it
+  wear.addColorStop(0, 'rgba(255,225,190,0.1)'); wear.addColorStop(1, 'rgba(255,225,190,0)');
   g.fillStyle = wear; g.fillRect(0, 0, W, H);
-  // fringe on the short sides
-  g.fillStyle = cream;
-  for (let x = 6; x < W - 6; x += 7) { g.fillRect(x, 0, 3, 14 + r() * 5); g.fillRect(x, H - 14 - r() * 5, 3, 20); }
   return tex(c);
 }
 
