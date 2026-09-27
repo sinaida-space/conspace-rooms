@@ -420,13 +420,11 @@ body.inspecting #control-hud, body.inspecting #hand-legend, body.inspecting #pad
 }
 #pad .pad-arrows {
   position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom));
-  display: grid; grid-template-columns: repeat(3, 3.2em); grid-template-rows: repeat(2, 3.2em); gap: 0.35em;
+  display: flex; flex-direction: column; align-items: center; gap: 0.35em;
 }
-#pad .pad-arrows button { font-size: 1.15em; width: 100%; height: 100%; }
-#pad .pad-up { grid-column: 2; grid-row: 1; }
-#pad .pad-arrows button[data-key="ArrowLeft"] { grid-column: 1; grid-row: 2; }
-#pad .pad-arrows button[data-key="ArrowDown"] { grid-column: 2; grid-row: 2; }
-#pad .pad-arrows button[data-key="ArrowRight"] { grid-column: 3; grid-row: 2; }
+#pad .pad-up { width: 3.4em; height: 3.2em; }
+#pad .pad-row { display: flex; width: 10.2em; height: 3.2em; padding: 0; pointer-events: auto; }
+#pad .pad-row button { flex: 1; height: 100%; }
 #pad button.held { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 #pad .pad-inspect {
   position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 3.6em);
@@ -443,7 +441,7 @@ body.can-inspect #pad .pad-inspect:active, body.inspecting #pad .pad-inspect:act
 }
 /* the key legend sits between the pad's two halves on a desktop */
 body:has(#pad) #inspect-overlay .inspect-card { margin-bottom: calc(max(16px, env(safe-area-inset-bottom)) + 7.6em); }
-body:has(#pad) #artwork-prompt { bottom: calc(max(16px, env(safe-area-inset-bottom)) + 7.6em); }
+body:has(#pad) #artwork-prompt { display: none; }   /* the pad's own tape says it */
 
 /* in-page confirm dialog */
 .dialog {
@@ -591,13 +589,15 @@ body.gallery #final-card .fc-actions { display: none; }   /* nobody clicks in a 
 #btn-mute.tape { position: static; width: auto; height: auto; border-radius: 0; font-size: 0.95rem; }
 #btn-mute.muted { color: #6d6556; }
 
-/* the pad: tape squares, barely there until touched */
-#pad .pad-arrows { opacity: 0.2; transition: opacity 0.3s ease; }
-#pad .pad-arrows:has(button.held), #pad .pad-arrows:hover { opacity: 0.85; }
+/* the pad: two tapes like the menu's, one above the other; the lower one
+   holds three keys that share a single strip */
+#pad .pad-arrows { opacity: 0.85; transition: opacity 0.3s ease; }
+#pad .pad-arrows:has(button.held), #pad .pad-arrows:hover { opacity: 1; }
 #pad .pad-arrows button { padding: 0; font-size: 1em; }
-#pad .pad-arrows button:nth-child(2) { --tilt: 2deg; }
-#pad .pad-arrows button:nth-child(3) { --tilt: -0.6deg; }
-#pad .pad-arrows button:nth-child(4) { --tilt: 1.6deg; }
+#pad .pad-up { --tilt: 1.4deg; }
+#pad .pad-row { --tilt: -0.8deg; }
+#pad .pad-row button { background: none; clip-path: none; box-shadow: none; transform: none; }
+#pad .pad-row button.held { background: rgba(60, 45, 20, 0.14); color: #000; }
 #pad button.held { background: linear-gradient(180deg, #f7ecd0, #e3d3a8); color: #000; }
 #pad .pad-inspect { --tilt: 1.8deg; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
 body.can-inspect #pad .pad-inspect, body.inspecting #pad .pad-inspect { color: #1d1a16; border: 0; box-shadow: 0 0 0 1px rgba(57, 255, 106, 0.0), 0 1px 3px rgba(0, 0, 0, 0.35); }

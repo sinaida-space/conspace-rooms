@@ -218,9 +218,11 @@ export class UI {
     el.innerHTML = `
       <div class="pad-arrows">
         <button type="button" data-key="ArrowUp" class="pad-up" aria-label="${labels[0]}">▲</button>
-        <button type="button" data-key="ArrowLeft" aria-label="${labels[2]}">◄</button>
-        <button type="button" data-key="ArrowDown" aria-label="${labels[1]}">▼</button>
-        <button type="button" data-key="ArrowRight" aria-label="${labels[3]}">►</button>
+        <div class="pad-row tape">
+          <button type="button" data-key="ArrowLeft" aria-label="${labels[2]}">◄</button>
+          <button type="button" data-key="ArrowDown" aria-label="${labels[1]}">▼</button>
+          <button type="button" data-key="ArrowRight" aria-label="${labels[3]}">►</button>
+        </div>
       </div>
       <button type="button" class="pad-inspect"><span class="pi-open">${t('padInspect')}</span><span class="pi-close">${t('padBack')}</span></button>`;
     for (const b of el.querySelectorAll('[data-key]')) {
