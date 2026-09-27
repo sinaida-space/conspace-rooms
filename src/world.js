@@ -144,6 +144,14 @@ export const LAMP_LINES = [1, 5, 8, 11, 14];
 const LAMP_SET = new Set(LAMP_LINES);
 const mod16 = v => ((v % 16) + 16) % 16;
 export function isLampCell(gi, gj) { return LAMP_SET.has(mod16(gi)) && LAMP_SET.has(mod16(gj)); }
+// Grandmother's chandeliers hang one to a stretch of corridor: on a lamp
+// line that runs down a corridor band (5 or 11), halfway between two
+// crossings (8, or 1 of the next chunk). materials.js mirrors this in GLSL.
+const CROSS = new Set([5, 11]), MID = new Set([8, 1]);
+export function isChandelierCell(gi, gj) {
+  const a = mod16(gi), b = mod16(gj);
+  return (CROSS.has(a) && MID.has(b)) || (CROSS.has(b) && MID.has(a));
+}
 // nearest lamp line (global cell index) to a cell coordinate, plus offset k
 export function lampLineNear(c, k = 0) {
   const ext = [-5, -2, 1, 5, 8, 11, 14, 17, 21];

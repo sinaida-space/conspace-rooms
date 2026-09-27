@@ -71,7 +71,8 @@ export function contactShadows(list) {
     }
     idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
   };
-  for (const f of list) {
+  for (const f0 of list) {
+    const f = { ...f0, w: f0.w || f0.d || 0.3, d: f0.d || f0.w || 0.3 };   // some small things only know their depth
     // away from the nearest fixture
     const lx = (lampLineNear(f.x / CELL) + 0.5) * CELL, lz = (lampLineNear(f.z / CELL) + 0.5) * CELL;
     let ax = f.x - lx, az = f.z - lz;

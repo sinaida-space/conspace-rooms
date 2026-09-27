@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CEIL_H, CELL, lampLineNear, solidAtGlobal } from './world.js';
+import { CEIL_H, CELL, lampLineNear, solidAtGlobal, isChandelierCell } from './world.js';
 import { ZONE, ORIGIN } from './zones.js';
 
 // ── conspace-rooms · materials.js ───────────────────────────────────────────
@@ -98,6 +98,14 @@ vec3 zoneWeights(vec2 xz){ return uZone; }
 vec3 zoneLight(vec3 z){ return LIGHT_FEAR * z.x + LIGHT_MEM * z.y + LIGHT_ACC * z.z; }
 
 // Extra brightness a fixture gets from footsteps that passed under it.
+// In the red rooms only the chandeliers light (world.js isChandelierCell):
+// they burn brighter, every other fixture is all but out.
+float chandelierK(vec2 cell){
+  float a = mod(cell.x, 16.0), b = mod(cell.y, 16.0);
+  bool ca = abs(a - 5.0) < 0.5 || abs(a - 11.0) < 0.5, cb = abs(b - 5.0) < 0.5 || abs(b - 11.0) < 0.5;
+  bool ma = abs(a - 8.0) < 0.5 || abs(a - 1.0) < 0.5, mb = abs(b - 8.0) < 0.5 || abs(b - 1.0) < 0.5;
+  return mix(1.0, (ca && mb) || (cb && ma) ? 1.9 : 0.12, uZone.y);
+}
 float trailBoost(vec2 pc){
   float b = 0.0;
   for (int i = 0; i < 4; i++) {
@@ -153,7 +161,7 @@ vec3 fixtureLight(vec3 P, vec3 N, vec3 lightCol){
       float dist = length(L);
       float atten = 1.0 / (1.0 + 0.16 * dist + 0.10 * dist * dist);
       float ndl = max(dot(N, L / max(dist, 1e-3)), 0.0) * 0.7 + 0.3; // soft wrap
-      float fl = lampVis(P, N, pc);
+      float fl = lampVis(P, N, pc) * chandelierK(cellL);
       if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl *= uFlickerAmt;
       acc += lightCol * atten * ndl * fl;             // footstep boost lives on the fixtures themselves (ceiling)
     }
@@ -175,7 +183,7 @@ vec3 fixtureSpec(vec3 P, vec3 N, vec3 V, vec3 lightCol, float shin){
       float dist = length(L);
       L /= max(dist, 1e-3);
       float atten = 1.0 / (1.0 + 0.16 * dist + 0.10 * dist * dist);
-      float fl = lampVis(P, N, pc);
+      float fl = lampVis(P, N, pc) * chandelierK(cellL);
       if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl *= uFlickerAmt;
       vec3 H = normalize(L + V);
       acc += lightCol * atten * fl * pow(max(dot(N, H), 0.0), shin) * step(0.0, dot(N, L));
@@ -213,7 +221,7 @@ void fixtureLightSpec(vec3 P, vec3 N, vec3 V, vec3 lightCol, float shin, out vec
       float dist = length(L);
       L /= max(dist, 1e-3);
       float atten = 1.0 / (1.0 + 0.16 * dist + 0.10 * dist * dist);
-      float fl = lampVis(P, N, pc);
+      float fl = lampVis(P, N, pc) * chandelierK(cellL);
       if (abs(cellL.x - uFlickerTile.x) < 0.5 && abs(cellL.y - uFlickerTile.y) < 0.5) fl *= uFlickerAmt;
       vec3 c = lightCol * atten * fl;
       float nl = dot(N, L);
@@ -660,7 +668,7 @@ void main(){
   vec2 dl = p - lampC;
   float flL = 1.0;                                      // the halo dims with its own lamp, not with this cell
   if (abs(bx + LINES[ix] - uFlickerTile.x) < 0.5 && abs(bz + LINES[iz] - uFlickerTile.y) < 0.5) flL = uFlickerAmt;
-  lit += L * exp(-dot(dl, dl) * 1.6) * 0.18 * flL * boost;
+  lit += L * exp(-dot(dl, dl) * 1.6) * 0.18 * flL * boost * chandelierK(vec2(bx + LINES[ix], bz + LINES[iz]));
 
   vec4 fx = vec4(0.0);
   if (on > 0.5) {
@@ -934,7 +942,7 @@ export function createMaterials(quality) {
       for (let i = 0; i < HAZE_N; i++) {
         const c = cand[i];
         if (!c || c.v < 0.01) { shared.uHaze.value[i].w = 0; continue; }
-        const fl = c.gi === ft.x && c.gj === ft.y ? famt : 1;
+        const fl = (c.gi === ft.x && c.gj === ft.y ? famt : 1) * (1 + (zone ? zone.memory : 0) * (isChandelierCell(c.gi, c.gj) ? 0.9 : -0.88));   // the red rooms glow only round a chandelier
         const near = Math.min(1, Math.max(0.1, (c.d - 0.6) / 2.4));   // the column you stand in is air all round you, not a glow ahead
         shared.uHaze.value[i].set(c.x, HAZE_Y, c.z, c.v * fl * near * Math.min(1, (13 - c.d) / 3));
       }
