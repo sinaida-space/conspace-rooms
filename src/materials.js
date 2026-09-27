@@ -350,13 +350,13 @@ vec3 fearWall(float h, float y, int oct, out float gloss){
 vec3 paper(vec2 q){ return texture2D(uWallpaper, vec2(q.x / PAPER_W, q.y / PAPER_H)).rgb; }
 float memoryHeight(float h, float y){
   vec3 c = paper(vec2(h, y));
-  float ink = smoothstep(0.02, 0.12, abs(dot(c - vec3(0.059, 0.169, 0.098), vec3(0.4, 0.4, 0.2))));
+  float ink = smoothstep(0.02, 0.12, abs(dot(c - vec3(0.039, 0.231, 0.192), vec3(0.4, 0.4, 0.2))));
   return 0.6 * ink + 0.05 * vnoise(vec2(h, y) * 180.0);   // raised ink + paper tooth
 }
 vec3 memoryWall(float h, float y, int oct, out float gloss){
   vec2 q = vec2(h, y);
   vec3 col = paper(q);
-  float ink = smoothstep(0.02, 0.12, abs(dot(col - vec3(0.059, 0.169, 0.098), vec3(0.4, 0.4, 0.2))));
+  float ink = smoothstep(0.02, 0.12, abs(dot(col - vec3(0.039, 0.231, 0.192), vec3(0.4, 0.4, 0.2))));
   float fibre = vnoise(q * vec2(90.0, 260.0)) * 0.5 + vnoise(q * 400.0) * 0.5;
   col *= 0.86 + 0.28 * fibre;
   // strip seams: a hairline shadow and a lifted edge catching light
