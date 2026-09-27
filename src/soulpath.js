@@ -1759,8 +1759,18 @@ export class SoulPath {
       if (solidAtGlobal(gi, gj)) {
         // face normal points back into the open cell we came from
         const nx = gi !== pi ? Math.sign(pi - gi) : 0, nz = gj !== pj ? Math.sign(pj - gj) : 0;
+        if (!nx === !nz) return false;                  // hit a corner diagonally: no flat face to hang on
         const wx = nx ? (nx > 0 ? (gi + 1) * CELL : gi * CELL) : x;
         const wz = nz ? (nz > 0 ? (gj + 1) * CELL : gj * CELL) : z;
+        // the whole frame and its placard need flat wall behind and open
+        // floor before them, and no work close by: otherwise look elsewhere
+        const tx = nz, tz = -nx;                        // along the wall, toward the placard
+        for (let u = -0.75; u <= 1.1; u += 0.15) {
+          const bx = wx + tx * u - nx * 0.05, bz = wz + tz * u - nz * 0.05;      // just inside the wall
+          const ox = wx + tx * u + nx * 0.3, oz = wz + tz * u + nz * 0.3;        // just in front of it
+          if (!solidAtGlobal(cellOf(bx), cellOf(bz)) || solidAtGlobal(cellOf(ox), cellOf(oz))) return false;
+        }
+        if (this.artworks.active.some(a => Math.hypot(a.centerWorld.x - wx, a.centerWorld.z - wz) < 2.2)) return false;
         const g = new THREE.Group();
         g.position.set(wx + nx * 0.012, 1.55, wz + nz * 0.012);
         g.rotation.y = Math.atan2(nx, nz);

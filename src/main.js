@@ -67,27 +67,7 @@ async function boot() {
   camera.position.set(0, 1.6, 4);
   camera.lookAt(0, 0.5, 0);
 
-  // temporary gray ground + box so the render is verifiable before Enter; both
-  // are removed once the labyrinth streams in (see startWorld()).
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(40, 40),
-    new THREE.MeshStandardMaterial({ color: 0x808080 })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
-
-  const box = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0xc1121f })
-  );
-  box.position.set(0, 0.5, 0);
-  scene.add(box);
-
-  const light = new THREE.DirectionalLight(0xffffff, 1);
-  light.position.set(3, 5, 2);
-  scene.add(light);
-  const ambient = new THREE.AmbientLight(0x888888, 1);
-  scene.add(ambient);
+  // before the labyrinth streams in (startWorld()) the scene is just the dark
 
   const router = new InputRouter();
   let hands = null;
@@ -144,8 +124,6 @@ async function boot() {
         if (dt > 0) audio.turn((player.yaw - prevYaw) / dt);   // two frames can share a timestamp: 0/0 would stop the loop
       }
       prevYaw = player.yaw;
-    } else {
-      box.rotation.y += dt * 0.4; // pre-Enter idle
     }
     post = post ?? window.__app.post;
     if (audio) audio.motion(speed);
@@ -240,7 +218,16 @@ async function boot() {
     },
   });
 
-  startWorld();
+  // if the labyrinth cannot be built, say so gently and offer to try again,
+  // instead of leaving the visitor in the dark
+  startWorld().catch(e => {
+    console.error('[world] could not be built', e);
+    const el = document.createElement('div');
+    el.id = 'world-broken';
+    el.innerHTML = `<p>${t('worldBroken')}</p><button type="button" class="tape">${t('worldRetry')}</button>`;
+    el.querySelector('button').addEventListener('click', () => location.reload());
+    document.body.appendChild(el);
+  });
 
   if (mode === 'hands') {
     try {
@@ -270,9 +257,6 @@ async function boot() {
     const { Artworks } = await import('./artworks.js');
 
     // swap the placeholder scaffold for labyrinth-appropriate lighting
-    scene.remove(ground); ground.geometry.dispose(); ground.material.dispose();
-    scene.remove(box); box.geometry.dispose(); box.material.dispose();
-    scene.remove(light); scene.remove(ambient); // sunlit/flat lighting makes no sense indoors; panels light the scene
     scene.fog = new THREE.FogExp2(0x0e1f14, quality.tier === 0 ? 0.045 : 0.03); // dreamcore-green haze, visibility fades ~35m at tier 2
 
     const atmo = createMaterials(quality);
