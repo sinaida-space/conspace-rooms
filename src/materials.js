@@ -206,7 +206,10 @@ vec3 hazeGlow(vec3 P, vec3 lightCol){
     float D = sqrt(max(4.0 * A * C - B * B, 1e-6));
     acc += w * 2.0 / D * (atan((2.0 * A + B) / D) - atan(B / D));
   }
-  return lightCol * acc * len * 0.07;
+  // saturates instead of piling up (standing inside a column must not white
+  // the screen out), and the pale last stage, already full of light, gets little
+  float k = uZone.x + uZone.y + 0.3 * uZone.z;
+  return lightCol * (1.0 - exp(-acc * len * 0.07)) * 0.3 * k;
 }
 
 // gentle filmic rolloff so light pools don't clip to flat white
@@ -868,7 +871,8 @@ export function createMaterials(quality) {
         const c = cand[i];
         if (!c || c.v < 0.01) { shared.uHaze.value[i].w = 0; continue; }
         const fl = c.gi === ft.x && c.gj === ft.y ? famt : 1;
-        shared.uHaze.value[i].set(c.x, HAZE_Y, c.z, c.v * fl * Math.min(1, (13 - c.d) / 3));
+        const near = Math.min(1, Math.max(0.1, (c.d - 0.6) / 2.4));   // the column you stand in is air all round you, not a glow ahead
+        shared.uHaze.value[i].set(c.x, HAZE_Y, c.z, c.v * fl * near * Math.min(1, (13 - c.d) / 3));
       }
     },
     // lights: [{ x, y, z, col }] nearest first; each gets its own flicker
