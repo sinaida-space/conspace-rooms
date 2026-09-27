@@ -207,6 +207,29 @@ vec3 candleLight(vec3 P, vec3 N){
   return acc * (1.0 - 0.7 * uZone.z);               // on pale cloud a flame's glow would blow out
 }
 
+// Crystal throws the light about: round each chandelier the walls, floor
+// and ceiling are strewn with small bright flecks, a little prismatic,
+// thinning with distance and stopped by walls like the light itself.
+vec3 crystalFlecks(vec3 P, vec3 N){
+  if (uZone.y < 0.01) return vec3(0.0);
+  vec3 acc = vec3(0.0);
+  float bx, bz;
+  int ix = nearestLine(P.x / ${CELL.toFixed(2)}, bx), iz = nearestLine(P.z / ${CELL.toFixed(2)}, bz);
+  for (int dz = -1; dz <= 1; dz++) for (int dx = -1; dx <= 1; dx++) {
+    vec2 cellL = vec2(bx + LINES[ix + dx], bz + LINES[iz + dz]);
+    if (chandelierK(cellL) < 1.0) continue;                         // only a chandelier scatters
+    vec2 pc = (cellL + 0.5) * ${CELL.toFixed(2)};
+    vec3 L = P - vec3(pc.x, PANEL_Y - 0.2, pc.y);
+    float d = length(L);
+    vec3 dir = L / max(d, 1e-3);
+    vec2 sph = vec2(atan(dir.z, dir.x), asin(clamp(dir.y, -1.0, 1.0))) * 30.0;   // even in every direction: dots, not streaks
+    float fleck = pow(vnoise(sph + cellL * 3.7), 34.0);            // few, and small
+    vec3 tint = mix(vec3(1.0, 0.66, 0.4), vec3(1.0, 0.84, 0.6), vnoise(vec2(atan(dir.z, dir.x) * 5.0, dir.y * 9.0)));   // warm, candle-gold
+    acc += tint * fleck * 1.1 / (1.0 + d * d * 0.6) * max(dot(N, -dir), 0.0) * lampVis(P, N, pc);
+  }
+  return acc * uZone.y;
+}
+
 // Diffuse and specular from the same 3×3 fixtures in one pass (walls need
 // both; sharing the lamp search and attenuation halves the cost).
 void fixtureLightSpec(vec3 P, vec3 N, vec3 V, vec3 lightCol, float shin, out vec3 diff, out vec3 spec){
@@ -455,7 +478,7 @@ void main(){
   vec3 spec = sSum * gloss * mix(0.25, 0.9, z.x) * ao;
   vec3 lit = rolloff(diffuse + spec + cl * 0.05 * ao); // a little warm haze on the plaster right by a flame
   lit += z.z * 0.03 * LIGHT_ACC;                       // a little light from inside the cloud
-  lit += hazeGlow(vWorldPos, L);
+  lit += hazeGlow(vWorldPos, L) + crystalFlecks(vWorldPos, Nb);
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
 }
@@ -520,21 +543,32 @@ vec3 fearFloor(vec2 p, int oct){
   return base * (1.0 + 0.18 * worn);
 }
 
-// MEMORY: a wall-to-wall red ornamental carpet, one medallion every 2.4 m.
+// MEMORY: Soviet herringbone parquet, planks 7.5 × 30 cm. The pattern is a
+// lattice with steps (4, 4) and (1, −1) plank widths holding one flat and
+// one upright plank; each point finds its plank among the nine nearest
+// cells. Every plank its own tone of honey and walnut, grain along it,
+// dark seams, varnish worn where feet go.
 vec3 memoryFloor(vec2 p, int oct){
-  vec2 t = fract(p / 2.4) - 0.5;
-  float edge = max(abs(t.x), abs(t.y));
-  vec3 red = vec3(0.26, 0.03, 0.04), cream = vec3(0.50, 0.44, 0.40), dark = vec3(0.07, 0.02, 0.03);
-  vec3 col = mix(red, dark, smoothstep(0.30, 0.50, edge) * 0.6);   // darker between medallions
-  float r = length(t), ang = atan(t.y, t.x);
-  float med = smoothstep(0.02, 0.0, abs(r - 0.18 - 0.05 * sin(ang * 8.0)));   // arabesque medallion
-  med += smoothstep(0.015, 0.0, abs(r - 0.30 - 0.03 * cos(ang * 12.0)));
-  col = mix(col, cream, clamp(med, 0.0, 1.0) * 0.8);
-  vec2 g = fract(t * 9.0 + 0.5) - 0.5;                             // small motifs in the field
-  col = mix(col, cream * 0.7, smoothstep(0.12, 0.05, abs(g.x) + abs(g.y)) * step(0.34, r) * step(r, 0.42));
-  col *= 0.8 + 0.3 * vnoise(p * 80.0);                             // wool pile
-  col *= 0.85 + 0.2 * fbm(p * 0.5, oct);                           // wear
-  return col;
+  const float PW = 0.075, PL = 4.0;
+  vec2 q = p / PW;
+  vec2 e1 = vec2(PL, PL), e2 = vec2(1.0, -1.0);
+  float a = floor((q.x + q.y) / (2.0 * PL)), b = floor((q.x - q.y) * 0.5);
+  vec2 id = vec2(0.0), loc = vec2(0.0);
+  for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
+    vec2 cell = vec2(a + float(i), b + float(j));
+    vec2 r = q - cell.x * e1 - cell.y * e2;
+    if (r.x >= 0.0 && r.x < PL && r.y >= 0.0 && r.y < 1.0) { id = cell; loc = r; }
+    if (r.x >= PL - 1.0 && r.x < PL && r.y >= 1.0 && r.y < PL + 1.0) { id = cell + 0.5; loc = vec2(r.y - 1.0, r.x - PL + 1.0); }
+  }
+  float h = hash21(id * 1.73 + 0.31);
+  vec3 wood = mix(vec3(0.20, 0.12, 0.06), vec3(0.36, 0.23, 0.12), h);   // old varnish, darkened
+  float grain = vnoise(vec2(loc.x * 2.2 + h * 20.0, loc.y * 16.0 + h * 7.0));
+  wood *= 0.8 + 0.32 * grain;
+  wood *= 0.93 + 0.07 * sin(loc.y * 22.0 + grain * 7.0);            // the rings, running along the plank
+  float seam = smoothstep(0.0, 0.07, loc.y) * smoothstep(1.0, 0.93, loc.y) * smoothstep(0.0, 0.03, loc.x) * smoothstep(PL, PL - 0.03, loc.x);
+  wood *= mix(0.3, 1.0, seam);
+  wood *= 0.82 + 0.28 * fbm(p * 0.55, oct);                        // worn and waxed unevenly
+  return wood;
 }
 
 // ACCEPTANCE: pale limestone.
@@ -555,7 +589,7 @@ void main(){
 
   // grime creeps in along the 1.2 m grid lines (where walls stand), less so in the light
   vec2 g = abs(fract(p / 1.2) - 0.5);
-  col *= mix(mix(0.55, 1.0, smoothstep(0.42, 0.30, max(g.x, g.y))), 1.0, z.z + z.y); // carpet hides the seams
+  col *= mix(mix(0.55, 1.0, smoothstep(0.42, 0.30, max(g.x, g.y))), 1.0, z.z + z.y); // the parquet has seams of its own
 
   vec3 L = zoneLight(z);
   col *= pow(vAO, 1.6);                                 // shadow and dust gathered at the walls
@@ -564,7 +598,7 @@ void main(){
   vec3 clf = candleLight(vWorldPos, N);
   vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L * (0.5 + open) + z.y * FILL_MEM * 1.2 + clf) + clf * 0.04);
   lit += z.z * 0.05 * LIGHT_ACC;
-  lit += hazeGlow(vWorldPos, L);
+  lit += hazeGlow(vWorldPos, L) + crystalFlecks(vWorldPos, N);
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
 }
@@ -679,7 +713,7 @@ void main(){
   float body = step(0.001, fx.r + fx.g + fx.b + fx.a);
   vec3 col = mix(lit, fx.rgb * (0.3 + 0.7 * L), body * 0.9);  // housing / shade
   col += L * 2.4 * fx.a * fl * boost;                          // emitted light
-  col += hazeGlow(vWorldPos, L);
+  col += hazeGlow(vWorldPos, L) + crystalFlecks(vWorldPos, vec3(0.0, -1.0, 0.0));
   gl_FragColor = vec4(col, 1.0);
   #include <fog_fragment>
 }

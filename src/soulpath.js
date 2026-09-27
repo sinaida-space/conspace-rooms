@@ -248,24 +248,6 @@ function cloudTexture() {
   return CLOUD;
 }
 
-// A balloon's skin: pale blue fading to white, a soft highlight, and the
-// question written once round its middle, facing out at u = 0.25 (+z).
-function balloonTexture(text) {
-  const W = 1024, H = 512, c = document.createElement('canvas'); c.width = W; c.height = H;
-  const g = c.getContext('2d');
-  const bg = g.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#f7fbfd'); bg.addColorStop(0.55, '#e4eef6'); bg.addColorStop(1, '#cddcea');
-  g.fillStyle = bg; g.fillRect(0, 0, W, H);
-  g.fillStyle = '#6f8398'; g.textAlign = 'center';
-  g.font = 'italic 30px Georgia, "Times New Roman", serif';
-  const words = text.split(' '), lines = []; let line = '';
-  for (const w of words) { const t2 = line ? line + ' ' + w : w; if (g.measureText(t2).width > 300 && line) { lines.push(line); line = w; } else line = t2; }
-  lines.push(line);
-  lines.forEach((l, i) => g.fillText(l, W * 0.25, H / 2 - (lines.length - 1) * 18 + i * 36));
-  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4;
-  return tex;
-}
-
 let GLOW = null;
 function glowTexture() {
   if (GLOW) return GLOW;
@@ -1016,10 +998,9 @@ export class SoulPath {
       }
     }
   }
-  // Balloons: pale, almost white blue, a question written round each in a
-  // soft hand. They float on their strings in open rooms; walk up to one
-  // and its question is asked; it lets go and rises away, and another
-  // appears elsewhere.
+  // Balloons: pale, almost white blue, each holding a question. They float
+  // on their strings in open rooms; walk up to one and its question is
+  // asked; it lets go and rises away, and another appears elsewhere.
   _updateBalloons(dt, time, speed) {
     const P = this.player;
     if (!this.balloons) {
@@ -1027,7 +1008,7 @@ export class SoulPath {
       this.balloons = Array.from({ length: 5 }, (_, i) => {
         const text = qs[order[i % qs.length]];
         const g = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 28, 18), this.atmo.prop({ map: balloonTexture(text), color: 0xeef5fa, rust: 0 }));
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 28, 18), this.atmo.prop({ color: 0xe8f1f8, rust: 0 }));
         body.scale.set(1, 1.18, 1);
         const knot = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.04, 10), this.atmo.prop({ color: 0xdfe9f0, rust: 0 }));
         knot.position.y = -0.245; knot.rotation.x = Math.PI;
@@ -1049,7 +1030,7 @@ export class SoulPath {
       }
       if (dP > 26) { this._spawnBalloon(b); continue; }
       b.g.position.set(b.pos.x + Math.sin(time * 0.4 + b.seed) * 0.05, b.pos.y + Math.sin(time * 0.9 + b.seed) * 0.05, b.pos.z + Math.cos(time * 0.35 + b.seed) * 0.05);
-      b.g.rotation.set(Math.sin(time * 0.6 + b.seed) * 0.06, Math.atan2(P.pos.x - b.pos.x, P.pos.y - b.pos.z), 0);   // its writing turns to the visitor
+      b.g.rotation.set(Math.sin(time * 0.6 + b.seed) * 0.06, time * 0.1 + b.seed, 0);   // turning slowly on its string
       if (dP < 1.1 && this._soulReady(time)) {
         b.gone = true; b.back = time + 16; b.rise = 0;
         this._soulAt = time; this._walked = 0;

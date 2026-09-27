@@ -78,8 +78,9 @@ const DEFS = `<defs>
     <feMorphology in="soft" operator="erode" radius="0.55" result="inner"/>
     <feComposite in="soft" in2="inner" operator="out" result="rimA"/>
     <feColorMatrix in="rimA" type="matrix" values="0.55 0 0 0 0  0 0.55 0 0 0  0 0 0.55 0 0  0 0 0 0.8 0" result="rim"/>
-    <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="2" seed="9" result="grain"/>
-    <feColorMatrix in="grain" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 -0.5 1.15" result="grainA"/>
+    <!-- brush strokes: streaky, the pigment thicker and thinner along each drag -->
+    <feTurbulence type="fractalNoise" baseFrequency="0.9 0.12" numOctaves="2" seed="9" result="grain"/>
+    <feColorMatrix in="grain" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 -1.3 1.25" result="grainA"/>
     <feComposite in="soft" in2="grainA" operator="in" result="pigment"/>
     <feMerge><feMergeNode in="pigment"/><feMergeNode in="rim"/></feMerge>
   </filter>
