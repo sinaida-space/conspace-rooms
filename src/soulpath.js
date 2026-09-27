@@ -74,6 +74,8 @@ const CHILD_EYE = 0.98;
 const SOUL_HOLD = 5;             // seconds a soul's question stays before another may open
 const SOUL_WALK = 3;             // metres walked between two souls
 const SOUL_STOP = 1.6;           // a soul drawn to a still visitor halts this far off
+const BOARD_NEAR = 2.4;          // metres: on hands, passing a notice board this close stops the walk before it
+const BOARD_FIST = 3;            // seconds of a held fist before the walk turns back and goes on
 
 const SEED_WRITING = CONSPACE_SEED ^ 0x77a1;
 const SEED_DOOR = CONSPACE_SEED ^ 0x0d00;
@@ -328,8 +330,8 @@ export class SoulPath {
       this._bTimes = this._bTimes.filter(tm => now - tm < 3000).concat(now);
       if (this._bTimes.length < 5) return;
       this._bTimes = [];
-      if (this.stage.stage === 0 && this.stage.go(1)) this.post?.burst(1.4);
-      if (this.stage.stage !== 1 || this.visitedRoom) return;
+      if (this.stage.set(1)) this.post?.burst(1.4);
+      if (this.visitedRoom) return;
       this._guideRoom = true;
       if (!this.guide) this._toggleGuide();
     });
@@ -340,7 +342,16 @@ export class SoulPath {
       if ((e.code !== 'Digit0' && e.code !== 'Numpad0') || e.repeat) return;
       const now = performance.now();
       this._zeroTimes = this._zeroTimes.filter(tm => now - tm < 3000).concat(now);
-      if (this._zeroTimes.length >= 5) { this._zeroTimes = []; if (this.stage.go(2)) this.post?.burst(1.4); }
+      if (this._zeroTimes.length >= 5) { this._zeroTimes = []; if (this.stage.set(2)) this.post?.burst(1.4); }
+    });
+
+    // five presses of 1: back into fear, the hospital, from wherever
+    this._oneTimes = [];
+    addEventListener('keydown', e => {
+      if ((e.code !== 'Digit1' && e.code !== 'Numpad1') || e.repeat) return;
+      const now = performance.now();
+      this._oneTimes = this._oneTimes.filter(tm => now - tm < 3000).concat(now);
+      if (this._oneTimes.length >= 5) { this._oneTimes = []; if (this.stage.set(0)) this.post?.burst(1.4); }
     });
 
     // doors take part in collision: wrap World's wall query once
@@ -722,7 +733,7 @@ export class SoulPath {
   // A line typed across the lower screen, then gone.
   // color: the asker's own colour for the words (a soul's, a pale sky blue
   // in the light); without it the screen's phosphor green
-  _say(label, text, color = null) {
+  _say(label, text, color = null, { keep = false } = {}) {
     if (label !== null) {                               // the television shows exactly what a soul says
       this._tvText = text;
       this._tvUntil = performance.now() + 11000;
@@ -747,7 +758,46 @@ export class SoulPath {
     };
     const onTap = e => { if (!e.target.closest?.('button, #pad, #hud-toolbar, a')) close(); };
     setTimeout(() => { if (el.isConnected) addEventListener('pointerdown', onTap, true); }, 400);   // not the tap that set it off
-    setTimeout(() => { if (el.isConnected && el.classList.contains('visible')) close(); }, 11000);
+    if (!keep) setTimeout(() => { if (el.isConnected && el.classList.contains('visible')) close(); }, 11000);
+    return close;
+  }
+
+  // In fear, on hands: passing a notice board stops the walk, turns the view
+  // to it and puts its question on screen. Hands lowered, it stays; a fist
+  // held for BOARD_FIST seconds turns the view back the way it was going and
+  // the walk goes on. Each board asks once.
+  _updateBoards(dt) {
+    const P = this.player, b = this._board;
+    if (b) {
+      if (P.auto !== b.auto) { b.close?.(); this._board = null; return; }   // the keys took over, or Space
+      if (b.phase === 'hold') {
+        b.fist = P.hand.present && P.hand.anyFist ? b.fist + dt : 0;
+        if (b.fist >= BOARD_FIST) { b.phase = 'back'; b.auto.yaw = b.back; b.close?.(); b.close = null; }
+      } else if (Math.abs(Math.atan2(Math.sin(b.back - P.yaw), Math.cos(b.back - P.yaw))) < 0.06) {
+        P.auto = null; this._board = null;
+      }
+      return;
+    }
+    if (this.stage.stage !== 0 || P.mode !== 'hands' || !P.hand.present || P.auto || P.locked || this.finale) return;
+    if (P.vel.length() < 0.3) return;                   // only a walk passing by, not someone standing near
+    this._boardsAsked ||= new Set();
+    for (const st of this.chunkStuff.values()) for (const p of st.posters || []) {
+      const m = p.mesh;
+      if (!m.visible) continue;
+      const key = `${m.position.x.toFixed(1)},${m.position.z.toFixed(1)}`;
+      if (this._boardsAsked.has(key)) continue;
+      const nx = Math.sin(m.rotation.y), nz = Math.cos(m.rotation.y);   // the board faces into the corridor
+      const dx = P.pos.x - m.position.x, dz = P.pos.y - m.position.z;
+      if (Math.hypot(dx, dz) > BOARD_NEAR || dx * nx + dz * nz < 0.2) continue;
+      if (-(dx * -Math.sin(P.yaw) + dz * -Math.cos(P.yaw)) < -0.4 * Math.hypot(dx, dz)) continue;   // one already behind is let be
+      if (!this._lineOfSight(P.pos.x, P.pos.y, m.position.x + nx * 0.3, m.position.z + nz * 0.3)) continue;
+      this._boardsAsked.add(key);
+      const list = t('fearQuestions').concat(t('posterQuestions'));
+      const auto = { kind: 'board', yaw: Math.atan2(nx, nz) };
+      P.auto = auto;
+      this._board = { auto, back: P.yaw, phase: 'hold', fist: 0, close: this._say(null, list[p.q % list.length], null, { keep: true }) };
+      return;
+    }
   }
 
   _writeOn(w) {
@@ -1147,6 +1197,7 @@ export class SoulPath {
   }
   _updateRoamers(dt, time, speed) {
     const P = this.player;
+    this._roamersHidden = false;                       // hidden again whenever the walk leaves the red rooms
     if (!this.roamers) {
       this.roamers = [0, 1, 2, 0, 1].map(cat => {
         const mk = (k) => new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: SOUL_COLORS[cat], transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: k }));
@@ -1158,6 +1209,7 @@ export class SoulPath {
       });
     }
     for (const r of this.roamers) {
+      r.sprite.visible = true;
       if (r.gone) {
         r.sprite.material.opacity = Math.max(0, r.sprite.material.opacity - dt);
         r.tail.forEach(t => { t.visible = false; });
@@ -1205,7 +1257,9 @@ export class SoulPath {
       if (d < bd) { bd = d; best = k; }
     }
     if (!best) return;
-    this.stage.go(1);
+    if (this.artworks.inspecting) this.artworks._closeInspect();
+    this.player.auto = null;
+    this.stage.set(1);
     // stand a step from the table, looking at it
     const sx = best.x - 1.4, sz = best.z - 1.4;
     const ok = !solidAtGlobal(cellOf(sx), cellOf(sz));
@@ -1222,7 +1276,9 @@ export class SoulPath {
   // work counts as seen (the rose shows 17), and the visitor stands before it.
   _jumpToLastWork() {
     const P = this.player;
-    if (this.finale || P.locked) return;
+    if (this.finale) return;
+    if (this.artworks.inspecting) this.artworks._closeInspect();
+    P.auto = null;
     let best = null, bd = Infinity;
     for (const a of this.artworks.active) {
       const d = Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y);
@@ -1510,6 +1566,8 @@ export class SoulPath {
       this.roses.set(this.seen.size, t('rosesLabel', { n: this.seen.size, total: this.total }));
     }
 
+    this._updateBoards(dt);
+
     this._repathT -= dt;
     if (this._repathT <= 0) { this._repathT = REPATH_EVERY; this._updateMarks(); }
 
@@ -1695,6 +1753,11 @@ export class SoulPath {
     // after grandmother's room the souls leave it and roam the corridors
     if (this.visitedRoom && this.stage.stage === 1) this._updateRoamers(dt, time, speed);
     if (this.stage.stage === 2) { this._hideRoamers(); for (const b of this.balloons || []) b.g.visible = true; this._updateClouds(dt, time, speed); }
+    else if (this.clouds || this.balloons) {            // a cheat can lead back out of the light
+      for (const b of this.balloons || []) b.g.visible = false;
+      for (const c of this.clouds || []) for (const sp of c.puffs) sp.visible = false;
+    }
+    if (this.stage.stage !== 1) this._hideRoamers?.();
 
     // all the works seen: the arch of roses, once nothing else holds the view
     if (!this.finale && this.seen.size >= this.total && !P.locked) this._beginFinale();

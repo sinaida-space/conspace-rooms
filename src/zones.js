@@ -51,6 +51,12 @@ export class SoulStage {
     this.from = this.stage; this.stage = n; this.t = 0;
     return true;
   }
+  // cheat codes only: any stage, backwards too
+  set(n) {
+    if (n === this.stage || n < 0 || n > 2) return false;
+    this.from = this.stage; this.stage = n; this.t = 0;
+    return true;
+  }
   update(dt) { this.t = Math.min(1, this.t + dt / 2.5); }
   weights() {
     const k = this.t * this.t * (3 - 2 * this.t), a = ONE_HOT[this.from], b = ONE_HOT[this.stage];
