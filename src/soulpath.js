@@ -227,6 +227,26 @@ function scratchTexture() {
   return tex;
 }
 
+// A small cloud: a few overlapping soft puffs with a brighter crown and a
+// greyer belly, feathered all round so nothing reads as an edge.
+let CLOUD = null;
+function cloudTexture() {
+  if (CLOUD) return CLOUD;
+  const W = 256, H = 160, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const puff = (x, y, r, a) => {
+    const gr = g.createRadialGradient(x, y - r * 0.25, r * 0.1, x, y, r);
+    gr.addColorStop(0, `rgba(255,255,255,${a})`); gr.addColorStop(0.6, `rgba(236,240,236,${a * 0.6})`); gr.addColorStop(1, 'rgba(210,216,214,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill();
+  };
+  for (const [x, y, r, a] of [[128, 92, 62, 0.8], [86, 96, 48, 0.75], [170, 98, 50, 0.75], [108, 70, 44, 0.7], [150, 68, 40, 0.7], [58, 108, 30, 0.6], [200, 110, 32, 0.6]]) puff(x, y, r, a);
+  const belly = g.createLinearGradient(0, 70, 0, 150);        // a greyer underside
+  belly.addColorStop(0, 'rgba(120,130,135,0)'); belly.addColorStop(1, 'rgba(120,130,135,0.35)');
+  g.globalCompositeOperation = 'source-atop'; g.fillStyle = belly; g.fillRect(0, 0, W, H);
+  CLOUD = new THREE.CanvasTexture(c);
+  return CLOUD;
+}
+
 let GLOW = null;
 function glowTexture() {
   if (GLOW) return GLOW;
@@ -900,6 +920,85 @@ export class SoulPath {
     return false;
   }
 
+  // ── clouds ─────────────────────────────────────────────────────────────
+  // In the light the souls are gone; small clouds drift through the fog
+  // instead, above the head, each carrying a question about acceptance.
+  // Stand still and one sinks toward you; walk into it and it asks, then
+  // thins away and gathers again somewhere else.
+  _hideRoamers() {
+    if (this._roamersHidden || !this.roamers) return;
+    this._roamersHidden = true;
+    for (const r of this.roamers) { r.sprite.visible = false; r.tail.forEach(t => { t.visible = false; }); }
+  }
+  _askAccept(time) {
+    this._soulAt = time; this._walked = 0;
+    const qs = t('acceptQuestions');
+    const order = this._soulOrder(3, qs.length);
+    this._soulIdx[3] = this._soulIdx[3] || 0;
+    const text = qs[order[this._soulIdx[3]++ % qs.length]];
+    if (!this.asked.includes(text)) this.asked.push(text);
+    this.audio?.whisper?.();
+    this._say(t('cloudLabel'), text);
+  }
+  _updateClouds(dt, time, speed) {
+    const P = this.player;
+    if (!this.clouds) {
+      const tex = cloudTexture();
+      this.clouds = Array.from({ length: 7 }, (_, i) => {
+        const puffs = [1, 0.7, 0.62, 0.5].map((k, j) => {
+          const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xf4f6f1, transparent: true, depthWrite: false, fog: true, opacity: 0 }));
+          sp.userData.k = k; sp.userData.off = new THREE.Vector3(j ? (Math.random() - 0.5) * 0.9 : 0, j ? (Math.random() - 0.4) * 0.25 : 0, j ? (Math.random() - 0.5) * 0.9 : 0);
+          this.scene.add(sp);
+          return sp;
+        });
+        const c = { puffs, pos: new THREE.Vector3(), aim: new THREE.Vector3(), gone: false, back: 0, seed: Math.random() * 10, a: 0 };
+        this._spawnCloud(c);
+        return c;
+      });
+    }
+    for (const c of this.clouds) {
+      if (c.gone) {
+        c.a = Math.max(0, c.a - dt * 0.8);
+        if (time > c.back) this._spawnCloud(c);
+      } else {
+        const toP = new THREE.Vector3(P.pos.x - c.pos.x, 0, P.pos.y - c.pos.z), dP = toP.length();
+        if (dP > 26) { this._spawnCloud(c); continue; }
+        if (c.pos.distanceTo(c.aim) < 0.3 || Math.random() < dt * 0.08) {
+          const nx = c.pos.x + (Math.random() - 0.5) * 7, nz = c.pos.z + (Math.random() - 0.5) * 7;
+          if (!solidAtGlobal(cellOf(nx), cellOf(nz))) c.aim.set(nx, 2.1 + Math.random() * 0.6, nz);
+        }
+        const drawn = speed < 0.1 && dP < 8;
+        const goal = drawn ? new THREE.Vector3(P.pos.x - toP.x / dP * 0.6, 1.75, P.pos.y - toP.z / dP * 0.6) : c.aim;
+        const step = goal.clone().sub(c.pos), len = step.length();
+        if (len > 1e-3) {
+          step.multiplyScalar(Math.min(len, dt * (drawn ? 0.7 : 0.25)) / len);
+          if (!solidAtGlobal(cellOf(c.pos.x + step.x), cellOf(c.pos.z + step.z))) c.pos.add(step); else c.aim.copy(c.pos);
+        }
+        c.a = Math.min(1, c.a + dt * 0.4);
+        if (dP < 1.2 && this._soulReady(time)) { c.gone = true; c.back = time + 14; this._askAccept(time); }
+      }
+      for (const sp of c.puffs) {
+        const k = sp.userData.k, br = 1 + 0.06 * Math.sin(time * 0.7 + c.seed + k * 3);   // breathing
+        sp.position.copy(c.pos).add(sp.userData.off);
+        sp.position.y += Math.sin(time * 0.5 + c.seed) * 0.08;
+        sp.scale.set(0.95 * k * br, 0.6 * k * br, 1);
+        sp.material.opacity = 0.85 * c.a;
+        sp.visible = c.a > 0.01;
+      }
+    }
+  }
+  _spawnCloud(c) {
+    const P = this.player;
+    for (let tries = 0; tries < 40; tries++) {
+      const a = Math.random() * 6.28, d = 6 + Math.random() * 12;
+      const x = P.pos.x + Math.cos(a) * d, z = P.pos.y + Math.sin(a) * d;
+      if (solidAtGlobal(cellOf(x), cellOf(z))) continue;
+      c.pos.set(x, 2.1 + Math.random() * 0.6, z); c.aim = c.pos.clone();
+      c.gone = false; c.a = 0;
+      return;
+    }
+  }
+
   // ── roaming souls ──────────────────────────────────────────────────────
   // Five souls wander the corridors around the visitor once the room has
   // been found. They drift on their own; stand still and one comes to you;
@@ -1471,7 +1570,8 @@ export class SoulPath {
     if (this.guide) this._updateGuide(dt, time);
 
     // after grandmother's room the souls leave it and roam the corridors
-    if (this.visitedRoom && this.stage.stage >= 1) this._updateRoamers(dt, time, speed);
+    if (this.visitedRoom && this.stage.stage === 1) this._updateRoamers(dt, time, speed);
+    if (this.stage.stage === 2) { this._hideRoamers(); this._updateClouds(dt, time, speed); }
 
     // all the works seen: the arch of roses, once nothing else holds the view
     if (!this.finale && this.seen.size >= this.total && !P.locked) this._beginFinale();

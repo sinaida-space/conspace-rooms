@@ -549,6 +549,9 @@ body:has(#pad) #artwork-prompt { display: none; }   /* the pad's own tape says i
   height: min(74vh, calc((100vw - 32px) * 16 / 9)); width: auto; aspect-ratio: 9 / 16;
   border: 1px solid var(--dim); box-shadow: 0 0 30px rgba(57, 255, 106, 0.15);
 }
+/* a long walk makes two cards (or more): side by side, swiped on a phone */
+#final-card .fc-pages { display: flex; gap: 16px; max-width: 100%; overflow-x: auto; scroll-snap-type: x mandatory; flex-shrink: 0; }
+#final-card .fc-pages .fc-canvas { scroll-snap-align: center; flex-shrink: 0; }
 #final-card .fc-actions { display: flex; flex-wrap: wrap; gap: 0.8em; justify-content: center; }
 #final-card .btn-enter { font-size: 1em; padding: 0.55em 1.2em; }
 

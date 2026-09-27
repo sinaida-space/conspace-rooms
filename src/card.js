@@ -1,5 +1,5 @@
 // ── conspace-rooms · card.js ────────────────────────────────────────────────
-// The end of a walk: every question the souls asked, on one 1080×1920 card
+// The end of a walk: every question the souls asked, on 1080×1920 cards
 // to keep or post as a story. Black ground, the site's pixel font and
 // phosphor greens, CONSPACE ROOMS on top with a light CRT tear, the two
 // names in the bottom corners. Drawn on a canvas in the browser; nothing is
@@ -21,8 +21,33 @@ function wrap(g, text, width) {
   return lines;
 }
 
-// Draw the card. questions: strings in the order they were asked.
-export function drawCard(canvas, { questions, heading, empty, boot }) {
+// Split the questions over as many cards as it takes for the type to stay
+// at MIN_SIZE or larger: a long walk gets two cards (or more), never a
+// wall of tiny print. Returns [{ questions, first }] with first the number
+// of the page's first question.
+const TOP = 480, BOTTOM = H - 230, TEXT_W = W - PAD * 2 - 90, MIN_SIZE = 30;
+const fits = (g, list, size) => {
+  g.font = `400 ${size}px ${FONT}`;
+  const lines = list.reduce((s, q) => s + wrap(g, q, TEXT_W).length, 0);
+  return lines * size * 1.42 + (list.length - 1) * size * 0.75 <= BOTTOM - TOP;
+};
+export function paginate(questions) {
+  if (!questions.length) return [{ questions, first: 1 }];
+  const g = document.createElement('canvas').getContext('2d');
+  const pages = [];
+  let cur = [];
+  for (const q of questions) {
+    if (cur.length && !fits(g, cur.concat(q), MIN_SIZE)) { pages.push(cur); cur = []; }
+    cur.push(q);
+  }
+  pages.push(cur);
+  let n = 1;
+  return pages.map(qs => { const p = { questions: qs, first: n }; n += qs.length; return p; });
+}
+
+// Draw one card. questions: strings in the order they were asked; first:
+// the number of the first one; page / pages when the walk takes several.
+export function drawCard(canvas, { questions, heading, empty, boot, first = 1, page = 1, pages = 1 }) {
   canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d');
   g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
@@ -50,24 +75,22 @@ export function drawCard(canvas, { questions, heading, empty, boot }) {
   }
 
   g.font = `400 34px ${FONT}`; g.fillStyle = DIM;
-  const hw = g.measureText(heading).width;
-  g.fillText(heading, (W - hw) / 2, 392);
+  const head = pages > 1 ? `${heading} · ${page}/${pages}` : heading;
+  const hw = g.measureText(head).width;
+  g.fillText(head, (W - hw) / 2, 392);
 
   // the questions: numbered like /voprosy, shrinking until they all fit
-  const top = 480, bottom = H - 230, width = W - PAD * 2 - 90;
+  const top = TOP, bottom = BOTTOM, width = TEXT_W;
   const list = questions.length ? questions : [empty];
-  let size = 46, blocks;
-  for (; size >= 14; size -= 2) {                    // 25+ questions still fit above the footer
-    g.font = `400 ${size}px ${FONT}`;
-    blocks = list.map(q => wrap(g, q, width));
-    const lines = blocks.reduce((s, b) => s + b.length, 0);
-    if (lines * size * 1.42 + (list.length - 1) * size * 0.75 <= bottom - top) break;
-  }
+  let size = 46;
+  while (size > MIN_SIZE && !fits(g, list, size)) size -= 2;   // paginate() made sure MIN_SIZE fits
+  g.font = `400 ${size}px ${FONT}`;
+  const blocks = list.map(q => wrap(g, q, width));
   let y = top + size;
   blocks.forEach((lines, i) => {
     if (questions.length) {
       g.font = `400 ${Math.round(size * 0.72)}px ${FONT}`; g.fillStyle = DIM;
-      g.fillText(String(i + 1).padStart(2, '0'), PAD, y);
+      g.fillText(String(first + i).padStart(2, '0'), PAD, y);
     }
     g.font = `400 ${size}px ${FONT}`; g.fillStyle = FG;
     g.shadowColor = 'rgba(57, 255, 106, 0.35)'; g.shadowBlur = 10;
@@ -113,16 +136,20 @@ export async function showCard({ questions, strings, onBack, onAgain }) {
   wrapEl.setAttribute('role', 'dialog');
   wrapEl.setAttribute('aria-modal', 'true');
   wrapEl.setAttribute('aria-label', strings.heading);
-  wrapEl.innerHTML = `<canvas class="fc-canvas"></canvas>
+  const pages = paginate(questions);
+  wrapEl.innerHTML = `<div class="fc-pages">${pages.map(() => '<canvas class="fc-canvas"></canvas>').join('')}</div>
     <div class="fc-actions">
       <button type="button" class="btn-enter fc-save">${strings.save}</button>
       <button type="button" class="btn-enter fc-back dialog-no">${strings.back}</button>
       <button type="button" class="btn-enter fc-again dialog-no">${strings.again}</button>
     </div>`;
-  const canvas = wrapEl.querySelector('canvas');
-  drawCard(canvas, { questions, heading: strings.heading, empty: strings.empty, boot: strings.boot });
-  canvas.setAttribute('role', 'img');
-  canvas.setAttribute('aria-label', [strings.heading, ...questions].join('. '));
+  const canvases = [...wrapEl.querySelectorAll('canvas')];
+  pages.forEach((p, i) => {
+    const canvas = canvases[i];
+    drawCard(canvas, { questions: p.questions, first: p.first, page: i + 1, pages: pages.length, heading: strings.heading, empty: strings.empty, boot: strings.boot });
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', [strings.heading, ...p.questions].join('. '));
+  });
   document.body.appendChild(wrapEl);
   requestAnimationFrame(() => wrapEl.classList.add('visible'));
   wrapEl.querySelector('.fc-save').focus();
@@ -132,20 +159,20 @@ export async function showCard({ questions, strings, onBack, onAgain }) {
   addEventListener('keydown', onKey);
   wrapEl.querySelector('.fc-back').addEventListener('click', () => { close(); onBack?.(); });
   wrapEl.querySelector('.fc-again').addEventListener('click', () => onAgain?.());
-  wrapEl.querySelector('.fc-save').addEventListener('click', () => {
-    canvas.toBlob(async blob => {
-      if (!blob) return;
-      const name = 'conspace-rooms-souls.png';
-      const file = new File([blob], name, { type: 'image/png' });
-      const touch = matchMedia('(pointer: coarse)').matches;
-      if (touch && navigator.canShare?.({ files: [file] })) {
-        try { await navigator.share({ files: [file], title: 'CONSPACE ROOMS' }); return; } catch (e) { if (e.name === 'AbortError') return; }
-      }
-      const url = URL.createObjectURL(blob);
-      const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  wrapEl.querySelector('.fc-save').addEventListener('click', async () => {
+    const blobs = await Promise.all(canvases.map(c => new Promise(res => c.toBlob(res, 'image/png'))));
+    if (blobs.some(b => !b)) return;
+    const files = blobs.map((b, i) => new File([b], blobs.length > 1 ? `conspace-rooms-souls-${i + 1}.png` : 'conspace-rooms-souls.png', { type: 'image/png' }));
+    const touch = matchMedia('(pointer: coarse)').matches;
+    if (touch && navigator.canShare?.({ files })) {
+      try { await navigator.share({ files, title: 'CONSPACE ROOMS' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    files.forEach((f, i) => setTimeout(() => {           // one download per card
+      const url = URL.createObjectURL(f);
+      const a = Object.assign(document.createElement('a'), { href: url, download: f.name });
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
-    }, 'image/png');
+    }, i * 400));
   });
 }
 
