@@ -18,7 +18,8 @@
 //     retries on the CPU delegate if GPU creation throws.
 //
 // Two-hand vocabulary (callers just read the flags on the emitted state):
-//   both fists            → walk forward
+//   one fist (either hand) → walk forward (anyFist)
+//   both fists            → run (bothFists)
 //   right hand pointing    → turn right
 //   left hand pointing     → turn left
 //   both palms open (stop) → freezes turning/walking; moving the two open
@@ -30,6 +31,9 @@ const FACE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_det
 const FACE_EVERY_MS = 250;   // presence needs no more than a few looks a second
 
 const NO_FRAMES_TIMEOUT_MS = 6000;
+// A gesture has to hold for a moment before it counts, and a moment more
+// before it lets go: one misread frame no longer starts or stops the walk.
+const ON_MS = 110, OFF_MS = 200;
 const WATCHDOG_TIMEOUT_MS = 8000;
 const MAX_CONSECUTIVE_DETECT_FAILURES = 5;
 
@@ -51,6 +55,9 @@ function classifyHand(l) {
   };
 }
 
+// a one-word reading of a hand for the bug report
+function handName(g) { return g.fist ? 'fist' : g.openPalm ? 'palm' : g.pointing ? 'point' : g.pinch ? 'pinch' : 'hand'; }
+
 export class HandInput {
   // faces: also watch for a face (gallery mode), so presence() can tell
   // whether anyone is standing in front of the screen at all
@@ -66,6 +73,7 @@ export class HandInput {
     this._prevHandDist = null;
     this._failCount = 0;
     this._watchdogTimer = null;
+    this._flags = {};                // debounced gesture flags: name -> { on, since }
     this._loop = this._loop.bind(this);
   }
 
@@ -82,6 +90,15 @@ export class HandInput {
       clearTimeout(this._watchdogTimer);
       this._watchdogTimer = null;
     }
+  }
+
+  // Debounce one flag: the raw reading must disagree with the held value for
+  // ON_MS (to switch on) or OFF_MS (to switch off) before the value changes.
+  _stable(name, raw, now) {
+    const f = this._flags[name] ||= { on: false, since: now };
+    if (raw === f.on) { f.since = now; return f.on; }
+    if (now - f.since >= (raw ? ON_MS : OFF_MS)) { f.on = raw; f.since = now; }
+    return f.on;
   }
 
   // milliseconds since anyone (a face or a hand) was last seen
@@ -225,8 +242,12 @@ export class HandInput {
 
       if (n === 0) {
         this._prevHandDist = null;
+        for (const k of ['anyFist', 'bothFists', 'bothOpen', 'pointLeft', 'pointRight', 'pinch']) this._stable(k, false, now);
+        // a hand lost for a frame or two is not a hand taken away
+        if (now - (this._handAt || 0) < OFF_MS && this._last) { this.onUpdate({ ...this._last, zoomDelta: 0 }); requestAnimationFrame(this._loop); return; }
+        this._last = null;
         this.onUpdate({
-          present: false, bothFists: false, pointLeft: false, pointRight: false,
+          present: false, anyFist: false, bothFists: false, pointLeft: false, pointRight: false,
           stopped: false, pinch: false, zoomDelta: 0,
         });
       } else {
@@ -243,10 +264,13 @@ export class HandInput {
           else if (side === 'right' && !right) right = g;
         }
 
-        const bothFists = !!(left?.fist && right?.fist);
-        const bothOpen = !!(left?.openPalm && right?.openPalm);
-        const pointLeft = !!left?.pointing;
-        const pointRight = !!right?.pointing;
+        this._handAt = now;
+        const anyFist = this._stable('anyFist', !!(left?.fist || right?.fist), now);
+        const bothFists = this._stable('bothFists', !!(left?.fist && right?.fist), now);
+        const bothOpen = this._stable('bothOpen', !!(left?.openPalm && right?.openPalm), now);
+        const pointLeft = this._stable('pointLeft', !!left?.pointing, now);
+        const pointRight = this._stable('pointRight', !!right?.pointing, now);
+        anyPinch = this._stable('pinch', anyPinch, now);
 
         let zoomDelta = 0;
         if (bothOpen && left && right) {
@@ -257,10 +281,12 @@ export class HandInput {
           this._prevHandDist = null;
         }
 
-        this.onUpdate({
-          present: true, bothFists, pointLeft, pointRight,
+        this._last = {
+          present: true, anyFist, bothFists, pointLeft, pointRight,
           stopped: bothOpen, pinch: anyPinch, zoomDelta,
-        });
+          left: left ? handName(left) : '', right: right ? handName(right) : '',
+        };
+        this.onUpdate(this._last);
       }
     }
     requestAnimationFrame(this._loop);

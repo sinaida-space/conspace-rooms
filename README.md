@@ -65,12 +65,15 @@ darkness, childhood and dreams.
 
 | Action                | Desktop (gestures)         | Desktop (keyboard)          | Mobile (light mode)          |
 |------------------------|-----------------------------|-------------------------------|---------------------------------|
-| Walk                   | both hands as fists         | W / ↑, S / ↓                  | hold top half of the screen     |
+| Walk                   | one fist (two fists run); the walk keeps to the corridor's middle | W / ↑, S / ↓                  | hold top half of the screen     |
 | Turn                   | point right hand = turn right, point left hand = turn left | ← / →, or mouse look (click to lock) | horizontal drag |
 | Zoom                   | both palms open, spread/pinch the two hands | mouse wheel         | two-finger pinch (desktop-touch fallback) |
 | Strafe                 | —                            | A / D                         | —                                |
-| Inspect                | thumb-index pinch (either hand) | E or Space, click        | tap an artwork                  |
+| Inspect                | paintings show themselves when passed, 3 s each; open palm holds | E, click        | tap an artwork                  |
 | Close inspect / stop   | both palms open              | Escape                        | tap again                       |
+| Back to the middle     | Space (keyboard works in every mode) | Space                 | —                                |
+| Full screen            | F                            | F                             | —                                |
+| Bug report             | R R R: a picture of the walk's state to screenshot and send | R R R | —            |
 
 Gesture mode requests webcam access on entry (opt-in); if it's denied or unavailable the
 experience falls back to keyboard controls automatically. Light mode is auto-suggested on

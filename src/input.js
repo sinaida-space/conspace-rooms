@@ -19,7 +19,7 @@ export class InputRouter {
     addEventListener('keydown', e => {
       if (e.repeat) return;
       keys[e.code] = 1; send();
-      if (e.code === 'KeyE' || e.code === 'Space') this.emit('pick');
+      if (e.code === 'KeyE') this.emit('pick');   // Space puts the walk right again (player.js)
       if (e.code === 'Escape') this.emit('halt');
     });
     addEventListener('keyup', e => {
