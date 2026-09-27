@@ -346,18 +346,18 @@ export function buildRoseArch(text) {
   const paths = [];
   for (let a = 0; a < ARCHES; a++) {
     const z = -a * GAP, ag = new THREE.Group();
-    for (const sx of [-1, 1]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, POST_H, 8), iron); post.position.set(sx * HALF, POST_H / 2, z); ag.add(post); }
-    const top = new THREE.Mesh(new THREE.TorusGeometry(HALF, 0.022, 6, 32, Math.PI), iron); top.position.set(0, POST_H, z); ag.add(top);
+    ag.userData.mats = [iron.clone(), vine.clone()];    // each arch fades in on its own
+    for (const m of ag.userData.mats) { m.transparent = true; m.opacity = 0; }
+    const [ironA, vineA] = ag.userData.mats;
+    for (const sx of [-1, 1]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, POST_H, 8), ironA); post.position.set(sx * HALF, POST_H / 2, z); ag.add(post); }
+    const top = new THREE.Mesh(new THREE.TorusGeometry(HALF, 0.022, 6, 32, Math.PI), ironA); top.position.set(0, POST_H, z); ag.add(top);
     const path = archPath(z); paths.push(path);
     const wind = [];
     for (let k = 0; k <= 160; k++) { const u = k / 160, p = path.getPointAt(u), w = u * 48 + a; wind.push(p.add(new THREE.Vector3(Math.cos(w) * 0.045, 0, Math.sin(w) * 0.045))); }
-    ag.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(wind), 260, 0.011, 5, false), vine));
+    ag.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(wind), 260, 0.011, 5, false), vineA));
     g.add(ag); arches.push(ag);
   }
-  for (const [x, y] of [[-HALF, POST_H], [HALF, POST_H], [0, POST_H + HALF]]) {   // rails along the top
-    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, LENGTH, 6), iron);
-    rail.rotation.x = Math.PI / 2; rail.position.set(x, y, -LENGTH / 2); g.add(rail);
-  }
+  // no rails between the arches: seen down the tunnel they read as sticks across the way
 
   // roses and leaves as sprites, spread along every arch and over the rails,
   // ordered to open from the entrance inward
@@ -421,7 +421,7 @@ export function buildRoseArch(text) {
   plaque.position.set(0, PY, 0.02);
   plaque.visible = false;
   g.add(plaque);
-  arches.forEach(ag => ag.scale.set(1, 0.001, 1));
+
   let grow = 0;
   return {
     group: g,
@@ -454,7 +454,8 @@ export function buildRoseArch(text) {
       grow = Math.min(1, grow + dt / 3.2);
       arches.forEach((ag, a) => {                     // the arches rise one after another
         const k = Math.max(0, Math.min(1, grow * 1.6 - a * 0.12));
-        ag.scale.y = 0.001 + (1 - (1 - k) ** 3) * 0.999;
+        const o = 1 - (1 - k) ** 3;                   // each arch comes up out of the air where it stands: nothing crosses the way
+        for (const m of ag.userData.mats) { m.opacity = o; m.transparent = o < 0.999; m.depthWrite = o > 0.5; }
       });
       const bloom = Math.max(0, (grow - 0.2) / 0.8);
       rosePts.geometry.setDrawRange(0, Math.floor(rosePts.geometry.attributes.position.count * bloom));
