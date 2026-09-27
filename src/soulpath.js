@@ -489,11 +489,7 @@ export class SoulPath {
       stuff.rugs.push(mesh);
     };
     // under most of grandmother's rooms a big one, the television and table on it
-    if (kRoom && rr() < 0.7) {                         // in the colours of the room's lampshade
-      const w = Math.min(kRoom.maxX - kRoom.minX - 0.6, 3.4), d = Math.min(kRoom.maxZ - kRoom.minZ - 0.6, 4.4);
-      const sh = shadeOf(kRoom.x, kRoom.z), hex = n => '#' + n.toString(16).padStart(6, '0');
-      if (w > 1.5 && d > 1.5) addRug(kRoom.x, kRoom.z, w, d, (rr() - 0.5) * 0.06, { field: sh.v[1], dark: sh.v[0], light: hex(sh.fringe) });
-    }
+    const bigRug = kRoom && rr() < 0.7;                 // laid below, once the room shows where its television stands
     for (let k = 0, n = stuff.rugs.length + 1 + (rr() < 0.5 ? 1 : 0); k < 12 && stuff.rugs.length < n; k++) {
       const gi = cx * CHUNK + 2 + Math.floor(rr() * (CHUNK - 4)), gj = cz * CHUNK + 2 + Math.floor(rr() * (CHUNK - 4));
       let open = true;
@@ -566,6 +562,13 @@ export class SoulPath {
       const kg = new THREE.Group();                   // only exists in the memory stage
       group.add(kg);
       stuff.kitchen = { ...kp, group: kg, room: buildKitchen(kg, kp.x, kp.z) };
+      if (bigRug) {                                     // the table and the television both on it, in the lampshade's colours
+        const tv = stuff.kitchen.room.tv, m = 1.35;          // room.tv is half a metre before the set: reach past it
+        const x0 = Math.max(kp.minX + 0.3, Math.min(kp.x - 1.3, tv.x - m)), x1 = Math.min(kp.maxX - 0.3, Math.max(kp.x + 1.3, tv.x + m));
+        const z0 = Math.max(kp.minZ + 0.3, Math.min(kp.z - 1.3, tv.z - m)), z1 = Math.min(kp.maxZ - 0.3, Math.max(kp.z + 1.3, tv.z + m));
+        const sh = shadeOf(kp.x, kp.z), hex = n => '#' + n.toString(16).padStart(6, '0');
+        if (x1 - x0 > 1.5 && z1 - z0 > 1.5) addRug((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, 0, { field: sh.v[1], dark: sh.v[0], light: hex(sh.fringe) });
+      }
       stuff.kitchen.wisps = [0, 1, 2, 0, 1, 2].map(cat => {
         const color = SOUL_COLORS[cat];
         const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
