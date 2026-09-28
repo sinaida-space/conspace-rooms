@@ -35,7 +35,7 @@ const RAIL_REACH = 5;      // m: a side with no wall this close is a crossing, n
 const CORRIDOR_MAX = 3.0;  // m: a way this narrow is a corridor with a middle to keep (corridors are 2.4)
 const OPENING_REACH = 1.6; // m either side a blocked walk looks for the opening it was meant for
 const WALL_KEEP = 0.75;    // m: in rooms, a wall closer than this pushes the walk off it
-const ALIGN_RATE = 1.6;    // 1/s, the view settling along the corridor while walking on hands
+const ALIGN_RATE = 1.6;    // 1/s, the view settling along the corridor while walking
 const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 const STEER_SPEED_MIN = 0.3;  // m/s: below this the walk is free to look at a wall
 const STEER_LOOKAHEAD = 1.6;  // m: a wall this close ahead starts the turn
@@ -128,6 +128,7 @@ export class Player {
     addEventListener('mousemove', e => {
       if (!this.dragging || this.locked) return;
       const mx = e.movementX, my = e.movementY;
+      this._lookAt = performance.now();          // the visitor is looking round: the walk does not straighten the view
       if (Math.abs(mx) > 150 || Math.abs(my) > 150) return;
       this.canvas.dragDist += Math.abs(mx) + Math.abs(my);
       this.yaw -= mx * MOUSE_SENS;
@@ -163,6 +164,7 @@ export class Player {
       // mouse look, which stays optional) — A/D remain strafe below.
       const turn = (this.keys.ArrowRight ? 1 : 0) - (this.keys.ArrowLeft ? 1 : 0) + (this.drive?.x || 0);
       if (turn) this.yaw -= Math.max(-1, Math.min(1, turn)) * YAW_RATE * dt;
+      this._keyTurn = !!turn;
     }
 
     // ── gesture zoom: only while both palms are open ("stop"), spreading or
@@ -218,11 +220,13 @@ export class Player {
     // ── integrate + collide ──
     let nx = this.pos.x + this.vel.x * dt;
     let nz = this.pos.y + this.vel.y * dt;
-    // on hands the walk keeps to the middle and the view settles along the way
-    if (onHands && walk > 0 && dt > 0) {
+    // walking forward or back (any input, no sidestep) keeps to the middle and
+    // the view settles along the corridor, however crooked the start
+    if (walk !== 0 && strafe === 0 && !this.auto && dt > 0) {
       const r = this._rail(nx, nz);
       if (r) { nx += r.x * dt; nz += r.z * dt; }
-      if (Math.abs(this._yawVel) < 0.1) {
+      const looking = this._keyTurn || performance.now() - (this._lookAt || 0) < 800;
+      if (Math.abs(this._yawVel) < 0.1 && !looking) {
         const axis = Math.round(this.yaw / (Math.PI / 2)) * (Math.PI / 2);
         this.yaw += wrapAngle(axis - this.yaw) * Math.min(1, dt * ALIGN_RATE);
       }
@@ -346,7 +350,19 @@ export class Player {
       }
       if (best) this.pos.set(best.x, best.z);
     }
-    this.yaw = Math.round(this.yaw / (Math.PI / 2)) * (Math.PI / 2);
+    // of the four corridor axes, the one nearest the current view that is open
+    // for a good way ahead; failing that, the most open one (never a wall)
+    const Q = Math.PI / 2, base = Math.round(this.yaw / Q) * Q;
+    let bestYaw = base, bestScore = -Infinity;
+    for (let k = 0; k < 4; k++) {
+      const yaw = base + [0, 1, -1, 2][k] * Q;
+      const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+      let clear = 0;
+      while (clear < 6 && this._axisClear(this.pos.x, this.pos.y, fx, fz, clear + 0.4)) clear += 0.4;
+      const score = Math.min(clear, 3) * 10 - Math.abs(wrapAngle(yaw - this.yaw)) + clear * 0.01;
+      if (score > bestScore) { bestScore = score; bestYaw = yaw; }
+    }
+    this.yaw = bestYaw;
     const s = this._sides(this.pos.x, this.pos.y);
     if (s.a != null && s.b != null) {
       const off = (s.b - s.a) / 2;
