@@ -124,14 +124,14 @@ async function boot() {
       const zone = stage.weights();
       window.__app.zone = zone;
       if (scene.fog?.isFogExp2) {
-        mixZone(scene.fog.color, zone, 0x0e1f14, 0x030905, 0xa4aaa4);
+        mixZone(scene.fog.color, zone, 0x0e1f14, 0x030905, 0xd6cbc8);   // the light stage: warm pearl
         const base = quality.tier === 0 ? 1.5 : 1;
         scene.fog.density = base * (0.03 * zone.fear + 0.045 * zone.memory + 0.085 * zone.accept);   // the light stage stands in milky fog
         renderer.setClearColor(scene.fog.color);
       }
       if (atmo) atmo.update(dt, elapsed, camera.position, zone);
       if (window.__app.dust) {
-        mixZone(dustLight, zone, 0xd6e8da, 0xff5a48, 0xeeeee2);
+        mixZone(dustLight, zone, 0xd6e8da, 0xff5a48, 0xf4e8e0);
         window.__app.dust.update(elapsed, camera.position, dustLight);
         window.__app.spots?.update(elapsed, camera.position, dustLight);
       }

@@ -41,7 +41,8 @@ const LIB = /* glsl */`
 #define LIGHT_FEAR vec3(0.84, 0.91, 0.86)
 #define LIGHT_MEM  vec3(1.00, 0.16, 0.10)   // red lamp / candle glow
 #define FILL_MEM   vec3(0.10, 0.26, 0.14)   // the green half-dark around it
-#define LIGHT_ACC  vec3(0.92, 0.90, 0.84)
+#define FILL_ACC   vec3(0.29, 0.27, 0.31)   // morning light all round in the light stage, lilac where it is softest
+#define LIGHT_ACC  vec3(1.00, 0.90, 0.80)   // pale morning light, apricot where it falls
 
 uniform float uTime;
 uniform int   uTier;
@@ -96,12 +97,12 @@ ${WATER_GLSL}
 // Light thrown up by rippling water: two warped sine lattices sliding past
 // each other, their zero lines min-combined into a bright network.
 float causticLayer(vec2 p, float t){
-  vec2 q = p + 0.4 * vec2(sin(p.y * 1.3 + t * 0.8), cos(p.x * 1.1 - t * 0.6));
+  vec2 q = p + 0.55 * vec2(sin(p.y * 1.3 + t * 0.8) + 0.5 * sin(p.x * 0.73 - t * 0.37), cos(p.x * 1.1 - t * 0.6) + 0.5 * cos(p.y * 0.61 + t * 0.29));
   return abs(sin(q.x * 2.4 + t * 0.3) + sin(q.y * 2.1 - t * 0.4)) * 0.5;   // 0 on the lines
 }
 float caustic(vec2 p, float t, int oct){
   float d = causticLayer(p, t);
-  if (oct > 1) d = min(d, causticLayer(p * 1.37 + vec2(3.1, 1.7), -t * 1.1));
+  if (oct > 1) d = min(d, causticLayer(mat2(0.8, 0.6, -0.6, 0.8) * p * 1.37 + vec2(3.1, 1.7), -t * 1.1));   // the second net turned, so no lattice shows
   float c = smoothstep(0.3, 0.0, d);
   return c * c * (1.0 - 0.5 * uWater.w);                  // still water throws a quieter net
 }
@@ -387,8 +388,9 @@ vec3 memoryWall(float h, float y, int oct, out float gloss){
 
 // ── ACCEPTANCE: cloud ───────────────────────────────────────────────────────
 // No plaster left: a slow billowing mass, domain-warped fBm drifting and
-// breathing, pale on the crowns of the billows and grey-blue in their folds.
-// Low contrast, no edges, no shine, so it never reads as a pattern.
+// breathing, milk with a drop of rose on the crowns of the billows and soft
+// lilac in their folds, a mother-of-pearl play across them. Low contrast, no
+// edges, no shine, so it never reads as a pattern.
 float cloud(float h, float y, int oct){
   float t = uTime * 0.018;
   vec2 q = vec2(h, y * 1.3) * 0.5;
@@ -400,8 +402,10 @@ vec3 acceptWall(float h, float y, int oct, out float gloss){
   gloss = 0.0;
   float c = cloud(h, y, oct);
   float crown = smoothstep(0.32, 0.66, c);
-  vec3 fold = vec3(0.40, 0.44, 0.49), top = vec3(0.78, 0.79, 0.77);
-  return mix(fold, top, crown) * (0.97 + 0.06 * vnoise(vec2(h, y) * 3.0 + uTime * 0.05));
+  vec3 fold = vec3(0.62, 0.55, 0.66), top = vec3(0.93, 0.85, 0.81);
+  vec3 col = mix(fold, top, crown);
+  col += 0.03 * vec3(sin(c * 11.0), sin(c * 11.0 + 2.1), sin(c * 11.0 + 4.2)) * crown;   // nacre: the hue slides a little over the billows
+  return col * (0.97 + 0.06 * vnoise(vec2(h, y) * 3.0 + uTime * 0.05));
 }
 
 float wallHeight(float h, float y, vec3 z){
@@ -461,7 +465,7 @@ void main(){
   fixtureLightSpec(vWorldPos, Nb, V, L, shin, dSum, sSum);
   vec3 cl = candleLight(vWorldPos, Nb);
   float open = openness(vWorldPos.xz + N.xz * 1.2);    // a wall facing a hall gets more bounce than one in a slot
-  vec3 diffuse = col * (dSum + 0.04 * L * (0.5 + open) + z.y * FILL_MEM * 1.6 + cl) * ao;
+  vec3 diffuse = col * (dSum + 0.04 * L * (0.5 + open) + z.y * FILL_MEM * 1.6 + z.z * FILL_ACC + cl) * ao;
   vec3 spec = sSum * gloss * mix(0.25, 0.9, z.x) * ao;
   vec3 lit = rolloff(diffuse + spec + cl * 0.05 * ao); // a little warm haze on the plaster right by a flame
   lit += z.z * 0.03 * LIGHT_ACC;                       // a little light from inside the cloud
@@ -473,7 +477,7 @@ void main(){
     float k = smoothstep(1.2, 0.0, above);
     if (k > 0.0) {
       float wet = waterDamp(vWorldPos.xz + N.xz * 0.4, uWater);
-      lit += LIGHT_ACC * caustic(vec2(h * 2.6, above * 4.0 - uWater.z * 0.3), uWater.z, uTier > 0 ? 2 : 1) * k * k * wet * uWater.y * 0.16;
+      lit += LIGHT_ACC * caustic(vec2(h * 2.6, above * 4.0 - uWater.z * 0.3), uWater.z, uTier > 0 ? 2 : 1) * k * k * wet * uWater.y * 0.1;
     }
   }
   gl_FragColor = vec4(lit, 1.0);
@@ -584,9 +588,17 @@ vec3 memoryFloor(vec2 p, int oct){
   return wood;
 }
 
-// ACCEPTANCE: pale limestone.
+// ACCEPTANCE: pale limestone slabs, milk-rose with apricot drifts, faint
+// lilac veins and fine grain: enough detail for the water to bend.
 vec3 acceptFloor(vec2 p, int oct){
-  return vec3(0.62, 0.61, 0.57) * (0.85 + 0.2 * fbm(p * 0.5, oct));
+  vec3 stone = mix(vec3(0.66, 0.58, 0.56), vec3(0.70, 0.62, 0.54), fbm(p * 0.23 + 5.0, 2));
+  stone *= 0.85 + 0.2 * fbm(p * 0.5, oct);
+  float vein = smoothstep(0.035, 0.0, abs(fbm(p * 0.9 + 2.0, oct) - 0.5));
+  stone = mix(stone, stone * vec3(0.9, 0.86, 0.94), vein * 0.35);
+  stone *= 0.95 + 0.08 * vnoise(p * 34.0);
+  vec2 sl = abs(fract(p / 0.6) - 0.5);                  // slab joints, hairline
+  stone *= 1.0 - 0.12 * smoothstep(0.485, 0.5, max(sl.x, sl.y));
+  return stone;
 }
 
 void main(){
@@ -595,10 +607,22 @@ void main(){
   int oct = uTier > 0 ? 4 : 2;
   vec3 z = zoneWeights(p);
 
+  // under water the stone is seen through the moving surface: its pattern
+  // wobbles with the waves (refraction without a scene texture), it goes
+  // darker and a little cooler, and a thin wet halo rings each puddle
+  vec2 pw = p;
+  float under = 0.0, halo = 0.0;
+  if (uWater.y > 0.001) {
+    float thr = waterThreshold(uWater), wn = waterNoise(p);
+    under = smoothstep(thr, thr + 0.05, wn);
+    halo = smoothstep(thr - 0.025, thr - 0.002, wn) * (1.0 - under);
+    if (under > 0.0) pw += waterWaves(p, uWater.z, uWater.w, uTier > 0 ? 2 : 0) * uWater.x * under * 7.0;
+  }
+
   vec3 col = vec3(0.0);
   if (z.x > 0.001) col += z.x * fearFloor(p, oct);
   if (z.y > 0.001) col += z.y * memoryFloor(p, oct);
-  if (z.z > 0.001) col += z.z * acceptFloor(p, oct);
+  if (z.z > 0.001) col += z.z * acceptFloor(pw, oct);
 
   // grime creeps in along the 1.2 m grid lines (where walls stand), less so in the light
   vec2 g = abs(fract(p / 1.2) - 0.5);
@@ -609,12 +633,13 @@ void main(){
   float open = openness(p);
   col *= mix(0.5, 1.0, smoothstep(0.0, 0.55, wallDist(p)));   // contact shadow: the floor darkens into every wall foot
   vec3 clf = candleLight(vWorldPos, N);
-  vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L * (0.5 + open) + z.y * FILL_MEM * 1.2 + clf) + clf * 0.04);
+  vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L * (0.5 + open) + z.y * FILL_MEM * 1.2 + z.z * FILL_ACC * 0.8 + clf) + clf * 0.04);
   lit += z.z * 0.05 * LIGHT_ACC;
   lit += hazeGlow(vWorldPos, L) + crystalFlecks(vWorldPos, N);
-  if (uWater.y > 0.001 && uTier > 0) {                  // a caustic net on the stone under the water
-    float under = waterMask(p, uWater);
-    if (under > 0.0) lit += LIGHT_ACC * caustic(p * 2.8, uWater.z, 2) * under * uWater.y * 0.12;
+  if (uWater.y > 0.001) {
+    float wa = uWater.y;
+    lit *= mix(vec3(1.0), vec3(0.9, 0.89, 0.93), under * wa) * (1.0 - 0.1 * halo * wa);
+    if (uTier > 0 && under > 0.0) lit += LIGHT_ACC * caustic(pw * 3.6, uWater.z, 2) * under * wa * 0.07;   // a caustic net on the stone under the water
   }
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
@@ -703,13 +728,13 @@ void main(){
 
   vec3 matteFear = vec3(0.66, 0.68, 0.64);
   vec3 matteMem  = vec3(0.07, 0.07, 0.06);              // smoke-darkened ceiling
-  vec3 matteAcc  = vec3(0.92, 0.92, 0.89);
+  vec3 matteAcc  = vec3(0.94, 0.88, 0.86);              // milk with a drop of rose
   vec3 matte = (matteFear * z.x + matteMem * z.y + matteAcc * z.z) * ceilingAge(p, oct);
   matte = mix(matte * vec3(0.8, 0.74, 0.62), matte, pow(vAO, 0.7));   // yellowed soot toward the walls
   matte *= pow(vAO, 1.8);                                             // corner shadow
 
   vec3 L = zoneLight(z);
-  vec3 lit = rolloff(matte * (0.12 * L + fixtureLight(vWorldPos, vec3(0.0, -1.0, 0.0), L) * 0.5));
+  vec3 lit = rolloff(matte * (0.12 * L + fixtureLight(vWorldPos, vec3(0.0, -1.0, 0.0), L) * 0.5 + z.z * FILL_ACC * 0.85));
   lit += z.z * 0.08 * LIGHT_ACC;
   // the ceiling around the nearest fixture catches its light (measured to
   // that fixture, not to this cell, so the glow is round, never a square)

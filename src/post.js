@@ -7,6 +7,7 @@ const FRAG = /* glsl */`
 precision highp float;
 uniform sampler2D tScene;
 uniform float uTime, uShift, uGlitch;
+uniform vec3 uBloom;   // bloom tint: phosphor green in the dark stages, warm white in the light
 varying vec2 vUv;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 void main(){
@@ -36,7 +37,7 @@ void main(){
     glow += samp * smoothstep(0.55, 1.0, bright);
   }
   glow /= 8.0;
-  c += glow * vec3(0.25, 0.85, 0.45) * 0.55;
+  c += glow * uBloom * 0.55;
 
   // scanlines + noise
   c *= 0.90 + 0.10 * sin(uv.y * 900.0 + uTime * 8.0);
@@ -54,6 +55,7 @@ export function createPost(renderer, quality) {
   const uniforms = {
     tScene: { value: null },
     uTime: { value: 0 }, uShift: { value: 0 }, uGlitch: { value: 0 },
+    uBloom: { value: new THREE.Vector3(0.25, 0.85, 0.45) },
   };
   const mat = new THREE.ShaderMaterial({
     fragmentShader: FRAG,
@@ -83,6 +85,8 @@ export function createPost(renderer, quality) {
       if (!quality.p.post) { renderer.setRenderTarget(null); renderer.render(mainScene, mainCam); return; }
       glitch = Math.max(0, glitch - dt * 2.2);
       uniforms.uTime.value = t;
+      const acc = window.__app?.zone?.accept ?? 0;
+      uniforms.uBloom.value.set(0.25 + 0.75 * acc, 0.85 + 0.07 * acc, 0.45 + 0.41 * acc);   // green, and in the light (1, 0.92, 0.86)
       uniforms.uGlitch.value = glitch;
       uniforms.uShift.value = Math.min(0.0018, Math.abs(speed) * 0.0003) + glitch * 0.002; // no resting RGB split: small lights stay whole
       renderer.setRenderTarget(rt);
