@@ -74,6 +74,107 @@ void main(){
 }
 `;
 
+// ── the metal door's skin ───────────────────────────────────────────────────
+// An ordinary steel stairwell door, painted over and over in a dull
+// brown-grey: the paint is rough to the eye (grain in every pixel), blistered,
+// rusting through at the handle and along the bottom, scratched. No plaque.
+function metalTex(w, h, { leaf }) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.fillStyle = leaf ? 'rgb(122,116,106)' : 'rgb(96,92,84)';
+  g.fillRect(0, 0, w, h);
+  const blot = (x, y, r, col) => {
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r);
+  };
+  for (let i = 0; i < 60; i++) blot(Math.random() * w, Math.random() * h, 20 + Math.random() * 60, `rgba(${Math.random() < 0.5 ? '40,34,28' : '140,132,118'},0.12)`);   // uneven coats
+  if (leaf) {
+    // the pressed panel: a shallow rectangle stamped into the sheet
+    const m = 26;
+    g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 3; g.strokeRect(m, m, w - 2 * m, h - 2 * m);
+    g.strokeStyle = 'rgba(200,190,170,0.18)'; g.lineWidth = 2; g.strokeRect(m + 3, m + 3, w - 2 * m, h - 2 * m);
+    const hy = h * (1 - 1.0 / DOOR_H), hx = w * 0.88;   // the handle, 1 m up, near the free edge
+    blot(hx, hy, 70, 'rgba(20,14,8,0.45)');             // grease where hands push
+    for (let i = 0; i < 14; i++) blot(hx + (Math.random() - 0.5) * 60, hy + (Math.random() - 0.5) * 80, 6 + Math.random() * 16, 'rgba(120,58,22,0.55)');
+  }
+  // rust climbing from the floor in ragged tongues
+  for (let x = 0; x < w; x += 3) {
+    const top = h - (leaf ? 30 : 60) - Math.pow(Math.random(), 3) * (leaf ? 90 : 160);
+    const gr = g.createLinearGradient(0, top, 0, h);
+    gr.addColorStop(0, 'rgba(110,52,20,0)'); gr.addColorStop(0.4, 'rgba(110,52,20,0.5)'); gr.addColorStop(1, 'rgba(70,32,14,0.85)');
+    g.fillStyle = gr; g.fillRect(x, top, 3, h - top);
+  }
+  for (let i = 0; i < 40; i++) blot(Math.random() * w, Math.random() * h, 3 + Math.random() * 10, 'rgba(120,60,24,0.5)');   // rust pinholes
+  // blisters: a lit upper rim, a shadowed lower one
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * w, y = Math.random() * h, r = 1.5 + Math.random() * 4;
+    g.fillStyle = 'rgba(220,210,190,0.25)'; g.beginPath(); g.arc(x, y - r * 0.3, r, Math.PI, 2 * Math.PI); g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.arc(x, y + r * 0.3, r, 0, Math.PI); g.fill();
+  }
+  g.strokeStyle = 'rgba(210,200,180,0.22)'; g.lineWidth = 1;   // scratches through to bare metal
+  for (let i = 0; i < 30; i++) { const x = Math.random() * w, y = Math.random() * h; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (Math.random() - 0.5) * 50, y + (Math.random() - 0.5) * 14); g.stroke(); }
+  // grain in every pixel: the paint reads rough even from the corridor
+  const img = g.getImageData(0, 0, w, h), d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (Math.random() - 0.5) * 38 + (Math.random() < 0.02 ? -40 : 0);
+    d[i] += n; d[i + 1] += n; d[i + 2] += n;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+
+// Lit per facet: the corridor's tubes from above and in front, every face of
+// the leaf and the frame catching it at its own angle, the paint's grain
+// raised into relief from the texture itself. uBulb: a light behind the door
+// (the stairwell's own), felt only while the door stands open.
+const METAL_VERT = /* glsl */`
+#include <fog_pars_vertex>
+varying vec2 vUv; varying vec3 vN, vW;
+void main(){
+  vUv = uv;
+  vN = normalize(mat3(modelMatrix) * normal);
+  vec4 wp = modelMatrix * vec4(position, 1.0); vW = wp.xyz;
+  vec4 mvPosition = viewMatrix * wp;
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}`;
+const METAL_FRAG = /* glsl */`
+#include <common>
+#include <fog_pars_fragment>
+uniform sampler2D uMap;
+uniform vec3 uBulb, uBulbCol;
+uniform float uBulbK;
+varying vec2 vUv; varying vec3 vN, vW;
+void main(){
+  vec3 tex = texture2D(uMap, vUv).rgb;
+  // relief from the paint itself: brightness read as height
+  float h = dot(tex, vec3(0.33));
+  vec3 N = normalize(vN);
+  vec3 dpx = dFdx(vW), dpy = dFdy(vW);
+  vec3 r1 = cross(dpy, N), r2 = cross(N, dpx);
+  float det = dot(dpx, r1);
+  vec3 grad = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2) * 0.004;   // 4 mm of relief at full contrast
+  N = normalize(abs(det) * N - grad);
+  vec3 key = normalize(vec3(0.35, 0.9, 0.45));
+  float lit = (0.55 + 0.9 * max(dot(N, key), 0.0) + 0.3 * max(dot(N, normalize(vec3(-0.6, 0.2, -0.3))), 0.0)) * 1.5;   // the hospital's tubes are bright
+  vec3 col = tex * lit;
+  vec3 toB = uBulb - vW; float db = length(toB);
+  col += tex * uBulbCol * uBulbK * max(dot(N, toB / db), 0.0) * 2.2 / (1.0 + db * db);
+  gl_FragColor = vec4(col, 1.0);
+  #include <colorspace_fragment>
+  #include <fog_fragment>
+}`;
+function metalMat(map) {
+  return new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
+      uMap: { value: map }, uBulb: { value: new THREE.Vector3() }, uBulbCol: { value: new THREE.Color(1, 0.85, 0.6) }, uBulbK: { value: 0 },
+    }]),
+    vertexShader: METAL_VERT, fragmentShader: METAL_FRAG, fog: true,
+  });
+}
+
 // Build the door and the picture behind it. atmo: the world's material kit
 // (kept for the caller's signature). imgUrl: one of
 // assets/stairs/stairs_1..5.webp, chosen by the caller from the visit's seed.
@@ -90,6 +191,14 @@ export function buildStairwell(atmo, imgUrl) {
   dw.group.position.z = 0.02;
   g.add(dw.group);
   const pivot = dw.pivot, door = dw.door;
+  // reskin as plain rough steel, lit face by face
+  const leafSkin = metalMat(metalTex(256, 584, { leaf: true }));
+  const frameSkin = metalMat(metalTex(64, 512, { leaf: false }));
+  const skins = [leafSkin, frameSkin];
+  const bulbAt = new THREE.Vector3();
+  door.material.map?.dispose(); door.material.dispose(); door.material = leafSkin;
+  for (const m of dw.group.children) if (m.isMesh) { m.material.map?.dispose(); m.material.dispose(); m.material = frameSkin; }
+  for (const m of pivot.children) if (m.isMesh && m !== door) m.material.color?.setRGB(0.32, 0.3, 0.28);   // handle and peephole: dark worn steel
 
   // the room behind, one quad exactly the size of the opening. Vertices are
   // in the door group's own frame so the shader can ray-cast from the eye.
@@ -166,10 +275,15 @@ export function buildStairwell(atmo, imgUrl) {
   if (imgUrl) setImage(imgUrl);
 
   return {
-    group: g, pivot, door, rays, tint: rays.tint,
+    group: g, pivot, door, rays, tint: rays.tint, skins,
     // k: 0 shut, 1 fully open/held. eye: the camera's world position, so the
     // room behind the door parallaxes against the visitor's movement.
     tick(dt, time, k, eye) {
+      // a bare bulb swinging on its flex in the stairwell, just behind the
+      // opening: it lights the frame and the leaf's edge from within, each
+      // facet by turns
+      const sw = Math.sin(time * 1.7) * 0.35, bulb = g.localToWorld(bulbAt.set(sw, 2.25 - Math.abs(sw) * 0.15, -0.9));
+      for (const m of skins) { m.uniforms.uBulb.value.copy(bulb); m.uniforms.uBulbK.value = k * (0.85 + 0.15 * Math.sin(time * 23.0) * Math.sin(time * 7.1)); }
       const on = k > 0.002;
       room.visible = on;
       cloud.visible = on;
@@ -189,6 +303,7 @@ export function buildStairwell(atmo, imgUrl) {
       g.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); });
       placeholder.dispose();
       for (const img of cache.values()) img.dispose();
+      for (const m of skins) m.uniforms.uMap.value.dispose();
       rays.dispose();
     },
   };
