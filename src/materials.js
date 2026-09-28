@@ -58,6 +58,7 @@ uniform sampler2D uWallpaper; // grandmother's wallpaper, one repeat (wallpaper.
 uniform vec4  uHaze[6];       // the fixtures in sight of the visitor: xyz centre of the glow, w = strength (flicker included)
 uniform vec4  uWater;         // level, accept, time, calm (water.js); accept 0 outside the light stage
 uniform float uProgress;      // works seen, 0..1 eased (water.js): the light stage whitens with it
+uniform float uVanish;        // the finale: 0 whole, 1 the walls, ceiling and things are gone into the haze
 
 varying vec3 vWorldPos;
 varying vec3 vNormal;
@@ -78,12 +79,23 @@ float hash21(vec2 p){
   p += dot(p, p + 45.32);
   return fract(p.x * p.y);
 }
+// The finale: walls, ceiling and things come apart in soft patches, lower
+// first, the gaps filling with the pearl haze. true: this fragment is gone.
+float vanishK(vec3 P);
+bool vanished(vec3 P){
+  if (uVanish <= 0.0) return false;
+  return vanishK(P) < uVanish * 1.25 - 0.12;
+}
 float vnoise(vec2 p){
   vec2 i = floor(p), f = fract(p);
   vec2 u = f * f * (3.0 - 2.0 * f);
   float a = hash21(i), b = hash21(i + vec2(1.0, 0.0));
   float c = hash21(i + vec2(0.0, 1.0)), d = hash21(i + vec2(1.0, 1.0));
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+float vanishK(vec3 P){
+  float n = vnoise(P.xz * 0.9 + vec2(P.y * 0.7, -P.y * 0.4)) * 0.65 + vnoise(P.xz * 3.1 - P.y) * 0.35;
+  return n * 0.85 + P.y / 3.2 * 0.15;                // the tops hold a moment longer than the feet
 }
 float fbm(vec2 p, int oct){
   float s = 0.0, a = 0.5;
@@ -491,8 +503,10 @@ void main(){
       lit += LIGHT_ACC * c * k * k * wet * uWater.y;
     }
   }
+  if (vanished(vWorldPos)) discard;
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
+  if (uVanish > 0.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, uVanish * 0.75);   // what is left pales into the haze
 }
 `;
 
@@ -770,8 +784,10 @@ void main(){
   col += hazeGlow(vWorldPos, L) + crystalFlecks(vWorldPos, vec3(0.0, -1.0, 0.0));
   if (uWater.y > 0.001 && uTier > 0)                    // far fainter and wider, from the water below
     col += LIGHT_ACC * min(waveCaustic(p * 0.3, uWater.z * 0.7) * 0.035, 0.07) * waterDamp(p, uWater) * uWater.y;
+  if (vanished(vWorldPos)) discard;
   gl_FragColor = vec4(col, 1.0);
   #include <fog_fragment>
+  if (uVanish > 0.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, uVanish * 0.75);   // what is left pales into the haze
 }
 `;
 
@@ -859,8 +875,10 @@ void main(){
     float fl = step(0.12, vnoise(vec2(uTime * 7.0, uSeed)));        // now and then it dies for a blink
     lit += base * uGlow * (0.75 + 0.25 * fl);
   }
+  if (vanished(vWorldPos)) discard;
   gl_FragColor = vec4(rolloff(lit) + hazeGlow(vWorldPos, L), 1.0);
   #include <fog_fragment>
+  if (uVanish > 0.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, uVanish * 0.75);   // what is left pales into the haze
 }
 `;
 
@@ -933,6 +951,7 @@ export function createMaterials(quality) {
     uWallpaper: { value: paperTex },
     uWater: { value: new THREE.Vector4(0, 0, 0, 0) },
     uProgress: { value: 0 },
+    uVanish: { value: 0 },
     uWaveTex: { value: blankWaves },   // water.js bakes the real ripples on tiers 1-2
   };
   const hazeSeen = new Map();   // lamp cell key -> smoothed visibility, so a glow fades in as a corner opens
@@ -981,6 +1000,7 @@ export function createMaterials(quality) {
     // water.js, every frame: level (m), accept weight, caustic time, calm, progress
     setWater(level, accept, time, calm, progress = 0) { shared.uWater.value.set(level, accept, time, calm); shared.uProgress.value = progress; },
     setWaveTex(tex) { shared.uWaveTex.value = tex; },
+    setVanish(v) { shared.uVanish.value = v; },   // the finale (soulpath.js)
     // camPos: viewer position; zone: zoneWeights() at the viewer
     update(dt, t, camPos, zone) {
       shared.uTime.value = t;

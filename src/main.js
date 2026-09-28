@@ -130,6 +130,8 @@ async function boot() {
         mixZone(scene.fog.color, zone, 0x0e1f14, 0x030905, accFog);
         const base = quality.tier === 0 ? 1.5 : 1;
         scene.fog.density = base * (0.03 * zone.fear + 0.045 * zone.memory + 0.085 * zone.accept);   // the light stage stands in milky fog
+        const vanish = window.__app.vanish ?? 0;           // the finale: the haze swells while the walls go, then thins over open water
+        if (vanish > 0) scene.fog.density *= 1 + 1.6 * Math.sin(Math.PI * vanish) - 0.35 * vanish;
         renderer.setClearColor(scene.fog.color);
       }
       if (atmo) atmo.update(dt, elapsed, camera.position, zone);

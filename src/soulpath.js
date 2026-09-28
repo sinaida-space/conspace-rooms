@@ -76,6 +76,7 @@ const PORTAL_SEEN_FEAR = 3;      // works seen in fear before its portal is summ
 const PORTAL_SEEN_MEMORY = 5;    // works seen in memory (past the room) before the way into the light
 const PORTAL_NEAR = 8;           // metres: a summoned portal never lands closer than this
 const PORTAL_FAR = 24;           // metres: nor further than this
+const FINALE_VANISH = 6;         // seconds the walls take to dissolve before the rose tunnel rises
 const STAIR_NIGHTMARE = true;     // false: the calm version, only the door, fog and light, no zoom, no sound, no blackout
 const STAIR_NEAR = 3.2;          // metres: this close, the metal door gives way, each time the visitor passes
 const STAIR_OPEN = 1.3;          // seconds: it swings open
@@ -775,15 +776,28 @@ export class SoulPath {
     arch.group.rotation.y = Math.atan2(-spot.dir[0], -spot.dir[1]);   // its face toward the visitor
     this.scene.add(arch.group);
     arch.fitToWalls((x, z) => solidAtGlobal(cellOf(x), cellOf(z)));
-    this.petals.stream({ x: spot.x, z: spot.z, dir: spot.dir, length: arch.length });
+    // first the walls go: a pearl haze rises off the water, the walls, the
+    // ceiling and every thing come apart in it, and only the water is left
+    // to the horizon. Then, out of nothing, the tunnel of roses rises.
+    arch.group.visible = false;
     // the view turns to the entrance itself (_updateFinale): the tunnel
     // keeps to the middle of the corridor, the visitor may not
-    this.finale = { arch, spot, from: P.yaw, t: 0, side: null };
+    this.finale = { arch, spot, from: P.yaw, t: 0, side: null, vanish: 0 };
     this.post?.burst?.(0.4);
   }
 
   _updateFinale(dt, time) {
     const f = this.finale, P = this.player;
+    if (f.vanish < 1) {
+      f.vanish = Math.min(1, f.vanish + dt / FINALE_VANISH);
+      const e = f.vanish * f.vanish * (3 - 2 * f.vanish);
+      this.atmo.setVanish?.(e);
+      window.__app.vanish = f.vanish;                   // main.js thickens the fog while it happens
+      for (const g of this.artworks.chunkGroups?.values() || []) g.visible = e < 0.55;   // the works go with the walls they hung on
+      if (f.vanish < 1) return;
+      f.arch.group.visible = true;
+      this.petals.stream({ x: f.spot.x, z: f.spot.z, dir: f.spot.dir, length: f.arch.length });
+    }
     if (f.t < 1) {
       f.t = Math.min(1, f.t + dt / 1.6);
       const e = f.t * f.t * (3 - 2 * f.t);
