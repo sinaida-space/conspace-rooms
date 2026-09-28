@@ -455,16 +455,18 @@ export function buildKitchen(parent, X, Z) {
   }
   blob(1.3, 0.8, tv.x, 0.013, tv.z, 0.85);
 
-  // ── a tear-off calendar on the back wall, opposite the television ──
-  // rooms differ in size: find the back wall behind it and hang it there
-  const cal = { x: -0.9, y: 1.5, z: -2.05 };
+  // ── a tear-off calendar fallen from the back wall, lying face up on the floor ──
+  // rooms differ in size: find the back wall and let it lie a little in front
+  const cal = { x: -0.9, y: 0, z: -2.05 };
   group.updateMatrixWorld(true);
   for (let t = 0.3; t < 7; t += 0.02) {
-    const p = group.localToWorld(new THREE.Vector3(cal.x, cal.y, -t));
-    if (solidAtGlobal(Math.floor(p.x / CELL), Math.floor(p.z / CELL))) { cal.z = -t + 0.035; break; }   // its back against the paper
+    const p = group.localToWorld(new THREE.Vector3(cal.x, 1.5, -t));
+    if (solidAtGlobal(Math.floor(p.x / CELL), Math.floor(p.z / CELL))) { cal.z = -t + 0.3; break; }
   }
-  add(box(0.14, 0.2, 0.03), wood, cal.x, cal.y, cal.z);
-  const calFace = add(new THREE.PlaneGeometry(0.13, 0.19), new THREE.MeshBasicMaterial({ map: T.calendar, fog: true }), cal.x, cal.y, cal.z + 0.017, false);
+  const calBack = add(box(0.14, 0.03, 0.2), wood, cal.x, 0.015, cal.z);
+  const calFace = add(new THREE.PlaneGeometry(0.13, 0.19), new THREE.MeshBasicMaterial({ map: T.calendar, fog: true }), cal.x, 0.032, cal.z, false);
+  calFace.rotation.set(-Math.PI / 2, 0, 0.35);
+  calBack.rotation.y = 0.35;
   calFace.receiveShadow = false;
 
   // ── a closed hardback, faded cloth cover, left on top of the television ──

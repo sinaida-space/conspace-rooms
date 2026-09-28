@@ -7,3 +7,4 @@ dist/
 # stairwell sources, the site uses the webp copies
 assets/stairs/*.png
 .claude/worktrees/
+.claude/plans/
