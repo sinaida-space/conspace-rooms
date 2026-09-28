@@ -165,8 +165,11 @@ export class UI {
   initModeSelect(recommendedMode, caps = {}) {
     const isTouch = !!(caps.device?.isTouch ?? caps.touch);
     if (isTouch && recommendedMode === 'hands') recommendedMode = 'keys';
-    this.selectedMode = recommendedMode;
+    // nothing is chosen for the visitor: ВОЙТИ waits until a way to walk is picked
+    this.selectedMode = null;
     this._syncTrain();
+    const enter = $('btn-enter');
+    if (enter) enter.disabled = true;
     const buttons = Array.from(document.querySelectorAll('#mode-select button'));
     const hasWebcam = !!navigator.mediaDevices?.getUserMedia;
     buttons.forEach(btn => {
@@ -174,7 +177,6 @@ export class UI {
       if (btn.dataset.mode === 'keys' && isTouch) btn.querySelector('.mode-legend').textContent = t('legendPad');
       const isHands = btn.dataset.mode === 'hands';
       const isRecommended = btn.dataset.mode === recommendedMode && !(isHands && isTouch);
-      btn.classList.toggle('selected', isRecommended);
       if (isRecommended) {
         const tag = document.createElement('span');
         tag.className = 'mode-legend';
@@ -191,6 +193,7 @@ export class UI {
         buttons.forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
         this.selectedMode = btn.dataset.mode;
+        if (enter) enter.disabled = false;
         this._syncTrain();
         // the choice is made: bring ВОЙТИ into view
         $('btn-enter')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
@@ -231,6 +234,7 @@ export class UI {
   waitForEnter() {
     return new Promise(res => {
       const go = training => () => {
+        if (!this.selectedMode) return;
         let cameraStream = null;
         if (this.selectedMode === 'hands' && navigator.mediaDevices?.getUserMedia) {
           cameraStream = navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' } });
