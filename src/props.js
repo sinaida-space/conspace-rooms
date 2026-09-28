@@ -387,24 +387,24 @@ varying vec2 vUv;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
 void main(){
   vec2 uv = vUv;
-  float horizon = 0.45;
-  vec3 col;
-  if (uv.y < horizon) {
-    float t = uv.y / horizon;
-    col = mix(vec3(0.40, 0.43, 0.47), vec3(0.58, 0.60, 0.63), t);          // flat silver-grey water
-    float glint = pow(max(0.0, sin(uv.x * 46.0 + uTime * uRain * 0.5 + t * 9.0)), 24.0);
-    col += glint * 0.3;                                                    // slow moving glints
-    col *= mix(0.55, 1.0, smoothstep(0.0, 0.03, horizon - uv.y));          // a darker line at the embankment's edge
-  } else {
-    float t = (uv.y - horizon) / (1.0 - horizon);
-    col = mix(vec3(0.93, 0.85, 0.68), vec3(0.86, 0.84, 0.93), t);          // warm straw near the water, pale lilac above
-  }
+  // a low horizon; the water mirrors the same white-night sky, only a little
+  // dimmer and greyer, so the pane reads as one light, not dark below / bright above
+  float horizon = 0.3;
+  float ts = clamp((uv.y - horizon) / (1.0 - horizon), 0.0, 1.0);
+  vec3 sky = mix(vec3(0.93, 0.85, 0.68), vec3(0.86, 0.84, 0.93), ts);   // warm straw near the water, pale lilac above
+  float tw = clamp((horizon - uv.y) / horizon, 0.0, 1.0);
+  vec3 skyM = mix(vec3(0.93, 0.85, 0.68), vec3(0.86, 0.84, 0.93), tw);  // the sky upside down in the water
+  vec3 water = mix(skyM, vec3(0.62, 0.64, 0.68), 0.35) * 0.9;
+  float glint = pow(max(0.0, sin(uv.x * 46.0 + uTime * uRain * 0.5 + tw * 9.0)), 24.0);
+  water += glint * 0.12 * (1.0 - tw);                                    // slow moving glints near the far shore
+  vec3 col = mix(water, sky, smoothstep(horizon - 0.015, horizon + 0.015, uv.y));
+  col *= 1.0 - 0.12 * exp(-pow((uv.y - horizon) / 0.01, 2.0));           // the far embankment, a thin soft line
   // rain: streaks that run, drops that sit still on tier 0 (uRain = 0)
   vec2 ruv = uv * vec2(9.0, 13.0);
   float col1 = floor(ruv.x);
   float speed = 0.5 + hash(vec2(col1, 0.0)) * 0.7;
   float fall = uTime * uRain * 1.5 * speed;
-  float y = fract(ruv.y - fall - hash(vec2(col1, 1.0)) * 11.0);
+  float y = fract(ruv.y + fall - hash(vec2(col1, 1.0)) * 11.0);   // + fall: the pattern slides down the pane
   float streak = smoothstep(0.08, 0.0, abs(fract(ruv.x) - 0.5)) * smoothstep(0.85, 0.55, y);
   col = mix(col, min(vec3(1.0), col * 1.3 + 0.04), streak * 0.5);
   gl_FragColor = vec4(col, 1.0);
