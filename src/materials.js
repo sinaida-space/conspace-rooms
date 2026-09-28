@@ -154,11 +154,14 @@ float lampVis(vec3 P, vec3 N, vec2 lamp){
   if (len < 0.5) return 1.0;
   d /= len;
   float res = 1.0, t = 0.3;
+  // penumbra: crisp in the hospital, wide and soft in the light, where a hard
+  // edge across an open hall reads as a painted stripe
+  float soft = mix(3.0, 0.9, zoneWeights(P.xz).z);
   int steps = uTier > 1 ? 10 : 6;
   for (int i = 0; i < 10; i++) {
     if (i >= steps || t > len - 0.3) break;
     float h = wallDist(o + d * t);
-    res = min(res, 3.0 * h / t);
+    res = min(res, soft * h / t);
     if (res < 0.0) return 0.0;
     t += max(h, 0.2);
   }
