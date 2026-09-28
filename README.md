@@ -66,13 +66,18 @@ darkness, childhood and dreams.
 | Action                | Desktop (gestures)         | Desktop (keyboard)          | Mobile (light mode)          |
 |------------------------|-----------------------------|-------------------------------|---------------------------------|
 | Walk                   | one fist (two fists run); the walk keeps to the corridor's middle | W / ↑, S / ↓                  | hold top half of the screen     |
-| Turn                   | point right hand = turn right, point left hand = turn left | ← / →, or mouse look (click to lock) | horizontal drag |
+| Turn                   | point right hand = turn right, point left hand = turn left; heading into a wall, the view turns along the corridor by itself (or round, in a dead end) | ← / →, or mouse look (click to lock); heading into a wall while walking, the view turns along the corridor by itself (or round, in a dead end) | horizontal drag |
 | Zoom                   | both palms open, spread/pinch the two hands | mouse wheel         | two-finger pinch (desktop-touch fallback) |
 | Strafe                 | —                            | A / D                         | —                                |
 | Inspect                | paintings show themselves when passed, 3 s each; open palm holds | E, click        | tap an artwork                  |
 | Close inspect / stop   | both palms open              | Escape                        | tap again                       |
 | Back to the middle     | Space (keyboard works in every mode) | Space                 | —                                |
 | Full screen            | F                            | F                             | —                                |
+| Menu                    | Tab                          | Tab                            | tap the menu tape                |
+| Sound on/off            | N                             | N                               | tap the menu tape                |
+| Main screen             | H                             | H                               | tap the menu tape                |
+| Clip (when available)   | C                             | C                               | tap the menu tape                |
+| Finish (hold 1 s)       | Q                             | Q                               | tap the menu tape                |
 | Bug report             | R R R: a picture of the walk's state to screenshot and send | R R R | —            |
 
 Gesture mode requests webcam access on entry (opt-in); if it's denied or unavailable the

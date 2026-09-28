@@ -37,6 +37,10 @@ const OPENING_REACH = 1.6; // m either side a blocked walk looks for the opening
 const WALL_KEEP = 0.75;    // m: in rooms, a wall closer than this pushes the walk off it
 const ALIGN_RATE = 1.6;    // 1/s, the view settling along the corridor while walking on hands
 const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+const STEER_SPEED_MIN = 0.3;  // m/s: below this the walk is free to look at a wall
+const STEER_LOOKAHEAD = 1.6;  // m: a wall this close ahead starts the turn
+const STEER_AXIS_CLEAR = 2.4; // m: how far a lattice axis must stay open to count as "open"
+const STEER_RATE = 1.6;       // 1/s, how fast the view eases toward the open way
 
 export const EYE_HEIGHT = EYE;
 
@@ -186,6 +190,11 @@ export class Player {
     this.intent = walk;
     this.eye += (this.eyeTarget - this.eye) * Math.min(1, dt * 1.2); // slow, dreamlike height change
 
+    // never straight into a wall: walking forward into one, the view turns
+    // softly along the corridor (or round, in a dead end); standing still or
+    // turning by mouse/keys the view stays free
+    if (!this.auto && walk > 0 && this.vel.length() > STEER_SPEED_MIN) this._steer(dt);
+
     // heading basis (camera faces -Z at yaw 0)
     const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw); // forward
     const rx = -fz, rz = fx;                                   // right
@@ -285,6 +294,40 @@ export class Player {
     if (s.a != null && s.a < WALL_KEEP) push -= (WALL_KEEP - s.a) * RAIL_HARD;
     if (s.b != null && s.b < WALL_KEEP) push += (WALL_KEEP - s.b) * RAIL_HARD;
     return push ? { x: s.px * push, z: s.pz * push } : null;
+  }
+
+  // Nobody ever ends up facing a wall while walking: a wall close ahead
+  // steers the view toward whichever lattice axis (the four corridor
+  // directions) is both open and closest to the current heading — never
+  // backwards unless every other way is shut, which is a dead end and turns
+  // the view round. The turn only ever eases (never snaps), so a corner
+  // taken at a run still reads as a choice, not a collision.
+  _steer(dt) {
+    const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
+    if (this._axisClear(this.pos.x, this.pos.y, fx, fz, STEER_LOOKAHEAD)) return; // clear ahead, nothing to do
+    const HALF = Math.PI / 2;
+    const axes = [0, HALF, Math.PI, -HALF];
+    let back = axes[0], backDiff = -1;
+    for (const a of axes) {
+      const diff = Math.abs(wrapAngle(a - this.yaw));
+      if (diff > backDiff) { backDiff = diff; back = a; }
+    }
+    let best = null, bestDiff = Infinity;
+    for (const a of axes) {
+      if (a === back) continue;
+      const diff = Math.abs(wrapAngle(a - this.yaw));
+      if (diff >= bestDiff) continue;
+      if (this._axisClear(this.pos.x, this.pos.y, -Math.sin(a), -Math.cos(a), STEER_AXIS_CLEAR)) { best = a; bestDiff = diff; }
+    }
+    if (best == null && this._axisClear(this.pos.x, this.pos.y, -Math.sin(back), -Math.cos(back), STEER_AXIS_CLEAR)) best = back; // dead end: turn round
+    if (best == null) return;
+    this.yaw += wrapAngle(best - this.yaw) * Math.min(1, dt * STEER_RATE);
+  }
+
+  // is the way from (x,z) along (fx,fz) walkable out to `dist`?
+  _axisClear(x, z, fx, fz, dist) {
+    for (let d = 0.2; d <= dist; d += 0.2) if (!this.world.isWalkable(x + fx * d, z + fz * d)) return false;
+    return true;
   }
 
   // Space: whatever went astray, put it right. Back on the middle of the

@@ -382,6 +382,46 @@ export class UI {
     addEventListener('pointerdown', e => { if (!toolbar.contains(e.target)) setMenu(false); });
     addEventListener('keydown', e => { if (e.key === 'Escape') setMenu(false); });
 
+    // hotkeys, physical key so any keyboard layout works: Tab opens/closes the
+    // menu, N/H/C mirror their buttons (N and H work even with the menu shut,
+    // C only once the button itself is available), Q finishes the walk but
+    // only once held a full second — the finish tape fills to show it, and
+    // letting go early cancels
+    const finishBtn = $('btn-finish');
+    let qHeld = false, qRaf = null, qStart = 0;
+    const qCancel = () => {
+      qHeld = false;
+      if (qRaf != null) cancelAnimationFrame(qRaf);
+      qRaf = null;
+      finishBtn?.classList.remove('charging');
+      finishBtn?.style.removeProperty('--charge');
+    };
+    const qStep = now => {
+      if (!qHeld) return;
+      const p = Math.min(1, (now - qStart) / 1000);
+      finishBtn?.style.setProperty('--charge', String(p));
+      if (p >= 1) { qCancel(); onFinish?.(); return; }
+      qRaf = requestAnimationFrame(qStep);
+    };
+    addEventListener('keydown', e => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+      if (e.code === 'Tab') {
+        e.preventDefault();
+        if (!e.repeat) setMenu(menu.classList.contains('hidden'));
+        return;
+      }
+      if (e.code === 'KeyQ') {
+        if (!qHeld) { qHeld = true; qStart = performance.now(); finishBtn?.classList.add('charging'); qRaf = requestAnimationFrame(qStep); }
+        return;
+      }
+      if (e.repeat) return;
+      if (e.code === 'KeyN') $('btn-mute')?.click();
+      else if (e.code === 'KeyH') $('btn-main-screen')?.click();
+      else if (e.code === 'KeyC') { const cb = $('btn-clip'); if (cb && !cb.classList.contains('hidden')) cb.click(); }
+    });
+    addEventListener('keyup', e => { if (e.code === 'KeyQ') qCancel(); });
+    addEventListener('blur', qCancel);
+
     const fsBtn = $('btn-fullscreen');
     const syncFsLabel = () => {
       const active = !!document.fullscreenElement;
