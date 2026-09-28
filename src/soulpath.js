@@ -652,6 +652,7 @@ export class SoulPath {
         const key = `${cx}:${cz}:${edge}`;
         stuff.doors.push(this._makeDoor(group, cx, cz, edge, band, key));
       }
+      for (const d of stuff.doors) d.group.visible = this.stage.stage === 0;   // doors belong to fear alone
     }
 
     // ── grandmother's room: rare, only deep in the memory ring
@@ -1747,6 +1748,7 @@ export class SoulPath {
   _doorsNear(x, z) {
     const out = [];
     for (const stuff of this.chunkStuff.values()) {
+      if (this.stage.stage !== 0) break;                 // no doors outside fear: nothing to bump into
       for (const d of stuff.doors) if (Math.abs(d.x - x) < 4 && Math.abs(d.z - z) < 4) out.push(d);
     }
     return out;
@@ -1780,6 +1782,7 @@ export class SoulPath {
 
   // a closed door sits on a chunk edge between two cells
   _doorBlocks(i, j, ni, nj) {
+    if (this.stage.stage !== 0) return false;           // no doors outside fear
     for (const stuff of this.chunkStuff.values()) for (const d of stuff.doors) {
       if (d.open) continue;
       const mx = (Math.max(i, ni)) * CELL, mz = (Math.max(j, nj)) * CELL;
@@ -2033,7 +2036,7 @@ export class SoulPath {
     // out through the gap, the music clears, "not yet", and it slams shut.
     this._doorLights.length = 0;
     for (const s of this.chunkStuff.values()) for (const d of s.doors) {
-      if (d.phase === 'done') continue;
+      if (d.phase === 'done' || this.stage.stage !== 0) continue;   // doors live in fear only
       if (d.phase === 'wait') {
         if (this.finale) continue;                     // the way on is open now: doors keep still
         const near = Math.hypot(d.x - P.pos.x, d.z - P.pos.y) < DOOR_REACH;
@@ -2189,6 +2192,7 @@ export class SoulPath {
       this._rebuildScatter();
       for (const st of this.chunkStuff.values()) if (st.ward) st.ward.group.visible = this.stage.stage === 0;
       for (const st of this.chunkStuff.values()) if (st.beds) st.beds.group.visible = this.stage.stage === 0;
+      for (const st of this.chunkStuff.values()) for (const d of st.doors) d.group.visible = this.stage.stage === 0;
     }
 
     // grandmother's room: light the nearest one, let candles and picture breathe
