@@ -136,11 +136,15 @@ async function boot() {
         window.__app.spots?.update(elapsed, camera.position, dustLight);
       }
       if (window.__app.soul) window.__app.soul.update(dt, elapsed, zone);
+      window.__app.water?.update(dt, elapsed, player, window.__app.soul, audio);
       if (artworks) { artworks.sync(); artworks.update(dt); }
       speed = player.vel.length();
       if (audio) {
         const bobSin = Math.sin(player.bob);
-        if (speed > 0.15 && bobSin > 0 && prevBobSin <= 0) audio.step();
+        if (speed > 0.15 && bobSin > 0 && prevBobSin <= 0) {
+          audio.step();
+          window.__app.water?.addRipple(player.pos.x, player.pos.y, speed > 3.2 ? 1.2 : 0.7);   // running splashes harder
+        }
         prevBobSin = bobSin;
         if (dt > 0) audio.turn((player.yaw - prevYaw) / dt);   // two frames can share a timestamp: 0/0 would stop the loop
       }
@@ -148,6 +152,7 @@ async function boot() {
     }
     post = post ?? window.__app.post;
     if (audio) audio.motion(speed);
+    window.__app.water?.beforeRender();   // the mirror pass, tier 2 only
     if (post) post.render(scene, camera, dt, elapsed, speed);
     else renderer.render(scene, camera);
     window.__app.clip?.frame();   // copy the frame while the drawing buffer still holds it
@@ -323,6 +328,8 @@ async function boot() {
     window.__app.player = player;
     window.__app.atmo = atmo;
     window.__app.artworks = artworks;
+    const { createWater } = await import('./water.js');
+    window.__app.water = createWater({ scene, renderer, camera, quality, stage, atmo });   // hidden until the light stage
 
     const { createDust } = await import('./dust.js');
     window.__app.dust = createDust(scene, quality);

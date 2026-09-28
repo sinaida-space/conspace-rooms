@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CEIL_H, CELL, lampLineNear, solidAtGlobal, isChandelierCell } from './world.js';
 import { ZONE, ORIGIN } from './zones.js';
 import { wallpaperCanvas } from './wallpaper.js';
+import { WATER_GLSL } from './water.js';
 
 // ── conspace-rooms · materials.js ───────────────────────────────────────────
 // Procedural shader materials for the labyrinth. No texture files: everything
@@ -54,6 +55,7 @@ uniform sampler2D uWallDist; // distance to the nearest wall, one texel per cell
 uniform vec2  uWallO;         // cell index of texel 0
 uniform sampler2D uWallpaper; // grandmother's wallpaper, one repeat (wallpaper.js)
 uniform vec4  uHaze[6];       // the fixtures in sight of the visitor: xyz centre of the glow, w = strength (flicker included)
+uniform vec4  uWater;         // level, accept, time, calm (water.js); accept 0 outside the light stage
 
 varying vec3 vWorldPos;
 varying vec3 vNormal;
@@ -89,6 +91,19 @@ float fbm(vec2 p, int oct){
     p *= 2.02; a *= 0.5;
   }
   return s;
+}
+${WATER_GLSL}
+// Light thrown up by rippling water: two warped sine lattices sliding past
+// each other, their zero lines min-combined into a bright network.
+float causticLayer(vec2 p, float t){
+  vec2 q = p + 0.4 * vec2(sin(p.y * 1.3 + t * 0.8), cos(p.x * 1.1 - t * 0.6));
+  return abs(sin(q.x * 2.4 + t * 0.3) + sin(q.y * 2.1 - t * 0.4)) * 0.5;   // 0 on the lines
+}
+float caustic(vec2 p, float t, int oct){
+  float d = causticLayer(p, t);
+  if (oct > 1) d = min(d, causticLayer(p * 1.37 + vec2(3.1, 1.7), -t * 1.1));
+  float c = smoothstep(0.3, 0.0, d);
+  return c * c * (1.0 - 0.5 * uWater.w);                  // still water throws a quieter net
 }
 // thin band around y = c, width w (rails, paint lines)
 float band(float y, float c, float w){ return smoothstep(w, 0.0, abs(y - c)); }
@@ -451,6 +466,16 @@ void main(){
   vec3 lit = rolloff(diffuse + spec + cl * 0.05 * ao); // a little warm haze on the plaster right by a flame
   lit += z.z * 0.03 * LIGHT_ACC;                       // a little light from inside the cloud
   lit += hazeGlow(vWorldPos, L) + crystalFlecks(vWorldPos, Nb);
+  // the water's light on the lower wall: strongest just above the surface,
+  // gone by about 1.2 m; only where the floor in front of it is wet
+  if (uWater.y > 0.001) {
+    float above = max(y - uWater.x, 0.0);
+    float k = smoothstep(1.2, 0.0, above);
+    if (k > 0.0) {
+      float wet = waterDamp(vWorldPos.xz + N.xz * 0.4, uWater);
+      lit += LIGHT_ACC * caustic(vec2(h * 2.6, above * 4.0 - uWater.z * 0.3), uWater.z, uTier > 0 ? 2 : 1) * k * k * wet * uWater.y * 0.16;
+    }
+  }
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
 }
@@ -587,6 +612,10 @@ void main(){
   vec3 lit = rolloff(col * (fixtureLight(vWorldPos, N, L) + 0.04 * L * (0.5 + open) + z.y * FILL_MEM * 1.2 + clf) + clf * 0.04);
   lit += z.z * 0.05 * LIGHT_ACC;
   lit += hazeGlow(vWorldPos, L) + crystalFlecks(vWorldPos, N);
+  if (uWater.y > 0.001 && uTier > 0) {                  // a caustic net on the stone under the water
+    float under = waterMask(p, uWater);
+    if (under > 0.0) lit += LIGHT_ACC * caustic(p * 2.8, uWater.z, 2) * under * uWater.y * 0.12;
+  }
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
 }
@@ -702,6 +731,8 @@ void main(){
   vec3 col = mix(lit, fx.rgb * (0.3 + 0.7 * L), body * 0.9);  // housing / shade
   col += L * 2.4 * fx.a * fl * boost;                          // emitted light
   col += hazeGlow(vWorldPos, L) + crystalFlecks(vWorldPos, vec3(0.0, -1.0, 0.0));
+  if (uWater.y > 0.001 && uTier > 0)                    // far fainter and wider, from the water below
+    col += LIGHT_ACC * caustic(p * 0.45, uWater.z * 0.6, 2) * waterDamp(p, uWater) * uWater.y * 0.05;
   gl_FragColor = vec4(col, 1.0);
   #include <fog_fragment>
 }
@@ -861,6 +892,7 @@ export function createMaterials(quality) {
     uWallDist: { value: wallTex },
     uWallO: { value: new THREE.Vector2(-1e4, -1e4) },
     uWallpaper: { value: paperTex },
+    uWater: { value: new THREE.Vector4(0, 0, 0, 0) },
   };
   const hazeSeen = new Map();   // lamp cell key -> smoothed visibility, so a glow fades in as a corner opens
 
@@ -903,6 +935,9 @@ export function createMaterials(quality) {
   return {
     materials,
     prop,
+    haze: shared.uHaze,   // the fixtures in sight, for the water's glints (water.js)
+    // water.js, every frame: level (m), accept weight, caustic time, calm
+    setWater(level, accept, time, calm) { shared.uWater.value.set(level, accept, time, calm); },
     // camPos: viewer position; zone: zoneWeights() at the viewer
     update(dt, t, camPos, zone) {
       shared.uTime.value = t;
