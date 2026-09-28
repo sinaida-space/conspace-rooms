@@ -108,6 +108,7 @@ async function boot() {
   let elapsed = 0, atmo = null, post = null, audio = null; // not `t`: that name is the translator
   let prevBobSin = 0, prevYaw = 0;
   const dustLight = new THREE.Color();
+  const ACC_FOG_0 = new THREE.Color(0xcabec6), ACC_FOG_1 = new THREE.Color(0xe9e3df), accFogA = new THREE.Color();
   const frame = () => {
     const dt = Math.min(clock.getDelta(), 0.05);
     elapsed += dt;
@@ -124,7 +125,9 @@ async function boot() {
       const zone = stage.weights();
       window.__app.zone = zone;
       if (scene.fog?.isFogExp2) {
-        mixZone(scene.fog.color, zone, 0x0e1f14, 0x030905, 0xd6cbc8);   // the light stage: warm pearl
+        // the light stage: a lilac pearl at the portal, milk once every work is found
+        const accFog = accFogA.copy(ACC_FOG_0).lerp(ACC_FOG_1, window.__app.water?.progress ?? 0).getHex();
+        mixZone(scene.fog.color, zone, 0x0e1f14, 0x030905, accFog);
         const base = quality.tier === 0 ? 1.5 : 1;
         scene.fog.density = base * (0.03 * zone.fear + 0.045 * zone.memory + 0.085 * zone.accept);   // the light stage stands in milky fog
         renderer.setClearColor(scene.fog.color);
@@ -152,7 +155,7 @@ async function boot() {
     }
     post = post ?? window.__app.post;
     if (audio) audio.motion(speed);
-    window.__app.water?.beforeRender();   // the mirror pass, tier 2 only
+    window.__app.water?.beforeRender();   // the mirror pass, tier 2 only (the refraction split happens inside post.render)
     if (post) post.render(scene, camera, dt, elapsed, speed);
     else renderer.render(scene, camera);
     window.__app.clip?.frame();   // copy the frame while the drawing buffer still holds it

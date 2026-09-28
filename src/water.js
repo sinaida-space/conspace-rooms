@@ -6,10 +6,14 @@ import { CEIL_H, CELL, solidAtGlobal } from './world.js';
 // deep once every work has been seen; the whole sheet breathes with a slow
 // tide. The surface is never still: a broad swell with fine wind ripples
 // crossing it, rings from footsteps and from drops off the ceiling. Looking
-// down it is clear and the stone wobbles beneath it (the floor shader does
-// that, see materials.js); toward the horizon it turns into a mirror. On the
-// high tier the mirror is a real one, a half resolution pass; elsewhere it is
-// the pearl of the fog and soft streaks of the lamps. The caustics the water
+// down it is clear, toward the horizon it turns into a mirror. On tiers 1-2
+// it is real water: the frame is drawn first without it, and the water bends
+// that picture (refraction), dims it by the depth it looks through
+// (Beer-Lambert) and lays the lamps and candles on it in streaks; its surface
+// is a baked ripple field scrolled in two layers. On the high tier the mirror
+// is a real one, a half resolution pass; elsewhere it is the pearl above. On
+// tier 0 the cheap water stays (the floor shader wobbles the stone under
+// it). The caustics the water
 // throws on walls, floor and ceiling live in materials.js, driven by uWater
 // (set here through atmo.setWater).
 
@@ -107,6 +111,104 @@ function waterNoise(x, z) {
 }
 const smooth = x => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
 
+// ── the ripple field ────────────────────────────────────────────────────────
+// A tileable height field baked once: many directional waves on whole
+// numbers of cycles per tile (so it wraps), amplitude falling with frequency,
+// leaning along x (the wind down the corridors), random phases. Stored per
+// texel: slope x and z (normalised by 4 × their rms, so the shader scales
+// them to any steepness), height, and the caustic the field would throw:
+// light focused by the curvature, 1 / |det(I + d·Hessian)|.
+export const WATER_LAYER = 5;    // the water plane renders on its own layer (the split pass in post.js)
+const WAVE_N = 90;
+const WAVES = (() => {
+  let seed = 1224;
+  const rnd = () => {
+    seed = (seed + 0x6D2B79F5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const list = [];
+  while (list.length < WAVE_N) {
+    const kx = Math.round((rnd() * 2 - 1) * 24), kz = Math.round((rnd() * 2 - 1) * 24);
+    const k = Math.hypot(kx, kz);
+    if (k < 3 || k > 24) continue;
+    const along = Math.abs(kx) / k;
+    list.push({ kx, kz, a: Math.pow(k, -1.7) * (0.4 + 0.6 * along * along), ph: rnd() * Math.PI * 2 });
+  }
+  let s2 = 0, h2 = 0;
+  for (const w of list) { s2 += (w.a * 2 * Math.PI * Math.hypot(w.kx, w.kz)) ** 2 / 2; h2 += w.a * w.a / 2; }
+  return { list, slopeRms: Math.sqrt(s2), hRms: Math.sqrt(h2) };
+})();
+
+function bakeWaves(N) {
+  const { list, slopeRms, hRms } = WAVES;
+  const sx = new Float32Array(N * N), sz = new Float32Array(N * N), h = new Float32Array(N * N);
+  const cx = new Float32Array(N), cz = new Float32Array(N);
+  for (const w of list) {
+    for (let i = 0; i < N; i++) { cx[i] = 2 * Math.PI * w.kx * i / N; cz[i] = 2 * Math.PI * w.kz * i / N; }
+    const gx = w.a * 2 * Math.PI * w.kx, gz = w.a * 2 * Math.PI * w.kz;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const ph = cx[i] + cz[j] + w.ph, c = Math.cos(ph), o = j * N + i;
+      h[o] += w.a * Math.sin(ph); sx[o] += gx * c; sz[o] += gz * c;
+    }
+  }
+  // curvature by central differences of the slopes (wrapping), then focusing
+  const at = (a, i, j) => a[((j + N) % N) * N + ((i + N) % N)];
+  const hxx = new Float32Array(N * N), hzz = new Float32Array(N * N), hxz = new Float32Array(N * N);
+  let cr = 0;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const o = j * N + i;
+    hxx[o] = (at(sx, i + 1, j) - at(sx, i - 1, j)) * N / 2;
+    hzz[o] = (at(sz, i, j + 1) - at(sz, i, j - 1)) * N / 2;
+    hxz[o] = (at(sx, i, j + 1) - at(sx, i, j - 1)) * N / 2;
+    cr += hxx[o] * hxx[o] + hzz[o] * hzz[o];
+  }
+  const d = 0.3 / Math.sqrt(cr / (2 * N * N));   // how far the light travels before it lands: sharp lines, few blow-outs
+  const data = new Uint8Array(N * N * 4), enc = v => Math.max(0, Math.min(255, Math.round(128 + v * 127)));
+  for (let o = 0; o < N * N; o++) {
+    const det = (1 - d * hxx[o]) * (1 - d * hzz[o]) - d * d * hxz[o] * hxz[o];
+    const focus = Math.min(4, 1 / Math.max(Math.abs(det), 0.25));
+    data[o * 4] = enc(sx[o] / (4 * slopeRms));
+    data[o * 4 + 1] = enc(sz[o] / (4 * slopeRms));
+    data[o * 4 + 2] = enc(h[o] / (3 * hRms));
+    data[o * 4 + 3] = Math.round(focus / 4 * 255);
+  }
+  const tex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// Two layers of the baked field, scrolled with the wind at different scales
+// and speeds, the second turned. Shared with materials.js, whose caustics
+// move with the same ripples. t is the water's phase (uWater.z).
+export const WAVE_GLSL = /* glsl */`
+uniform sampler2D uWaveTex;   // baked ripples (water.js): rg slope, b height, a caustic
+const mat2 WAVE_TURN = mat2(0.82, 0.57, -0.57, 0.82);
+vec2 waveUV1(vec2 p, float t){ return p / 2.6 + vec2(0.019, 0.003) * t; }
+vec2 waveUV2(vec2 p, float t){ return WAVE_TURN * p / 0.85 + vec2(-0.041, 0.018) * t; }
+// slope of the ripples (dh/dx, dh/dz): about 0.03 rms long, 0.018 short
+vec2 waveSlope(vec2 p, float t){
+  vec2 a = texture2D(uWaveTex, waveUV1(p, t)).rg * 2.0 - 1.0;
+  vec2 b = texture2D(uWaveTex, waveUV2(p, t)).rg * 2.0 - 1.0;
+  return a * 0.12 + (b * WAVE_TURN) * 0.072;   // the turned layer's slope comes back through the transpose
+}
+float waveHeight(vec2 p, float t){
+  return texture2D(uWaveTex, waveUV1(p, t)).b + texture2D(uWaveTex, waveUV2(p, t) * 1.7).b - 1.0;
+}
+// light the ripples focus on whatever it lands on: a bright net, 0 between
+float waveCaustic(vec2 p, float t){
+  float a = texture2D(uWaveTex, waveUV1(p, t)).a * 4.0, b = texture2D(uWaveTex, waveUV2(p, t)).a * 4.0;
+  return max(a * b - 0.75, 0.0) * (1.0 - 0.5 * uWater.w);
+}
+`;
+
 const VERT = /* glsl */`
 #include <common>
 #include <fog_pars_vertex>
@@ -123,24 +225,7 @@ void main(){
 }
 `;
 
-const FRAG = /* glsl */`
-#include <common>
-#include <fog_pars_fragment>
-uniform vec4  uWater;              // level (a tenth of the tide), accept, phase, calm: as the world shaders get it
-uniform float uTime;
-uniform int   uTier;
-uniform vec4  uRipples[${RIPPLES}];   // x, z, start time, strength
-uniform vec3  uFinale;             // rose arch xz, 1 when it stands: the water round it goes still
-uniform vec4  uHaze[6];            // the fixtures in sight (materials.js): xz of each panel, w = strength
-uniform sampler2D uMirror;
-uniform float uMirrorOn;
-varying vec3 vWorldPos;
-varying vec4 vMirror;
-${WATER_GLSL}
-
-#define PEARL vec3(1.0, 0.93, 0.86)     // the lamps, as the water gives them back: warm pearl
-#define PANEL_Y ${(CEIL_H - 0.05).toFixed(2)}
-
+const RINGS_GLSL = /* glsl */`
 // Rings: a soft packet of a few crests round the front, gaussian in profile,
 // widening and fading as it travels. Returns the slope it adds.
 vec2 rings(vec2 p){
@@ -171,6 +256,28 @@ vec3 softCap(vec3 c, float cap){
   return c * (knee + (cap - knee) * (1.0 - exp(-(l - knee) / (cap - knee)))) / l;
 }
 
+`;
+
+// Tier 0: the cheap water, drawn with the scene, no extra targets.
+const FRAG = /* glsl */`
+#include <common>
+#include <fog_pars_fragment>
+uniform vec4  uWater;              // level (a tenth of the tide), accept, phase, calm: as the world shaders get it
+uniform float uTime;
+uniform int   uTier;
+uniform vec4  uRipples[${RIPPLES}];   // x, z, start time, strength
+uniform vec3  uFinale;             // rose arch xz, 1 when it stands: the water round it goes still
+uniform vec4  uHaze[6];            // the fixtures in sight (materials.js): xz of each panel, w = strength
+uniform sampler2D uMirror;
+uniform float uMirrorOn;
+varying vec3 vWorldPos;
+varying vec4 vMirror;
+${WATER_GLSL}
+
+#define PEARL vec3(1.0, 0.93, 0.86)     // the lamps, as the water gives them back: warm pearl
+#define PANEL_Y ${(CEIL_H - 0.05).toFixed(2)}
+
+${RINGS_GLSL}
 void main(){
   vec2 p = vWorldPos.xz;
   float thr = waterThreshold(uWater);
@@ -253,6 +360,148 @@ void main(){
 }
 `;
 
+// Tiers 1-2: real water. Drawn alone into its own target after the scene
+// (post.js), with the scene's colour and depth to read from.
+const VERT_REAL = /* glsl */`
+#include <common>
+#include <fog_pars_vertex>
+uniform mat4 uTexMatrix;
+varying vec3 vWorldPos;
+varying vec3 vView;
+varying vec4 vMirror;
+void main(){
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWorldPos = wp.xyz;
+  vMirror = uTexMatrix * wp;
+  vec4 mvPosition = viewMatrix * wp;
+  vView = mvPosition.xyz;
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}
+`;
+
+const FRAG_REAL = /* glsl */`
+#include <common>
+#include <packing>
+#include <fog_pars_fragment>
+uniform vec4  uWater;              // level (a tenth of the tide), accept, phase, calm
+uniform float uTime;
+uniform vec4  uRipples[${RIPPLES}];
+uniform vec3  uFinale;
+uniform vec4  uHaze[6];            // the fixtures in sight: xz of each panel, w = strength
+uniform vec4  uCandle[8];          // the candles nearest the visitor: xyz, w = flickering intensity
+uniform vec3  uCandleCol[8];
+uniform sampler2D uMirror;
+uniform float uMirrorOn;
+uniform sampler2D uScene;          // the frame without the water
+uniform sampler2D uDepth;          // and its depth
+uniform vec2  uRes;
+uniform vec2  uNearFar;
+varying vec3 vWorldPos;
+varying vec3 vView;
+varying vec4 vMirror;
+${WATER_GLSL}
+${WAVE_GLSL}
+${RINGS_GLSL}
+
+#define PEARL vec3(1.0, 0.93, 0.86)
+#define PANEL_Y ${(CEIL_H - 0.05).toFixed(2)}
+#define ABSORB vec3(2.4, 1.15, 1.0)   // per metre: red goes first, so depth turns a faint aqua pearl
+
+float sceneZ(vec2 uv){ return perspectiveDepthToViewZ(texture2D(uDepth, uv).r, uNearFar.x, uNearFar.y); }
+
+// A light seen in rippled water is a streak running toward the eye: tight
+// across the plane through the eye and the light, loose along it.
+float streak(vec3 R, vec3 lpos, float tight, float loose){
+  vec3 L = normalize(lpos - vWorldPos);
+  vec3 toL = vec3(lpos.x - cameraPosition.x, 0.0, lpos.z - cameraPosition.z);
+  vec3 side = dot(toL, toL) > 1e-4 ? normalize(cross(toL, vec3(0.0, 1.0, 0.0))) : vec3(1.0, 0.0, 0.0);
+  vec3 e = R - L;
+  float eh = dot(e, side);
+  vec3 ev = e - side * eh;
+  return exp(-eh * eh * tight - dot(ev, ev) * loose);
+}
+
+void main(){
+  vec2 p = vWorldPos.xz;
+  float thr = waterThreshold(uWater);
+  float n = waterNoise(p);
+  if (n < thr - 0.012) discard;
+  float water = smoothstep(thr, thr + 0.05, n);
+  float mx = (n - thr - 0.003) / 0.0025;
+  float meniscus = exp(-mx * mx);
+
+  // what stands in front of the water hides it (no depth buffer here: tested by hand)
+  vec2 uv = gl_FragCoord.xy / uRes;
+  float wz = vView.z, sz = sceneZ(uv);
+  if (sz > wz + 0.003) discard;
+  float rayK = length(vView) / max(-wz, 1e-3);
+  float path = (wz - sz) * rayK;                           // metres of water the eye looks through
+
+  float calm = uWater.w;
+  float still = uFinale.z > 0.5 ? smoothstep(4.0, 6.0, distance(p, uFinale.xy)) : 1.0;
+  vec2 s = (waveSlope(p, uWater.z) * (1.0 - 0.6 * calm) + waterWaves(p, uWater.z, calm, 0) + rings(p) * 1.8 * (1.0 - 0.5 * calm)) * still;   // rings stand out of the ripples
+  vec3 N = normalize(vec3(-s.x, 1.0, -s.y));
+  vec3 V = normalize(cameraPosition - vWorldPos);
+  float F = 0.02 + 0.98 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+
+  #ifdef USE_FOG
+    vec3 fogC = fogColor;
+    #ifdef FOG_EXP2
+      float fogF = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+    #else
+      float fogF = smoothstep(fogNear, fogFar, vFogDepth);
+    #endif
+  #else
+    vec3 fogC = vec3(0.84, 0.8, 0.78);
+    float fogF = 0.0;
+  #endif
+
+  // refraction: the picture behind bends with the surface, more the deeper it is
+  vec2 bend = (viewMatrix * vec4(-s.x, 0.0, -s.y, 0.0)).xy;
+  vec2 uvR = uv + bend * 1.3 * clamp(path, 0.02, 0.4);
+  float szR = sceneZ(uvR);
+  if (szR > wz) { uvR = uv; szR = sz; }                    // bent onto something above the water: keep it straight
+  float pathR = max((wz - szR) * rayK, 0.0);
+  vec3 behind = texture2D(uScene, uvR).rgb;
+  vec3 T = exp(-ABSORB * pathR);
+  vec3 body = behind * T + fogC * vec3(0.95, 1.03, 1.02) * (1.0 - T);   // Beer-Lambert, the lost light turned pale aqua pearl
+
+  // reflection: the real mirror on tier 2, the pearl above elsewhere
+  vec3 R = reflect(-V, N);
+  vec3 refl;
+  if (uMirrorOn > 0.5) {
+    vec4 mc = vMirror;
+    mc.xy += s * 0.9 * mc.w;
+    refl = softCap(texture2DProj(uMirror, mc).rgb, 0.95);   // the pale walls come back whole, only the panels are held down
+  } else {
+    refl = fogC * mix(1.0, 1.12, clamp(R.y, 0.0, 1.0));
+  }
+
+  // light on the water: lamps in pearl, candles in their own warm flame,
+  // each a streak toward the eye, broken where the ripples turn away
+  float broken = 0.25 + 0.75 * smoothstep(0.4, 0.75, waveHeight(p * 1.9, uWater.z * 1.6) * 0.5 + 0.5);
+  vec3 lights = vec3(0.0);
+  for (int i = 0; i < 6; i++) {
+    if (uHaze[i].w <= 0.0) continue;
+    lights += PEARL * min(uHaze[i].w, 1.0) * streak(R, vec3(uHaze[i].x, PANEL_Y, uHaze[i].z), 1600.0, 16.0);
+  }
+  for (int i = 0; i < 8; i++) {
+    if (uCandle[i].w <= 0.0) continue;
+    lights += uCandleCol[i] * min(uCandle[i].w / 3.2, 1.0) * streak(R, uCandle[i].xyz, 2600.0, 26.0) * 0.8;
+  }
+  lights = softCap(lights * broken * (0.35 + 0.65 * F / (F + 0.1)), 0.5) * (1.0 - fogF);
+
+  vec3 col = mix(body, refl, F) + lights;
+  float shore = smoothstep(0.0, 0.012, path);             // where the water thins onto something, it fades out
+  float a = water * shore * uWater.y;
+  col *= a;
+  col += (fogC * 1.08 + 0.05) * meniscus * 0.12 * uWater.y * (1.0 - fogF);   // the hairline at the rim
+  a = max(a, meniscus * 0.12 * uWater.y);
+  gl_FragColor = vec4(col, a);                             // premultiplied: post.js lays it over the frame
+}
+`;
+
 export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
   const uniforms = Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
     uWater: { value: new THREE.Vector4() },
@@ -264,13 +513,26 @@ export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
     uMirror: { value: null },
     uMirrorOn: { value: 0 },
     uTexMatrix: { value: new THREE.Matrix4() },
+    uWaveTex: { value: null },
+    uCandle: atmo?.candles ?? { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, -100, 0, 0)) },
+    uCandleCol: atmo?.candleCol ?? { value: Array.from({ length: 8 }, () => new THREE.Color()) },
+    uScene: { value: null },
+    uDepth: { value: null },
+    uRes: { value: new THREE.Vector2(1, 1) },
+    uNearFar: { value: new THREE.Vector2(0.1, 100) },
   });
   const mat = new THREE.ShaderMaterial({
     uniforms, vertexShader: VERT, fragmentShader: FRAG,
     transparent: true, premultipliedAlpha: true, depthWrite: false, fog: true,
   });
+  const matReal = new THREE.ShaderMaterial({
+    uniforms, vertexShader: VERT_REAL, fragmentShader: FRAG_REAL,
+    transparent: true, premultipliedAlpha: true, depthWrite: false, depthTest: false, fog: true,
+  });
   const geo = new THREE.PlaneGeometry(PLANE, PLANE, 2, 2).rotateX(-Math.PI / 2);
   const mesh = new THREE.Mesh(geo, mat);
+  mesh.layers.set(WATER_LAYER);
+  camera.layers.enable(WATER_LAYER);
   mesh.frustumCulled = false;
   mesh.renderOrder = -1;          // first of the see-through things: dust and petals draw over it
   mesh.visible = false;
@@ -296,9 +558,43 @@ export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
     uniforms.uMirrorOn.value = 0;
   };
 
+  // real water (tiers 1-2): its own target, and the baked ripples
+  let rtW = null, waveTex = null;
+  const clearCol = new THREE.Color();
+  const dropSplit = () => { if (rtW) { rtW.dispose(); rtW = null; } };
+
   let head = 0, phase = 0, stillFor = 0, prog = 0;
   const api = {
-    level: 0, tide: 0, calm: 0,
+    level: 0, tide: 0, calm: 0, progress: 0,
+    // post.js asks each frame whether to draw the frame in two passes
+    get refracting() { return mesh.visible && quality.tier >= 1 && quality.p.post; },
+    // the frame without the water into rt (colour + depth), then the water
+    // alone into its own target, reading them; returns that target's texture
+    renderSplit(scn, cam, rt) {
+      const mask = cam.layers.mask;
+      cam.layers.disable(WATER_LAYER);
+      renderer.setRenderTarget(rt);
+      renderer.render(scn, cam);
+      if (!rtW) {
+        rtW = new THREE.WebGLRenderTarget(rt.width, rt.height, { depthBuffer: false });
+        rtW.texture.colorSpace = THREE.SRGBColorSpace;
+      } else if (rtW.width !== rt.width || rtW.height !== rt.height) rtW.setSize(rt.width, rt.height);
+      uniforms.uScene.value = rt.texture;
+      uniforms.uDepth.value = rt.depthTexture;
+      uniforms.uRes.value.set(rt.width, rt.height);
+      uniforms.uNearFar.value.set(cam.near, cam.far);
+      cam.layers.set(WATER_LAYER);
+      const prevShadow = renderer.shadowMap.autoUpdate, prevAlpha = renderer.getClearAlpha();
+      renderer.getClearColor(clearCol);
+      renderer.shadowMap.autoUpdate = false;
+      renderer.setClearColor(0x000000, 0);
+      renderer.setRenderTarget(rtW);
+      renderer.render(scn, cam);
+      renderer.setClearColor(clearCol, prevAlpha);
+      renderer.shadowMap.autoUpdate = prevShadow;
+      cam.layers.mask = mask;
+      return rtW.texture;
+    },
     heightAt(x, z) {
       if (api.level <= 0.001) return null;
       const w = uniforms.uWater.value;
@@ -331,7 +627,16 @@ export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
       uniforms.uWater.value.set(shaderLevel, accept, phase, api.calm);
       uniforms.uTime.value = elapsed;
       uniforms.uTier.value = quality.tier;
-      atmo?.setWater?.(shaderLevel, accept, phase, api.calm);
+      api.progress = prog;
+      atmo?.setWater?.(shaderLevel, accept, phase, api.calm, prog);
+      // the ripples are baked once, the first time a tier that uses them runs
+      if (quality.tier >= 1 && !waveTex) {
+        waveTex = bakeWaves(quality.tier >= 2 ? 256 : 128);
+        uniforms.uWaveTex.value = waveTex;
+        atmo?.setWaveTex?.(waveTex);
+      }
+      mesh.material = quality.tier >= 1 && quality.p.post ? matReal : mat;
+      if (!(quality.tier >= 1 && quality.p.post)) dropSplit();
       audio?.setWater?.({ level: api.level, tide: api.tide, calm: api.calm });
 
       mesh.visible = accept >= 0.001;
@@ -387,7 +692,7 @@ export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
       tmpUp.y = -tmpUp.y;
       mirrorCam.up.copy(tmpUp);
       mirrorCam.lookAt(tmpT);
-      mirrorCam.near = camera.near; mirrorCam.far = camera.far;
+      mirrorCam.near = camera.near; mirrorCam.far = camera.far * 4;   // the oblique near plane tilts the far one: push it out so the corridor's end is not cut
       mirrorCam.aspect = camera.aspect; mirrorCam.fov = camera.fov;
       mirrorCam.layers.mask = camera.layers.mask;
       mirrorCam.updateProjectionMatrix();
@@ -417,9 +722,10 @@ export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
     },
 
     dispose() {
-      dropMirror();
+      dropMirror(); dropSplit();
       scene.remove(mesh, drop);
-      geo.dispose(); mat.dispose(); drop.material.dispose();
+      geo.dispose(); mat.dispose(); matReal.dispose(); drop.material.dispose();
+      waveTex?.dispose();
     },
   };
   return api;

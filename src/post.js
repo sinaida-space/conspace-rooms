@@ -6,10 +6,18 @@ import * as THREE from 'three';
 const FRAG = /* glsl */`
 precision highp float;
 uniform sampler2D tScene;
+uniform sampler2D tWater;   // the water, drawn alone and premultiplied (water.js), laid over the scene
+uniform float uWaterOn;
 uniform float uTime, uShift, uGlitch;
+uniform float uCrt;    // how much television: 1 in the dark stages, a quarter in the light
 uniform vec3 uBloom;   // bloom tint: phosphor green in the dark stages, warm white in the light
 varying vec2 vUv;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+vec3 frame(vec2 uv){
+  vec3 c = texture2D(tScene, uv).rgb;
+  if (uWaterOn > 0.5) { vec4 w = texture2D(tWater, uv); c = w.rgb + c * (1.0 - w.a); }
+  return c;
+}
 void main(){
   vec2 uv = vUv;
   // glitch: horizontal band displacement
@@ -20,9 +28,9 @@ void main(){
   // rgb delay
   float s = uShift + uGlitch*0.01;
   vec3 c;
-  c.r = texture2D(tScene, uv + vec2(s, 0.0)).r;
-  c.g = texture2D(tScene, uv).g;
-  c.b = texture2D(tScene, uv - vec2(s, 0.0)).b;
+  c.r = frame(uv + vec2(s, 0.0)).r;
+  c.g = frame(uv).g;
+  c.b = frame(uv - vec2(s, 0.0)).b;
 
   // cheap phosphor bloom: sample a small ring around this texel, keep only
   // the brightest neighbours, add back tinted green — a poor-man's
@@ -32,7 +40,7 @@ void main(){
   for (int i = 0; i < 8; i++) {
     float a = float(i) * 0.7854; // 2*PI/8
     vec2 o = vec2(cos(a), sin(a)) * px * 3.0;
-    vec3 samp = texture2D(tScene, uv + o).rgb;
+    vec3 samp = frame(uv + o);
     float bright = max(samp.r, max(samp.g, samp.b));
     glow += samp * smoothstep(0.55, 1.0, bright);
   }
@@ -40,8 +48,8 @@ void main(){
   c += glow * uBloom * 0.55;
 
   // scanlines + noise
-  c *= 0.90 + 0.10 * sin(uv.y * 900.0 + uTime * 8.0);
-  c += (hash(uv * vec2(1441.0, 907.0) + fract(uTime)) - 0.5) * 0.055;
+  c *= mix(1.0, 0.90 + 0.10 * sin(uv.y * 900.0 + uTime * 8.0), uCrt);
+  c += (hash(uv * vec2(1441.0, 907.0) + fract(uTime)) - 0.5) * 0.055 * uCrt;
   // vignette
   float v = length(uv - 0.5);
   c *= 1.0 - v*v*0.55;
@@ -53,8 +61,8 @@ export function createPost(renderer, quality) {
   const scene = new THREE.Scene();
   const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const uniforms = {
-    tScene: { value: null },
-    uTime: { value: 0 }, uShift: { value: 0 }, uGlitch: { value: 0 },
+    tScene: { value: null }, tWater: { value: null }, uWaterOn: { value: 0 },
+    uTime: { value: 0 }, uShift: { value: 0 }, uGlitch: { value: 0 }, uCrt: { value: 1 },
     uBloom: { value: new THREE.Vector3(0.25, 0.85, 0.45) },
   };
   const mat = new THREE.ShaderMaterial({
@@ -68,10 +76,8 @@ export function createPost(renderer, quality) {
   function resize() {
     if (rt) rt.dispose();
     const dpr = renderer.getPixelRatio();
-    rt = new THREE.WebGLRenderTarget(
-      Math.round(renderer.domElement.clientWidth * dpr),
-      Math.round(renderer.domElement.clientHeight * dpr)
-    );
+    const w = Math.round(renderer.domElement.clientWidth * dpr), h = Math.round(renderer.domElement.clientHeight * dpr);
+    rt = new THREE.WebGLRenderTarget(w, h, { depthTexture: new THREE.DepthTexture(w, h) });   // the water reads the depth (water.js)
     rt.texture.colorSpace = THREE.SRGBColorSpace;
     uniforms.tScene.value = rt.texture;
   }
@@ -87,10 +93,19 @@ export function createPost(renderer, quality) {
       uniforms.uTime.value = t;
       const acc = window.__app?.zone?.accept ?? 0;
       uniforms.uBloom.value.set(0.25 + 0.75 * acc, 0.85 + 0.07 * acc, 0.45 + 0.41 * acc);   // green, and in the light (1, 0.92, 0.86)
-      uniforms.uGlitch.value = glitch;
-      uniforms.uShift.value = Math.min(0.0018, Math.abs(speed) * 0.0003) + glitch * 0.002; // no resting RGB split: small lights stay whole
-      renderer.setRenderTarget(rt);
-      renderer.render(mainScene, mainCam);
+      const crt = 1 - 0.75 * acc;                        // the light stage is a quarter as much television
+      uniforms.uCrt.value = crt;
+      uniforms.uGlitch.value = glitch * crt;
+      uniforms.uShift.value = (Math.min(0.0018, Math.abs(speed) * 0.0003) + glitch * 0.002) * crt; // no resting RGB split: small lights stay whole
+      const water = window.__app?.water;
+      if (water?.refracting) {                           // the frame without the water, then the water over it
+        uniforms.tWater.value = water.renderSplit(mainScene, mainCam, rt);
+        uniforms.uWaterOn.value = 1;
+      } else {
+        uniforms.uWaterOn.value = 0;
+        renderer.setRenderTarget(rt);
+        renderer.render(mainScene, mainCam);
+      }
       renderer.setRenderTarget(null);
       renderer.render(scene, cam);
     },
