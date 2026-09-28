@@ -1,5 +1,6 @@
 import { startAmbience } from './ambience.js';
 import { Music } from './music.js';
+import { WaterSound } from './waterSound.js';
 // Generative audio, zero files: the music (music.js), crackle, footsteps,
 // turns, the works' voices, soft chime on demand.
 // Init-only — build only after a user gesture (start()), not auto-started.
@@ -19,6 +20,8 @@ export class AudioEngine {
 
     // the music: lo-fi corridors, a gramophone in grandmother's room (music.js)
     this.music = new Music(ctx, this.bed);
+    // the flooded acceptance stage: surf, drips, wet steps (waterSound.js)
+    this.water = new WaterSound(ctx, this.bed);
 
     // crackle bed: looping filtered noise + random pops
     const len = ctx.sampleRate * 2;
@@ -59,9 +62,16 @@ export class AudioEngine {
     this._speedS = s; // crackle level is set in setZone(), which scales it by zone
   }
 
-  // footfall thump/creak, alternating pitch left/right foot for a bit of variety
+  // footfall thump/creak, alternating pitch left/right foot for a bit of variety.
+  // the flooded acceptance stage swaps this for a squelch (waterSound.js).
   step() {
     if (!this.ctx || this.muted) return;
+    const level = window.__app?.water?.level ?? 0;
+    if (level > 0.01) {
+      const running = (window.__app?.player?.vel?.length?.() ?? 0) > 3.2;
+      this.water.step(running, (dx, dz, dist) => this.drip(dx, dz, dist));
+      return;
+    }
     const ctx = this.ctx, t = ctx.currentTime;
     this._stepFoot = !this._stepFoot;
     const base = this._stepFoot ? 66 : 61;
@@ -73,6 +83,18 @@ export class AudioEngine {
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
     o.connect(bp); bp.connect(g); g.connect(this.bed);
     o.start(t); o.stop(t + 0.18);
+  }
+
+  // the flooded acceptance stage, called every frame by water.js
+  setWater({ level = 0, tide = 0 } = {}) {
+    this.water?.setWater(level, tide, this.muted);
+  }
+
+  // one drip landed: dx/dz = direction from the listener (world), dist metres
+  drip(dx, dz, dist) {
+    if (!this.ctx || this.muted) return;
+    const yaw = window.__app?.player?.yaw ?? 0;
+    this.water.drip(dx, dz, dist, yaw);
   }
 
   // subtle whoosh/tick tied to turn rate (rad/s), same shape as motion()
