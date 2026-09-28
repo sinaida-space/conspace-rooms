@@ -150,8 +150,10 @@ export function buildDoorway(span, wallMat, stage, text) {
     lever.position.set(DOOR_W - 0.14, 1.0, f * 0.05); pivot.add(lever);
     const peep = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.012, 12).rotateX(Math.PI / 2), metal);
     peep.position.set(DOOR_W / 2, 1.6, f * 0.031); pivot.add(peep);
-    const plaque = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.1), basic(plaqueTex(text)));
-    plaque.position.set(DOOR_W / 2, 1.38, f * 0.027); plaque.rotation.y = f > 0 ? 0 : Math.PI; pivot.add(plaque);
+    if (text) {                                        // no text, no plaque
+      const plaque = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.1), basic(plaqueTex(text)));
+      plaque.position.set(DOOR_W / 2, 1.38, f * 0.027); plaque.rotation.y = f > 0 ? 0 : Math.PI; pivot.add(plaque);
+    }
   }
   return { group: g, pivot, door, side, gap: DOOR_W };
 }
@@ -169,6 +171,7 @@ void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(p
 const RAY_FRAG = /* glsl */`
 uniform float uK;
 uniform float uTime;
+uniform vec3 uTint;
 varying vec2 vUv;
 void main(){
   float along = vUv.y, across = vUv.x;
@@ -177,22 +180,24 @@ void main(){
   float fade = pow(1.0 - along, 1.7);
   float edge = smoothstep(0.0, 0.22, across) * smoothstep(1.0, 0.78, across);
   float a = uK * fade * edge * (0.08 + 0.92 * streak) * 0.12;
-  gl_FragColor = vec4(vec3(1.0, 0.97, 0.9) * a, 1.0);
+  gl_FragColor = vec4(uTint * a, 1.0);
 }
 `;
 const GAP_FRAG = /* glsl */`
 uniform float uK;
+uniform vec3 uTint;
 varying vec2 vUv;
 void main(){
   vec2 d = abs(vUv - 0.5) * 2.0;
   float soft = 1.0 - smoothstep(0.75, 1.0, max(d.x, d.y));
-  gl_FragColor = vec4(vec3(1.0, 0.97, 0.9) * uK * (0.55 + 0.45 * soft), 1.0);
+  gl_FragColor = vec4(uTint * uK * (0.55 + 0.45 * soft), 1.0);
 }
 `;
-export function buildLightRays(reach = 4.5, { nearW = DOOR_W, nearH = DOOR_H, farW = 2.3, farH = CEIL_TOP, gapZ = -WALL_T / 2 - 0.01, z0 = WALL_T / 2, gapK = 1 } = {}) {
+export function buildLightRays(reach = 4.5, { nearW = DOOR_W, nearH = DOOR_H, farW = 2.3, farH = CEIL_TOP, gapZ = -WALL_T / 2 - 0.01, z0 = WALL_T / 2, gapK = 1, tint = [1.0, 0.97, 0.9] } = {}) {
   const g = new THREE.Group();
-  const uniforms = { uK: { value: 0 }, uTime: { value: 0 } };
-  const gapUniforms = { uK: { value: 0 } };
+  const tintV = new THREE.Vector3(...tint);              // shared by every plane: setTint() recolours the whole shaft
+  const uniforms = { uK: { value: 0 }, uTime: { value: 0 }, uTint: { value: tintV } };
+  const gapUniforms = { uK: { value: 0 }, uTint: { value: tintV } };
   const mat = new THREE.ShaderMaterial({ uniforms, vertexShader: RAY_VERT, fragmentShader: RAY_FRAG,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
   const z1 = z0 + reach;
@@ -219,7 +224,7 @@ export function buildLightRays(reach = 4.5, { nearW = DOOR_W, nearH = DOOR_H, fa
   g.add(gap);
   g.visible = false;
   return {
-    group: g,
+    group: g, tint: tintV,
     set(k, time) { uniforms.uK.value = k; gapUniforms.uK.value = k * gapK; uniforms.uTime.value = time; g.visible = k > 0.002; },
     dispose() { g.traverse(o => o.geometry?.dispose()); mat.dispose(); gapMat.dispose(); },
   };

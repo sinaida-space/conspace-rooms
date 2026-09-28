@@ -74,15 +74,17 @@ const DOOR_SLAM = 0.22;          // seconds to slam shut
 const PORTAL_SEEN_FEAR = 3;      // works seen in fear before its portal is summoned
 const PORTAL_SEEN_MEMORY = 5;    // works seen in memory (past the room) before the way into the light
 const PORTAL_NEAR = 8;           // metres: a summoned portal never lands closer than this
-const PORTAL_FAR = 16;           // metres: nor further than this
-const STAIR_NEAR = 2.6;          // metres: this close and roughly facing it, the metal door gives way
-const STAIR_FOV = 50;            // degrees off the view still counted as "coming near" the door
-const STAIR_OPEN = 0.35;         // seconds: it swings open
-const STAIR_HOLD = 2.5;          // seconds held, smoke and a little light
+const PORTAL_FAR = 24;           // metres: nor further than this
+const STAIR_NEAR = 3.2;          // metres: this close, the metal door gives way, each time the visitor passes
+const STAIR_OPEN = 1.3;          // seconds: it swings open
+const STAIR_HOLD = 5.0;          // seconds held, with the light pouring out
 const STAIR_SLAM = 0.2;          // seconds: it slams shut
-const STAIR_SWING = 1.5;         // radians: how far it gives way
-const STAIR_BEFORE_MIN = 2;      // metres before the portal a metal door may stand
-const STAIR_BEFORE_MAX = 5;
+const STAIR_SWING = 1.15;        // radians: how far it gives way, as the other doors do
+const STAIR_FLY = 1.0;           // seconds the view takes to fly to the doorway
+const STAIR_FREE = 0.175;        // radians (10°) the view may be turned while it is held
+const STAIR_TURN = 1.0;          // seconds the view takes to come round onto the way on
+const STAIR_BEFORE_MIN = 4.8;      // metres before the portal a metal door may stand
+const STAIR_BEFORE_MAX = 30;
 const CHILD_AFTER = 30;          // seconds of walking backwards
 const CHILD_EYE = 0.98;
 const SOUL_HOLD = 5;             // seconds a soul's question stays before another may open
@@ -153,6 +155,20 @@ function clockPlan(cx, cz, reserved) {
 // ── small helpers ───────────────────────────────────────────────────────────
 const cellOf = v => Math.floor(v / CELL);
 const centreOf = g => (g + 0.5) * CELL;
+
+// The holy free zone: nothing stands within five steps (3.6 m) of a corridor
+// crossing. cornerDist is the distance in metres from a point to the nearest
+// crossing square of the 2-cell corridor lattice (bands 4-5 and 10-11 of a
+// 16-cell chunk, along both axes).
+const CORNER_FREE = 3.6;
+const BAND_SPANS = [[-6, -4], [4, 6], [10, 12], [20, 22]];
+function bandGap(u) {
+  const m = ((u % CHUNK) + CHUNK) % CHUNK;
+  let d = Infinity;
+  for (const [lo, hi] of BAND_SPANS) d = Math.min(d, Math.max(0, lo - m, m - hi));
+  return d;
+}
+const cornerDist = (x, z) => Math.hypot(bandGap(x / CELL), bandGap(z / CELL)) * CELL;
 
 function pick(list, r) { return list[Math.floor(r * list.length) % list.length]; }
 
@@ -291,7 +307,7 @@ export class SoulPath {
     this._stageSeenIds = new Set(); // ids already counted into stageSeen
     this.summonedPortals = {};      // target -> { x, z, west, cx, cz }
     this.stairwellPlan = null;      // the fear-stage metal door's plan, once summoned
-    this._stairDone = false;        // it never gives way twice in one visit
+    this._stairDone = false;        // the dream line is said the first time only
     this.doorsOpen = new Set();     // door keys opened this visit (none now: doors only give way for a moment)
     this.doorsDone = new Set();     // doors that already gave way and slammed: they stay shut
     this._doorLights = [];          // light from a door ajar, for the walls to catch
@@ -411,6 +427,7 @@ export class SoulPath {
       if (!EGG_BAND.has(i) && !EGG_BAND.has(j)) continue;
       const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
       if (solidAtGlobal(gi, gj) || reserved.has(cellKey(gi, gj)) || ward?.has(cellKey(gi, gj))) continue;
+      if (cornerDist(centreOf(gi), centreOf(gj)) < CORNER_FREE) continue;
       let clear = true;
       for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (solidAtGlobal(gi + di, gj + dj)) clear = false;
       if (clear) out.push({ x: centreOf(gi), z: centreOf(gj) });
@@ -455,7 +472,7 @@ export class SoulPath {
     // ── writings: about half the chunks get one, on a deterministic wall run
     const rw = mulberry32(hash2i(SEED_WRITING, cx, cz));
     if (rw() < 0.55) {
-      const slots = this.world.getWallSlots(cx, cz).filter(s => s.length >= 2);
+      const slots = this.world.getWallSlots(cx, cz).filter(s => s.length >= 2 && cornerDist(s.position.x, s.position.z) >= CORNER_FREE);
       if (slots.length) {
         const slot = slots[Math.floor(rw() * slots.length)];
         const along = (rw() - 0.5) * (slot.length - 1.6) * CELL; // slide along the run
@@ -966,31 +983,47 @@ export class SoulPath {
     const plan = this.stairwellPlan;
     if (!plan || plan.cx !== cx || plan.cz !== cz || stuff.stairwell) return;
     const idx = (hash2i(SEED_STAIR, 0, 0) % 5) + 1;
-    const sw = buildStairwell(`assets/stairs/stairs_${idx}.webp`);
+    const sw = buildStairwell(this.atmo, `assets/stairs/stairs_${idx}.webp`);
     sw.group.position.set(plan.x, 0, plan.z);
     sw.group.rotation.y = plan.rotY;
     group.add(sw.group);
-    sw.phase = this._stairDone ? 'done' : 'wait';
+    sw.phase = 'wait';
     sw.t = 0;
     stuff.stairwell = sw;
   }
 
-  // Every open cell where both axes sit on the corridor lattice is a true
-  // crossing (a small 2×2 open square where two 2-cell corridors meet) — the
-  // same width a portal or a presence door already spans. Cells the visitor
-  // cannot yet walk to (behind a closed presence door) are left out.
+  // Spots for a portal: the exact centre line of a plain 2-cell corridor,
+  // never a crossing, never where a room opens onto it — solid wall on both
+  // sides of the cell and of the cells either side of it along the corridor.
+  // Returns the centre of the 2-cell width, and whether the visitor crosses
+  // the frame moving in x (west) or in z. Cells the visitor cannot yet walk
+  // to (behind a closed presence door) are left out.
   _latticeCrossings(gi0, gj0, near, far, reach) {
     const out = [];
     const R = Math.ceil(far / CELL) + 1;
+    const bandLow = v => { const m = mod16(v); return m === 4 || m === 10; };   // first cell of a 2-cell band
     for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
       const gi = gi0 + di, gj = gj0 + dj;
-      if (!EGG_BAND.has(mod16(gi)) || !EGG_BAND.has(mod16(gj))) continue;
       if (solidAtGlobal(gi, gj)) continue;
-      const x = centreOf(gi), z = centreOf(gj);
+      const inI = EGG_BAND.has(mod16(gi)), inJ = EGG_BAND.has(mod16(gj));
+      if (inI === inJ) continue;                       // a crossing or a room cell, not a plain corridor
+      let x, z, west;
+      if (inI) {                                       // a corridor running along z: walls at i-1 and i+2
+        const lo = bandLow(gi) ? gi : gi - 1;
+        if ([-1, 0, 1].some(k => !solidAtGlobal(lo - 1, gj + k) || !solidAtGlobal(lo + 2, gj + k))) continue;
+        if (gi !== lo) continue;                       // one candidate per corridor cell row
+        x = (lo + 1) * CELL; z = centreOf(gj); west = false;
+      } else {                                         // a corridor running along x
+        const lo = bandLow(gj) ? gj : gj - 1;
+        if ([-1, 0, 1].some(k => !solidAtGlobal(gi + k, lo - 1) || !solidAtGlobal(gi + k, lo + 2))) continue;
+        if (gj !== lo) continue;
+        x = centreOf(gi); z = (lo + 1) * CELL; west = true;
+      }
       const d = Math.hypot(x - centreOf(gi0), z - centreOf(gj0));
       if (d < near || d > far) continue;
+      if (cornerDist(x, z) < CORNER_FREE) continue;    // never near a corner
       if (reach && !reach.has(gi + ',' + gj)) continue;
-      out.push({ gi, gj, x, z, d });
+      out.push({ gi, gj, x, z, d, west });
     }
     return out;
   }
@@ -1008,11 +1041,11 @@ export class SoulPath {
     for (const c of cands) c.ahead = (fx * (c.x - P.pos.x) + fz * (c.z - P.pos.y)) / (c.d || 1);
     cands.sort((a, b) => b.ahead - a.ahead || a.d - b.d);
     const c = cands[0];
-    const west = Math.abs(c.x - P.pos.x) >= Math.abs(c.z - P.pos.y);
-    const plan = { x: c.x, z: c.z, west, target, cx: Math.floor(c.gi / CHUNK), cz: Math.floor(c.gj / CHUNK) };
+    const plan = { x: c.x, z: c.z, west: c.west, target, cx: Math.floor(c.gi / CHUNK), cz: Math.floor(c.gj / CHUNK) };
     this.summonedPortals[target] = plan;
     const stuff = this.chunkStuff.get(plan.cx + ':' + plan.cz);
-    if (stuff) stuff.portals.push(this._makePortal(stuff.group, plan.x, plan.z, plan.west, target));
+    this._clearAround(plan.x, plan.z, 2.4);
+    if (stuff) { stuff.portals.push(this._makePortal(stuff.group, plan.x, plan.z, plan.west, target)); this._rebuildChunkProps(plan.cx, plan.cz, stuff); }
     this.post?.burst(0.4);
     this.audio?.whisper?.();
     if (target === 1) this._summonStairwell(plan, gi0, gj0);
@@ -1053,17 +1086,47 @@ export class SoulPath {
       if (d >= STAIR_BEFORE_MIN && d <= STAIR_BEFORE_MAX) zone.push({ gi: pi, gj: pj });
       if (d > STAIR_BEFORE_MAX) break;
     }
-    for (const w of zone) {
-      const cx = Math.floor(w.gi / CHUNK), cz = Math.floor(w.gj / CHUNK);
-      const wallSlots = this.world.getWallSlots(cx, cz);
-      const hung = new Set(artworkSlots(cx, cz, wallSlots).map(sl => sl.cellKey));
-      const slot = wallSlots.find(s => s.length >= 2 && !hung.has(s.cellKey) && slotNearCell(s, w.gi, w.gj));
-      if (!slot) continue;
-      this.stairwellPlan = { x: slot.position.x, z: slot.position.z, rotY: Math.atan2(slot.normal.x, slot.normal.z), cx, cz };
-      const stuff = this.chunkStuff.get(cx + ':' + cz);
-      if (stuff) this._ensureStairwellFor(cx, cz, stuff.group, stuff);
-      return;
+    for (const clear of [CORNER_FREE, 1.8]) {          // the holy zone first; only if no slot at all, a smaller one
+      for (const w of zone) {
+        const cx = Math.floor(w.gi / CHUNK), cz = Math.floor(w.gj / CHUNK);
+        const wallSlots = this.world.getWallSlots(cx, cz);
+        const hung = new Set(artworkSlots(cx, cz, wallSlots).map(sl => sl.cellKey));
+        // the door may slide along a run of wall, off its middle, to stand clear of the corners
+        let slot = null, at = null;
+        for (const sl of wallSlots) {
+          if (sl.length < 2 || hung.has(sl.cellKey) || !slotNearCell(sl, w.gi, w.gj)) continue;
+          const tx = Math.abs(sl.normal.z), tz = Math.abs(sl.normal.x), reach = sl.length * CELL / 2 - 0.9;
+          for (let off = 0; off <= reach + 1e-6 && !at; off += 0.3) for (const sgn of off ? [1, -1] : [1]) {
+            const x = sl.position.x + tx * off * sgn, z = sl.position.z + tz * off * sgn;
+            if (cornerDist(x, z) >= clear && Math.hypot(x - portal.x, z - portal.z) >= 4.8) { slot = sl; at = { x, z }; break; }
+          }
+          if (at) break;
+        }
+        if (!slot) continue;
+        this.stairwellPlan = { x: at.x, z: at.z, rotY: Math.atan2(slot.normal.x, slot.normal.z), cx, cz };
+        this._clearAround(at.x, at.z, 2.4);
+        const stuff = this.chunkStuff.get(cx + ':' + cz);
+        if (stuff) {
+          this._ensureStairwellFor(cx, cz, stuff.group, stuff);
+          this._rebuildChunkProps(cx, cz, stuff);          // whatever already stood there makes way for the door
+        }
+        return;
+      }
     }
+  }
+
+
+  // The heading that looks straight down the route to a portal: toward the
+  // route's cell a few steps ahead, so it follows the corridor rather than
+  // cutting across corners. null when there is no portal or no route.
+  _wayYaw(portal) {
+    if (!portal) return null;
+    const P = this.player;
+    const gi = cellOf(portal.x - 0.01), gj = cellOf(portal.z - 0.01);
+    const path = this._route((i, j) => (Math.abs(i - gi) <= 1 && Math.abs(j - gj) <= 1 ? Infinity : -Math.hypot(i - gi, j - gj)), cellOf(P.pos.x), cellOf(P.pos.y), 20000);
+    if (path.length < 2) return null;
+    const [ti, tj] = path[Math.min(4, path.length - 1)];
+    return Math.atan2(-(centreOf(ti) - P.pos.x), -(centreOf(tj) - P.pos.y));
   }
 
   // Threshold check, run every frame: cheap when nothing is due.
@@ -1096,6 +1159,7 @@ export class SoulPath {
       const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
       if (solidAtGlobal(gi, gj)) continue;
       if (wardCells?.has(cellKey(gi, gj))) continue;  // the hospital's things own these cells
+      if (cornerDist(centreOf(gi), centreOf(gj)) < CORNER_FREE) continue;   // the holy zone round a corner stays bare
       const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([di, dj]) => solidAtGlobal(gi + di, gj + dj));
       const r = rnd();
       if (!side) continue;                              // only along walls, so paths stay clear
@@ -1139,11 +1203,12 @@ export class SoulPath {
     const avoid = [];
     for (const target of [1, 2]) {
       const p = this.summonedPortals[target];
-      if (p && p.cx === cx && p.cz === cz) avoid.push([cellOf(p.x), cellOf(p.z), 2]);
+      if (p && p.cx === cx && p.cz === cz) avoid.push([cellOf(p.x), cellOf(p.z), 3]);
     }
-    if (this.stairwellPlan?.cx === cx && this.stairwellPlan?.cz === cz) avoid.push([cellOf(this.stairwellPlan.x), cellOf(this.stairwellPlan.z), 1]);
+    if (this.stairwellPlan?.cx === cx && this.stairwellPlan?.cz === cz) avoid.push([cellOf(this.stairwellPlan.x), cellOf(this.stairwellPlan.z), 3]);
     if (st === 1) { const k = kitchenPlan(cx, cz); if (k) avoid.push([cellOf(k.x), cellOf(k.z), 5]); }
     const free = (gi, gj) => !solidAtGlobal(gi, gj) && !reserved.has(cellKey(gi, gj)) && !ward?.has(cellKey(gi, gj))
+      && cornerDist(centreOf(gi), centreOf(gj)) >= CORNER_FREE
       && avoid.every(([ai, aj, r]) => Math.max(Math.abs(gi - ai), Math.abs(gj - aj)) > r);
     const wallSpots = [], airSpots = [];
     for (let j = 1; j < CHUNK - 1; j++) for (let i = 1; i < CHUNK - 1; i++) {
@@ -1176,6 +1241,72 @@ export class SoulPath {
       x: centreOf(s.gi) + s.di * CELL / 2, z: centreOf(s.gj) + s.dj * CELL / 2, nx: -s.di, nz: -s.dj, r: rp(), run3: s.run3 }));
     const air = st === 2 ? choose(airSpots, low ? 2 : 4, 4).map(s => ({ x: centreOf(s.gi), z: centreOf(s.gj), r: rp() })) : [];
     return this.props.build(group, st, walls, air);
+  }
+
+  // Where the view is taken to see into the door: a step and a bit in front
+  // of it, a little to the free side of the leaf's swing, looking at the
+  // opening. { from, spot, doorYaw, ... } — see _stairHold.
+  _stairView(sw) {
+    const P = this.player, r = sw.group.rotation.y;
+    const nx = Math.sin(r), nz = Math.cos(r), ax = Math.cos(r), az = -Math.sin(r);   // out of the wall, and along it (the door's local +x)
+    let spot = null;
+    for (const dist of [1.4, 1.1, 0.8]) {
+      const x = sw.group.position.x + nx * dist + ax * 0.3, z = sw.group.position.z + nz * dist + az * 0.3;
+      if (this.world.isWalkable(x, z)) { spot = { x, z }; break; }
+    }
+    spot ??= { x: P.pos.x, z: P.pos.y };
+    return {
+      from: { x: P.pos.x, z: P.pos.y }, spot, yaw0: P.yaw, pitch0: P.pitch,
+      doorYaw: Math.atan2(-(sw.group.position.x - 0.05 * ax - spot.x), -(sw.group.position.z - 0.05 * az - spot.z)),
+      way: null, yawFrom: 0, pitchFrom: 0, turnT: 0,
+    };
+  }
+
+  // One frame of the held view: it flies to the spot while the door opens,
+  // stays there with only a few degrees of turn, and comes round level onto
+  // the way on as the door shuts.
+  _stairHold(sw, dt) {
+    const P = this.player, c = sw.cam;
+    const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+    const ease = e => e * e * (3 - 2 * e);
+    P.vel.set(0, 0);
+    if (sw.phase === 'open') {
+      const e = ease(Math.min(1, sw.t / STAIR_FLY));
+      P.pos.set(c.from.x + (c.spot.x - c.from.x) * e, c.from.z + (c.spot.z - c.from.z) * e);
+      P.yaw = c.doorYaw + wrap(c.yaw0 - c.doorYaw) * (1 - e);
+      P.pitch = c.pitch0 * (1 - e);
+    } else if (sw.phase === 'hold') {
+      P.pos.set(c.spot.x, c.spot.z);
+      P.yaw = c.doorYaw + Math.max(-STAIR_FREE, Math.min(STAIR_FREE, wrap(P.yaw - c.doorYaw)));
+      P.pitch = Math.max(-STAIR_FREE, Math.min(STAIR_FREE, P.pitch));
+    } else {                                            // slam, turn
+      c.turnT += dt;
+      const e = ease(Math.min(1, c.turnT / STAIR_TURN));
+      P.pos.set(c.spot.x, c.spot.z);
+      P.yaw = c.yawFrom + wrap(c.way - c.yawFrom) * e;
+      P.pitch = c.pitchFrom * (1 - e);
+    }
+    P._apply(0);
+  }
+
+  // Whatever hangs on the walls within r metres of a spot (notice boards,
+  // carpets, writings) is taken down: a door or a portal owns that stretch.
+  _clearAround(x, z, r) {
+    const near = m => Math.hypot(m.position.x - x, m.position.z - z) < r;
+    for (const st of this.chunkStuff.values()) {
+      st.posters = (st.posters || []).filter(p => { if (!near(p.mesh)) return true; p.mesh.parent?.remove(p.mesh); return false; });
+      st.carpets = (st.carpets || []).filter(m => { if (!near(m)) return true; m.parent?.remove(m); return false; });
+      st.writings = (st.writings || []).filter(w => { if (!near(w.mesh)) return true; w.mesh.parent?.remove(w.mesh); return false; });
+    }
+  }
+
+  // A door or a portal has just been given a place in this chunk: what was
+  // already built there is drawn again so nothing is left standing on it.
+  _rebuildChunkProps(cx, cz, st) {
+    st.scatter?.dispose();
+    st.scatter = this._buildScatter(st.group, cx, cz);
+    st.props?.dispose();
+    st.props = this._buildProps(st.group, cx, cz, st.reserved || new Set());
   }
 
   _rebuildScatter() {
@@ -1921,38 +2052,68 @@ export class SoulPath {
       }
     }
 
-    // the metal door onto the stairwell (fear only, once this visit): no
-    // waiting, it gives way the moment the visitor is close and looking
-    // roughly at it.
-    if (!this._stairDone) for (const s of this.chunkStuff.values()) {
+    // the metal door onto the stairwell (fear only): every time the visitor
+    // comes close, the view is taken — flown from wherever they stand to a spot
+    // in front of the doorway, looking in — while the door gives way and shows
+    // the stairwell with light in the tone of its photograph pouring out. The
+    // view can be turned only a few degrees while it is held. As the door
+    // shuts the view comes round, level, onto the way on, and the walk is the
+    // visitor's again. It re-arms once they have walked away.
+    const eye = new THREE.Vector3();
+    for (const s of this.chunkStuff.values()) {
       const sw = s.stairwell;
-      if (!sw || sw.phase === 'done') continue;
+      if (!sw) continue;
+      const d = Math.hypot(sw.group.position.x - P.pos.x, sw.group.position.z - P.pos.y);
+      let k = 0;
       if (sw.phase === 'wait') {
-        const dx = sw.group.position.x - P.pos.x, dz = sw.group.position.z - P.pos.y, d = Math.hypot(dx, dz);
-        const ang = Math.acos(Math.max(-1, Math.min(1, (fx * dx + fz * dz) / (d || 1e-6)))) * 180 / Math.PI;
-        if (this.finale || d >= STAIR_NEAR || ang >= STAIR_FOV) continue;
+        if (this.finale || d >= STAIR_NEAR) continue;
         sw.phase = 'open'; sw.t = 0;
-        this.audio?.collapse?.();
+        if (!P.locked && !P.auto) sw.cam = this._stairView(sw);
+        this.audio?.doorCreak?.(STAIR_OPEN + 0.4);
+        this.audio?.doorLight?.(STAIR_HOLD + 1);
       }
       sw.t += dt;
       if (sw.phase === 'open') {
         const e = Math.min(1, sw.t / STAIR_OPEN);
+        // negative, as the presence doors: the leaf swings out toward the visitor
         sw.pivot.rotation.y = -STAIR_SWING * (1 - (1 - e) ** 3);
-        sw.tick(dt, time, e);
+        k = e;
         if (sw.t >= STAIR_OPEN) { sw.phase = 'hold'; sw.t = 0; }
       } else if (sw.phase === 'hold') {
         sw.pivot.rotation.y = -STAIR_SWING;
-        sw.tick(dt, time, 1);
-        if (sw.t >= STAIR_HOLD) { sw.phase = 'slam'; sw.t = 0; }
+        k = 1;
+        if (sw.t >= STAIR_HOLD) {
+          sw.phase = 'slam'; sw.t = 0;
+          if (sw.cam) {                                   // the view will come round onto the way on
+            sw.cam.way = this._wayYaw(this.summonedPortals[this.stage.stage + 1]) ?? sw.cam.doorYaw;
+            sw.cam.yawFrom = P.yaw; sw.cam.pitchFrom = P.pitch; sw.cam.turnT = 0;
+          }
+        }
       } else if (sw.phase === 'slam') {
         const e = Math.min(1, sw.t / STAIR_SLAM);
         sw.pivot.rotation.y = -STAIR_SWING * (1 - e * e);
-        sw.tick(dt, time, 1 - e);
+        k = 1 - e;
         if (e >= 1) {
-          sw.phase = 'done'; this._stairDone = true;
-          this.audio?.slam?.();
-          this.post?.burst?.(0.6);
-          this._say(null, t('stairDream'));
+          sw.phase = 'turn'; sw.t = 0;
+          this.audio?.doorSlam?.();
+          this.post?.burst?.(0.4);
+          if (!this._stairDone) { this._stairDone = true; this._say(null, t('stairDream')); }
+        }
+      } else if (sw.phase === 'turn') {
+        if (!sw.cam || sw.cam.turnT >= STAIR_TURN) { sw.cam = null; sw.phase = 'cool'; }
+      } else if (sw.phase === 'cool') {
+        if (d > STAIR_NEAR + 1.5) sw.phase = 'wait';   // walked away: it will open for the next pass
+      }
+      if (sw.cam) this._stairHold(sw, dt);
+      eye.set(P.pos.x, P.eyeH ?? EYE_HEIGHT, P.pos.y);
+      sw.tick(dt, time, k, eye);
+      if (k > 0.01) {                                  // the walls and floor catch it, in the photograph's tone
+        sw.lights ??= [[0.6, 1.3], [2.0, 1.0]].map(([z, y]) => ({ at: new THREE.Vector3(0, y, z), p: new THREE.Vector3(), x: 0, y: 0, z: 0, col: new THREE.Color() }));
+        for (const l of sw.lights) {
+          sw.rays.group.localToWorld(l.p.copy(l.at));
+          l.x = l.p.x; l.y = l.p.y; l.z = l.p.z;
+          l.col.setRGB(sw.tint.x, sw.tint.y, sw.tint.z).multiplyScalar(0.45 * k);
+          this._doorLights.push(l);
         }
       }
     }
