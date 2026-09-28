@@ -22,7 +22,7 @@ const DOOR_W = 0.9, DOOR_H = 2.05, FRAME = 0.08, WALL_T = 0.2; // matches doorwa
 const ROOM_HW = 1.6;            // half width of the room behind the door
 const ROOM_D = 3.4;             // its depth
 const ROOM_FLOOR = -1.0;        // its floor sits below the doorstep: a stairwell drops away
-const DEFAULT_TINT = [0.45, 0.72, 0.9];
+const DEFAULT_TINT = [0.42, 0.34, 0.24];   // a dim tungsten until the photograph says otherwise
 
 const box = (w, h, d) => roundedBox(w, h, d, Math.min(0.04, Math.min(w, h, d) * 0.3));
 
@@ -46,6 +46,9 @@ const float HW = ${ROOM_HW.toFixed(2)};
 const float RD = ${ROOM_D.toFixed(2)};
 const float FY = ${ROOM_FLOOR.toFixed(2)};
 const float DW = ${DOOR_W.toFixed(3)}, DH = ${DOOR_H.toFixed(3)};
+float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }
 vec3 pic(vec2 uv){                                       // the photograph, mirror-folded past its edges
   uv = 1.0 - abs(1.0 - mod(uv, 2.0));
   return texture2D(uMap, uv).rgb;
@@ -69,7 +72,39 @@ void main(){
   col *= mix(0.6, 1.0, smoothstep(0.0, 0.5, dz / RD));   // a little shade toward the door, for depth
   float q = min(min(vP.x / DW + 0.5, 0.5 - vP.x / DW) * 6.0, 1.0);
   col *= mix(0.65, 1.0, q);                              // the reveal's own shadow at the frame
-  gl_FragColor = vec4(col, uK);
+
+  // ── the nightmare: one bare bulb swinging on its flex (the same one that
+  // lights the door's edges, stairwell.js tick), the picture drained toward
+  // the hospital's sick green and the bulb's tungsten, fog lying low and
+  // thick at the threshold, heavy crawling grain
+  float sw = sin(uTime * 1.7) * 0.35;
+  vec3 bulb = vec3(sw, 2.25 - abs(sw) * 0.15, -0.9);
+  float flick = 0.85 + 0.15 * sin(uTime * 23.0) * sin(uTime * 7.1);
+  vec3 toB = bulb - hit; float db = length(toB);
+  float lb = flick * (0.6 + 5.0 / (1.0 + db * db));    // the room is lit by it and nothing else
+  float grey = dot(col, vec3(0.3, 0.55, 0.15));
+  col = mix(vec3(grey), col, 0.35) * vec3(0.85, 1.0, 0.82) * mix(vec3(1.0), vec3(1.25, 1.0, 0.7), 0.5) * lb;
+  col = smoothstep(0.0, 0.62, col);              // hard contrast: the steps and the windows cut out of the dark
+  // fog: denser the further the ray goes and the lower it runs, drifting
+  float fn = n2(hit.xz * 1.3 + vec2(uTime * 0.12, -uTime * 0.07)) * 0.6 + n2(hit.xy * 2.1 - uTime * 0.05) * 0.4;
+  float low = smoothstep(1.2, -0.8, hit.y);
+  float fog = 1.0 - exp(-t * (0.08 + 0.35 * low) * (0.6 + 0.8 * fn));
+  float nearB = 1.0 / (1.0 + 4.0 * dot(bulb - (vP + rd * min(t, 1.5)), bulb - (vP + rd * min(t, 1.5))));   // the haze glows round the bulb
+  vec3 fogC = vec3(0.07, 0.085, 0.065) * (0.6 + 0.8 * fn) + vec3(1.0, 0.75, 0.45) * nearB * 0.9 * flick;
+  col = mix(col, fogC, clamp(fog, 0.0, 0.8));
+  // the bulb itself, a hot point where the ray passes close to it
+  vec3 cb = bulb - vP; float along = clamp(dot(cb, rd), 0.0, t);
+  float miss = length(cb - rd * along);
+  col += vec3(1.0, 0.82, 0.55) * flick * (exp(-miss * miss * 900.0) * 3.0 + exp(-miss * miss * 40.0) * 0.35);
+  // and a veil of it right in the opening, thickest along the frame
+  float veil = (1.0 - q) * 0.45 + 0.3 * fn * smoothstep(0.9, -0.2, vP.y);
+  col = mix(col, fogC * 1.6 + vec3(0.05, 0.055, 0.045), clamp(veil, 0.0, 0.7));
+  // grain, heavy and alive: every frame another
+  vec2 gp = floor(gl_FragCoord.xy * 0.75);
+  float gr = fract(sin(dot(gp + floor(uTime * 24.0) * vec2(17.0, 31.0), vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+  col += gr * 0.3 * (0.35 + grey);
+  col *= 1.0 - 0.35 * smoothstep(0.35, 0.7, length((vP.xy - vec2(0.0, DH * 0.5)) / vec2(DW, DH)));
+  gl_FragColor = vec4(max(col, 0.0), uK);
   #include <colorspace_fragment>
 }
 `;
@@ -259,8 +294,10 @@ export function buildStairwell(atmo, imgUrl) {
     const c = img.userData.tint ??= photoTint(img.image);   // the photograph's light: its bright pixels' colour
     roomMat.uniforms.uGain.value = c.gain;
     roomMat.uniforms.uTint.value.setRGB(c[0], c[1], c[2]);
-    rays.tint.set(c[0], c[1], c[2]);
-    cloudMat.uniforms.uTint.value.setRGB(c[0], c[1], c[2]);
+    // what pours out is the bulb's tungsten more than the photograph's tone, and dim
+    const w = [0.3 * c[0] + 0.55, 0.3 * c[1] + 0.4, 0.3 * c[2] + 0.22].map(v => v * 0.6);
+    rays.tint.set(w[0], w[1], w[2]);
+    cloudMat.uniforms.uTint.value.setRGB(w[0], w[1], w[2]);
   };
   const placeholder = roomMat.uniforms.uMap.value;
   const setImage = url => {

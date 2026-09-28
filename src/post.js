@@ -14,6 +14,7 @@ uniform vec3 uBloom;   // bloom tint: phosphor green in the dark stages, warm wh
 // soft edges for whatever is not drawn yet (sketches, ?edge=a|b|c):
 // 1 dusty fog dissolve by depth, 2 dreamy periphery blur, 3 soft silhouettes
 uniform int uEdge;
+uniform float uBlack;  // a slam: the frame goes to black grain for a moment
 uniform sampler2D tDepth;
 uniform vec2 uNearFar;
 uniform vec3 uFogCol;
@@ -98,6 +99,8 @@ void main(){
 
   if (uEdge == 4 && (abs(vUv.x - 0.3333) < 0.0012 || abs(vUv.x - 0.6667) < 0.0012)) c = vec3(0.9, 0.1, 0.1);
 
+  if (uBlack > 0.0) c = mix(c, vec3(hash(floor(vUv * vec2(320.0, 200.0)) + fract(uTime * 7.0)) * 0.22), uBlack);
+
   // scanlines + noise
   c *= mix(1.0, 0.90 + 0.10 * sin(uv.y * 900.0 + uTime * 8.0), uCrt);
   c += (hash(uv * vec2(1441.0, 907.0) + fract(uTime)) - 0.5) * 0.055 * uCrt;
@@ -115,6 +118,7 @@ export function createPost(renderer, quality) {
     tScene: { value: null }, tWater: { value: null }, uWaterOn: { value: 0 },
     uTime: { value: 0 }, uShift: { value: 0 }, uGlitch: { value: 0 }, uCrt: { value: 1 },
     uBloom: { value: new THREE.Vector3(0.25, 0.85, 0.45) },
+    uBlack: { value: 0 },
     uEdge: { value: { a: 1, b: 2, c: 3, abc: 4 }[new URLSearchParams(location.search).get('edge')] || 0 },
     tDepth: { value: null }, uNearFar: { value: new THREE.Vector2(0.1, 100) },
     uFogCol: { value: new THREE.Color() }, uFogFar: { value: 50 },
@@ -131,7 +135,7 @@ export function createPost(renderer, quality) {
     tag.innerHTML = ['A', 'B', 'C'].map(l => `<span style="flex:1;text-align:center">${l}</span>`).join('');
     document.body.appendChild(tag);
   }
-  let glitch = 0;
+  let glitch = 0, blackT = 0;
 
   function resize() {
     if (rt) rt.dispose();
@@ -148,9 +152,12 @@ export function createPost(renderer, quality) {
     get enabled() { return quality.p.post; },
     resize,
     burst(strength = 1) { glitch = Math.min(1.5, glitch + strength); },
+    black(seconds = 0.3) { blackT = seconds; },
     render(mainScene, mainCam, dt, t, speed) {
       if (!quality.p.post) { renderer.setRenderTarget(null); renderer.render(mainScene, mainCam); return; }
       glitch = Math.max(0, glitch - dt * 2.2);
+      blackT = Math.max(0, blackT - dt);
+      uniforms.uBlack.value = blackT > 0 ? 1 : Math.max(0, uniforms.uBlack.value - dt * 6);   // holds, then lets the frame back in a sixth of a second
       uniforms.uTime.value = t;
       if (uniforms.uEdge.value) {
         uniforms.uNearFar.value.set(mainCam.near, mainCam.far);

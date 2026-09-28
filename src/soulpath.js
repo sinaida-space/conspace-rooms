@@ -76,6 +76,7 @@ const PORTAL_SEEN_FEAR = 3;      // works seen in fear before its portal is summ
 const PORTAL_SEEN_MEMORY = 5;    // works seen in memory (past the room) before the way into the light
 const PORTAL_NEAR = 8;           // metres: a summoned portal never lands closer than this
 const PORTAL_FAR = 24;           // metres: nor further than this
+const STAIR_NIGHTMARE = true;     // false: the calm version, only the door, fog and light, no zoom, no sound, no blackout
 const STAIR_NEAR = 3.2;          // metres: this close, the metal door gives way, each time the visitor passes
 const STAIR_OPEN = 1.3;          // seconds: it swings open
 const STAIR_HOLD = 5.0;          // seconds held, with the light pouring out
@@ -1153,6 +1154,11 @@ export class SoulPath {
   _maybeSummonPortal(time) {
     const st = this.stage.stage;
     if (st === 0 && !this.summonedPortals[1] && this.stageSeen[0] >= PORTAL_SEEN_FEAR) this._summonPortal(1, time);
+    else if (st === 0 && this.summonedPortals[1] && !this.stairwellPlan && time - (this._stairTry || 0) > 1) {
+      // no wall for the metal door on the first try: look again from wherever the walk is now
+      this._stairTry = time;
+      this._summonStairwell(this.summonedPortals[1], cellOf(this.player.pos.x), cellOf(this.player.pos.y));
+    }
     else if (st === 1 && !this.summonedPortals[2] && this.visitedRoom && this.stageSeen[1] >= PORTAL_SEEN_MEMORY) this._summonPortal(2, time);
   }
 
@@ -2104,6 +2110,7 @@ export class SoulPath {
         if (!P.locked && !P.auto) sw.cam = this._stairView(sw);
         this.audio?.doorCreak?.(STAIR_OPEN + 0.4);
         this.audio?.doorLight?.(STAIR_HOLD + 1);
+        if (STAIR_NIGHTMARE) { this.audio?.nightmare?.(STAIR_OPEN + STAIR_HOLD); sw.fov0 = P.camera.fov; }
       }
       sw.t += dt;
       if (sw.phase === 'open') {
@@ -2115,6 +2122,10 @@ export class SoulPath {
       } else if (sw.phase === 'hold') {
         sw.pivot.rotation.y = -STAIR_SWING;
         k = 1;
+        if (STAIR_NIGHTMARE && sw.fov0) {                // the corridor seems to stretch away: a slow creeping zoom in
+          const e = Math.min(1, sw.t / STAIR_HOLD);
+          P.camera.fov = sw.fov0 * (1 - 0.14 * e * e * (3 - 2 * e)); P.camera.updateProjectionMatrix();
+        }
         if (sw.t >= STAIR_HOLD) {
           sw.phase = 'slam'; sw.t = 0;
           if (sw.cam) {                                   // the view will come round onto the way on
@@ -2130,6 +2141,10 @@ export class SoulPath {
           sw.phase = 'turn'; sw.t = 0;
           this.audio?.doorSlam?.();
           this.post?.burst?.(0.4);
+          if (STAIR_NIGHTMARE) {
+            this.post?.black?.(0.3);
+            if (sw.fov0) { P.camera.fov = sw.fov0; P.camera.updateProjectionMatrix(); sw.fov0 = 0; }
+          }
           if (!this._stairDone) { this._stairDone = true; this._say(null, t('stairDream')); }
         }
       } else if (sw.phase === 'turn') {

@@ -241,6 +241,37 @@ export class AudioEngine {
 
   // A presence door gives way for a moment, then slams.
   doorLight(seconds) { this.music?.light(seconds); }
+
+  // The metal door's nightmare: the corridor drains away to almost nothing,
+  // and what is left is a low mains hum and a slow heartbeat, close, as if
+  // inside the head. The corridor comes back after.
+  nightmare(seconds) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    this.bed.gain.setTargetAtTime(0.12, t, 0.35);
+    this.bed.gain.setTargetAtTime(1, t + seconds, 0.6);
+    const out = ctx.createGain(); out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(0.5, t + 0.8);
+    out.gain.setValueAtTime(0.5, t + seconds - 0.3);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.2);
+    out.connect(this.master);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 320; lp.connect(out);
+    for (const [f, type, g] of [[50, 'sine', 0.09], [100, 'sawtooth', 0.025], [150.7, 'triangle', 0.012]]) {   // the hum, a touch out of tune with itself
+      const o = ctx.createOscillator(); o.type = type; o.frequency.value = f;
+      const og = ctx.createGain(); og.gain.value = g; o.connect(og); og.connect(lp);
+      o.start(t); o.stop(t + seconds + 0.3);
+    }
+    for (let at = 0.5; at < seconds - 0.2; at += 0.95) {        // lub-dub
+      for (const [d, k] of [[0, 1], [0.22, 0.7]]) {
+        const o = ctx.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(62, t + at + d); o.frequency.exponentialRampToValueAtTime(38, t + at + d + 0.16);
+        const e = ctx.createGain(); e.gain.setValueAtTime(0.0001, t + at + d);
+        e.gain.exponentialRampToValueAtTime(0.5 * k, t + at + d + 0.015);
+        e.gain.exponentialRampToValueAtTime(0.0001, t + at + d + 0.2);
+        o.connect(e); e.connect(out); o.start(t + at + d); o.stop(t + at + d + 0.22);
+      }
+    }
+  }
   doorSlam() {
     this.music?.slam();
     if (!this.ctx || this.muted) return;
