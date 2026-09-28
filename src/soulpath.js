@@ -57,6 +57,7 @@ const ROUTE_CELLS = 30;          // how much of the route gets marks (~36 m)
 const MARK_EVERY = 2;            // cells between marks
 const MARK_POOL = 28;             // marks stay where they were scratched, so the pool is larger
 const CANDLE_NEAR = 12;          // metres: candles within this of a work tell whether it is seen
+const CANDLE_CURTAIN_GAP = 1.4;  // metres: no flame this close to a window and its curtains
 const CANDLE_DIE = 2.6;          // seconds a candle gutters before it is only an ember
 const EMBER = new THREE.Color(0x2e0c04);
 const MARK_FADE = 2.5;           // seconds a mark takes to fade once its work is seen
@@ -618,10 +619,11 @@ export class SoulPath {
 
     // ── scattered things: candles, teapots, cups. The closer the portal into
     // the next stage, the more of them, so they thicken into a trail.
-    stuff.scatter = this._buildScatter(group, cx, cz);
+    // props first: their windows and curtains tell the candles where not to burn
     stuff.reserved = taken;
     if (cp) taken.add(cellKey(cellOf(cp.x), cellOf(cp.z)));
     stuff.props = this._buildProps(group, cx, cz, taken);
+    stuff.scatter = this._buildScatter(group, cx, cz);
     stuff.drown = this.stage.stage === 2 ? this.drowned.build(group, cx, cz, this._drownSpots(cx, cz, taken)) : null;
 
     // ── presence doors on this chunk's west and north edge crossings.
@@ -1185,6 +1187,7 @@ export class SoulPath {
       for (const p of portals) { const d = Math.hypot(p.x - x, p.z - z); if (d < tgd) { tgd = d; tgx = p.x - x; tgz = p.z - z; } }
       for (const a of unseen) { const d = Math.hypot(a.x - x, a.z - z); if (d < tgd) { tgd = d; tgx = a.x - x; tgz = a.z - z; } }
       if (tgd < Infinity && tgd > 1e-3) { tgx /= tgd; tgz /= tgd; }
+      if (this._nearFlammable(cx, cz, x, z)) continue;
       items.push({ type: 'candle', x, z, rot: rnd() * 6.28, flame, wax, spent, tgx, tgz });
     }
     return buildScatter(group, items);
@@ -1240,7 +1243,17 @@ export class SoulPath {
     const walls = choose(wallSpots, nWall, 3).map(s => ({
       x: centreOf(s.gi) + s.di * CELL / 2, z: centreOf(s.gj) + s.dj * CELL / 2, nx: -s.di, nz: -s.dj, r: rp(), run3: s.run3 }));
     const air = st === 2 ? choose(airSpots, low ? 2 : 4, 4).map(s => ({ x: centreOf(s.gi), z: centreOf(s.gj), r: rp() })) : [];
+    // everything on a wall may be a curtained window: remember it, a candle keeps off
+    (this._flammable ||= new Map()).set(cx + ':' + cz, walls.map(w => ({ x: w.x, z: w.z })));
     return this.props.build(group, st, walls, air);
+  }
+
+  // a candle never stands where it would set a curtain alight
+  _nearFlammable(cx, cz, x, z) {
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++)
+      for (const f of this._flammable?.get((cx + dx) + ':' + (cz + dz)) || [])
+        if (Math.hypot(f.x - x, f.z - z) < CANDLE_CURTAIN_GAP) return true;
+    return false;
   }
 
   // Where the view is taken to see into the door: a step and a bit in front
@@ -1303,10 +1316,10 @@ export class SoulPath {
   // A door or a portal has just been given a place in this chunk: what was
   // already built there is drawn again so nothing is left standing on it.
   _rebuildChunkProps(cx, cz, st) {
-    st.scatter?.dispose();
-    st.scatter = this._buildScatter(st.group, cx, cz);
     st.props?.dispose();
     st.props = this._buildProps(st.group, cx, cz, st.reserved || new Set());
+    st.scatter?.dispose();
+    st.scatter = this._buildScatter(st.group, cx, cz);
   }
 
   _rebuildScatter() {
