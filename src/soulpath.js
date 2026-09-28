@@ -195,19 +195,35 @@ function scrawlTexture(text, zone) {
     : zone.accept > 0.5 ? 'rgba(90,96,88,0.7)'                 // faint graphite on pale plaster
       : 'rgba(225,232,220,0.8)';                               // chalk on green paint
   ctx.fillStyle = ink;
-  ctx.font = '34px "Departure Mono", monospace';
   ctx.textBaseline = 'middle';
-  let x = 14;
-  for (const ch of text) {
-    const w = ctx.measureText(ch).width;
-    ctx.save();
-    ctx.translate(x + w / 2, 48 + (Math.random() - 0.5) * 7);
-    ctx.rotate((Math.random() - 0.5) * 0.22);
-    ctx.fillText(ch, -w / 2, 0);
-    ctx.restore();
-    x += w * (0.92 + Math.random() * 0.14);
-    if (x > c.width - 30) break;
+  // never cut short: a long phrase breaks at the space nearest its middle
+  // (non-breaking spaces hold), and each line shrinks until it fits the plank
+  const room = c.width - 40, SPREAD = 1.06;           // the widest the jittered spacing can get
+  ctx.font = '34px "Departure Mono", monospace';
+  let lines = [text];
+  if (ctx.measureText(text).width * SPREAD > room) {
+    const mid = text.length / 2;
+    let cut = -1;
+    for (let i = 0; i < text.length; i++) if (text[i] === ' ' && (cut < 0 || Math.abs(i - mid) < Math.abs(cut - mid))) cut = i;
+    if (cut > 0) lines = [text.slice(0, cut), text.slice(cut + 1)];
   }
+  let size = lines.length > 1 ? 30 : 34;
+  ctx.font = `${size}px "Departure Mono", monospace`;
+  const widest = Math.max(...lines.map(l => ctx.measureText(l).width)) * SPREAD;
+  if (widest > room) { size = Math.floor(size * room / widest); ctx.font = `${size}px "Departure Mono", monospace`; }
+  const rows = lines.length > 1 ? [30, 68] : [48];
+  lines.forEach((line, li) => {
+    let x = 14;
+    for (const ch of line) {
+      const w = ctx.measureText(ch).width;
+      ctx.save();
+      ctx.translate(x + w / 2, rows[li] + (Math.random() - 0.5) * 6);
+      ctx.rotate((Math.random() - 0.5) * 0.22);
+      ctx.fillText(ch, -w / 2, 0);
+      ctx.restore();
+      x += w * (0.92 + Math.random() * 0.14);
+    }
+  });
   // rub some of it away
   ctx.globalCompositeOperation = 'destination-out';
   for (let i = 0; i < 260; i++) {
