@@ -285,6 +285,75 @@ export class AudioEngine {
     o.start(t); slip.start(t); o.stop(t + seconds + 0.05); slip.stop(t + seconds + 0.05);
   }
 
+  // ── the metal door onto the stairwell (#34) ──────────────────────────────
+  // The building coming down, heard through a door that only opens for a
+  // moment: a low rumble that swells, concrete cracking in bursts, debris
+  // clicking as it falls, and a long hiss settling after. All into bed, so
+  // muting and the corridor's own levels still hold.
+  collapse() {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime, dur = 3.6;
+    const len = ctx.sampleRate * dur, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    // the rumble: heavily lowpassed noise, swelling in over 0.4 s
+    const rumble = ctx.createBufferSource(); rumble.buffer = buf;
+    const rlp = ctx.createBiquadFilter(); rlp.type = 'lowpass'; rlp.frequency.value = 80;
+    const rg = ctx.createGain();
+    rg.gain.setValueAtTime(0.0001, t);
+    rg.gain.exponentialRampToValueAtTime(0.5, t + 0.4);
+    rg.gain.setValueAtTime(0.5, t + dur - 1.4);
+    rg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    rumble.connect(rlp); rlp.connect(rg); rg.connect(this.bed);
+    rumble.start(t); rumble.stop(t + dur + 0.05);
+    // concrete cracking: bandpassed bursts, ticking at random through the hold
+    for (let i = 0; i < 14; i++) {
+      const at = t + 0.1 + Math.random() * (dur - 0.6);
+      const s = ctx.createBufferSource(); s.buffer = buf;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 600 + Math.random() * 1900; bp.Q.value = 3 + Math.random() * 4;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.09 + Math.random() * 0.1, at);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.05 + Math.random() * 0.1);
+      s.connect(bp); bp.connect(g); g.connect(this.bed); s.start(at); s.stop(at + 0.2);
+    }
+    // falling debris: many short decaying clicks
+    for (let i = 0; i < 40; i++) {
+      const at = t + 0.3 + Math.random() * (dur - 0.8);
+      const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = 300 + Math.random() * 2200;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.02 + Math.random() * 0.025, at);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.02 + Math.random() * 0.04);
+      o.connect(g); g.connect(this.bed); o.start(at); o.stop(at + 0.08);
+    }
+    // a long settling hiss, under everything, fading out last
+    const hiss = ctx.createBufferSource(); hiss.buffer = buf;
+    const hhp = ctx.createBiquadFilter(); hhp.type = 'highpass'; hhp.frequency.value = 2000;
+    const hg = ctx.createGain();
+    hg.gain.setValueAtTime(0.0001, t + 0.5);
+    hg.gain.exponentialRampToValueAtTime(0.05, t + 0.9);
+    hg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    hiss.connect(hhp); hhp.connect(hg); hg.connect(this.bed);
+    hiss.start(t + 0.5); hiss.stop(t + dur + 0.05);
+  }
+
+  // The metal door slamming shut: a heavy low thump and a metallic ring.
+  slam() {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const len = ctx.sampleRate * 0.4, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const thump = ctx.createBufferSource(); thump.buffer = buf;
+    const tlp = ctx.createBiquadFilter(); tlp.type = 'lowpass'; tlp.frequency.value = 150;
+    const tg = ctx.createGain();
+    tg.gain.setValueAtTime(0.6, t); tg.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    thump.connect(tlp); tlp.connect(tg); tg.connect(this.bed); thump.start(t); thump.stop(t + 0.24);
+    for (const f of [180, 420]) {                        // the metallic ring
+      const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.16, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      o.connect(g); g.connect(this.bed); o.start(t); o.stop(t + 0.55);
+    }
+  }
+
   // ── the finale: the chord, then silence for the card of questions ────────
   finale() { this.music?.resolve(); }
   silence() {

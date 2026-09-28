@@ -22,6 +22,26 @@ any keyboard layout; the presses must come within three seconds.
 - **Stand still near a door** (up to 4.5 m away) for two seconds: it creaks open for a moment, then slams.
 - **All 18 works seen:** the arch of roses; walking through it opens the card of every question the souls asked.
 
+## Portals now follow what you find, not chance
+
+- Nothing is decided at world-build time any more. In the hospital, **3 works
+  seen** summons the portal into the red rooms: it lands at a corridor
+  crossing 8–16 m out, ahead of you if there is one that way, and it stays
+  there for the rest of the visit even if its chunk unloads.
+- In the red rooms, once you have **found grandmother's room and seen 5 more
+  works there**, the portal into the light is summoned the same way.
+- The moment the fear portal is summoned, a solid metal door also appears in
+  a side wall 2–5 m before it, on your route to it. Get within 2.6 m and
+  roughly facing it and it swings open by itself: a ruined stairwell behind
+  it, smoke, a picture of the stairs. It holds a couple of seconds, then
+  slams for good — once only, per visit.
+- `7` × 5, `5` × 5, `B` × 5, `0` × 5 and `1` × 5 all still work exactly as
+  below. Setting the stage directly with a cheat does not touch the counts:
+  if you cheat into fear with 3 works already seen, the portal is summoned
+  as soon as the threshold check next runs. Adding ids straight into
+  `soul.seen` (or the `7` × 5 cheat, which adds several at once) counts them
+  into whichever stage you are in at that moment too.
+
 ## On the welcome screen
 
 - **Click the CONSPACE ROOMS wordmark** to play a small Pac-Man.
