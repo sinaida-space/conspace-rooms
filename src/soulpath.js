@@ -15,6 +15,7 @@ import { createRoseCounter, buildRoseArch, findArchSpot, GRAIN_OPEN_MS } from '.
 import { showCard } from './card.js';
 import { createPetals } from './petals.js';
 import { createPropKit } from './props.js';
+import { createDrowned } from './drowned.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
 // Everything that makes the labyrinth respond to the visitor on the way from
@@ -264,7 +265,8 @@ export class SoulPath {
     this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
     this.roses = createRoseCounter(this.total);
     this.petals = createPetals(scene, camera, quality);
-    this.props = createPropKit(atmo);
+    this.props = createPropKit(atmo, quality);
+    this.drowned = createDrowned(atmo, quality);   // what the water on the floor uncovers, acceptance stage only
     this.chandeliers = createChandeliers(scene);   // grandmother's ice-glass chandeliers, red rooms only   // what each stage leaves along its corridors
     this.roses.set(0, t('rosesLabel', { n: 0, total: this.total }));
     this.finale = null;
@@ -368,6 +370,31 @@ export class SoulPath {
         if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
       return segs;
     };
+  }
+
+  // The water task's rig (water.js), or a stand-in while it hasn't landed:
+  // shallow everywhere, calm, so the acceptance stage still shows its work.
+  _water() {
+    return window.__app?.water || { level: 0.1, heightAt: () => 0.1, calm: 1, tide: 0 };
+  }
+
+  // Open floor cells on the corridor lattice for drowned.js: at least
+  // 0.5 m clear of every wall (a cell is 1.2 m, so a cell with no solid
+  // neighbour already clears that), not reserved, not the hospital's own
+  // islands. drowned.js itself nudges each 0.3–0.5 m off the corridor's
+  // middle line, so what it drops is never quite underfoot.
+  _drownSpots(cx, cz, reserved) {
+    const ward = this._wardCells.get(cx + ':' + cz);
+    const out = [];
+    for (let j = 1; j < CHUNK - 1; j++) for (let i = 1; i < CHUNK - 1; i++) {
+      if (!EGG_BAND.has(i) && !EGG_BAND.has(j)) continue;
+      const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+      if (solidAtGlobal(gi, gj) || reserved.has(cellKey(gi, gj)) || ward?.has(cellKey(gi, gj))) continue;
+      let clear = true;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (solidAtGlobal(gi + di, gj + dj)) clear = false;
+      if (clear) out.push({ x: centreOf(gi), z: centreOf(gj) });
+    }
+    return out;
   }
 
   // ── chunk lifecycle (mirrors World) ────────────────────────────────────
@@ -558,6 +585,7 @@ export class SoulPath {
     stuff.reserved = taken;
     if (cp) taken.add(cellKey(cellOf(cp.x), cellOf(cp.z)));
     stuff.props = this._buildProps(group, cx, cz, taken);
+    stuff.drown = this.stage.stage === 2 ? this.drowned.build(group, cx, cz, this._drownSpots(cx, cz, taken)) : null;
 
     // ── presence doors on this chunk's west and north edge crossings.
     // Never in the spawn chunk, so nobody starts boxed in.
@@ -948,7 +976,14 @@ export class SoulPath {
       const wax = st === 1 ? PALE_WAX.clone().lerp(RED_WAX, pk) : PALE_WAX.clone();
       if (spent) flame.copy(EMBER);
       else if (pa > 0) flame.multiplyScalar(1 + 0.35 * pa);   // brighter the closer the unseen work
-      items.push({ type: 'candle', x, z, rot: rnd() * 6.28, flame, wax, spent });
+      // the map's own direction: the nearest thing this candle points toward
+      // (a portal, or an unseen work), for stage 2's floating candles to
+      // drift along without recomputing it every frame
+      let tgx = 0, tgz = 0, tgd = Infinity;
+      for (const p of portals) { const d = Math.hypot(p.x - x, p.z - z); if (d < tgd) { tgd = d; tgx = p.x - x; tgz = p.z - z; } }
+      for (const a of unseen) { const d = Math.hypot(a.x - x, a.z - z); if (d < tgd) { tgd = d; tgx = a.x - x; tgz = a.z - z; } }
+      if (tgd < Infinity && tgd > 1e-3) { tgx /= tgd; tgz /= tgd; }
+      items.push({ type: 'candle', x, z, rot: rnd() * 6.28, flame, wax, spent, tgx, tgz });
     }
     return buildScatter(group, items);
   }
@@ -975,7 +1010,16 @@ export class SoulPath {
       if (!free(gi, gj)) continue;
       airSpots.push({ gi, gj });
       for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
-        if (solidAtGlobal(gi + di, gj + dj)) wallSpots.push({ gi, gj, di, dj });
+        if (solidAtGlobal(gi + di, gj + dj)) {
+          // the wall a window would sit in: open on both sides along the
+          // face too, and the wall itself keeps going past them, so a
+          // 0.95 m frame and its 1.55 m curtain rod never hang past a
+          // corner or a doorway into empty air
+          const tx = di !== 0 ? 0 : 1, tz = di !== 0 ? 1 : 0;
+          const run3 = !solidAtGlobal(gi + tx, gj + tz) && !solidAtGlobal(gi - tx, gj - tz)
+            && solidAtGlobal(gi + tx + di, gj + tz + dj) && solidAtGlobal(gi - tx + di, gj - tz + dj);
+          wallSpots.push({ gi, gj, di, dj, run3 });
+        }
     }
     const choose = (list, n, gap) => {
       const out = [];
@@ -987,7 +1031,7 @@ export class SoulPath {
     };
     const nWall = st === 2 ? (low ? 3 : 5) : (low ? 4 : 7);
     const walls = choose(wallSpots, nWall, 3).map(s => ({
-      x: centreOf(s.gi) + s.di * CELL / 2, z: centreOf(s.gj) + s.dj * CELL / 2, nx: -s.di, nz: -s.dj, r: rp() }));
+      x: centreOf(s.gi) + s.di * CELL / 2, z: centreOf(s.gj) + s.dj * CELL / 2, nx: -s.di, nz: -s.dj, r: rp(), run3: s.run3 }));
     const air = st === 2 ? choose(airSpots, low ? 2 : 4, 4).map(s => ({ x: centreOf(s.gi), z: centreOf(s.gj), r: rp() })) : [];
     return this.props.build(group, st, walls, air);
   }
@@ -999,6 +1043,8 @@ export class SoulPath {
       st.scatter = this._buildScatter(st.group, cx, cz);
       st.props?.dispose();
       st.props = this._buildProps(st.group, cx, cz, st.reserved || new Set());
+      st.drown?.dispose();
+      st.drown = this.stage.stage === 2 ? this.drowned.build(st.group, cx, cz, this._drownSpots(cx, cz, st.reserved || new Set())) : null;
     }
   }
 
@@ -1075,6 +1121,7 @@ export class SoulPath {
   _updateClouds(dt, time, speed) {
     const P = this.player;
     this._updateBalloons(dt, time, speed);
+    this._updateSurfaceBalloon(time);
     if (!this.clouds) {
       const tex = cloudTexture();
       this.clouds = Array.from({ length: 4 }, (_, i) => {
@@ -1173,6 +1220,38 @@ export class SoulPath {
       if ((this.balloons || []).some(o => o !== b && !o.gone && Math.hypot(o.pos.x - x, o.pos.z - z) < 8)) continue;   // never two together
       b.pos.set(x, 1.7 + Math.random() * 0.5, z);
       b.gone = false; b.rise = 0; b.g.position.copy(b.pos);
+      return;
+    }
+  }
+  // A third balloon, on the water itself: no string, no question, no let
+  // go. It just turns and rides the tide a few centimetres, one more small
+  // thing the flood carried in.
+  _updateSurfaceBalloon(time) {
+    if (this.stage.stage !== 2) return;
+    if (!this.surfaceBalloon) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 16), this.atmo.prop({ color: 0xe8f1f8, rust: 0 }));
+      body.scale.set(1, 1.18, 1);
+      g.add(body);
+      this.scene.add(g);
+      this.surfaceBalloon = { g, pos: new THREE.Vector3(), seed: Math.random() * 10 };
+      this._spawnSurfaceBalloon();
+    }
+    const b = this.surfaceBalloon, P = this.player;
+    if (Math.hypot(P.pos.x - b.pos.x, P.pos.y - b.pos.z) > 26) this._spawnSurfaceBalloon();
+    const water = this._water();
+    const wy = water.heightAt(b.pos.x, b.pos.z);
+    const y = (wy ?? 0.1) + 0.2;
+    b.g.position.set(b.pos.x + Math.sin(time * 0.15 + b.seed) * 0.04, y, b.pos.z + Math.cos(time * 0.13 + b.seed) * 0.04);
+    b.g.rotation.set(Math.sin(time * 0.3 + b.seed) * 0.04, time * 0.09 + b.seed, 0);
+  }
+  _spawnSurfaceBalloon() {
+    const P = this.player;
+    for (let tries = 0; tries < 40; tries++) {
+      const a = Math.random() * 6.28, d = 6 + Math.random() * 14;
+      const x = P.pos.x + Math.cos(a) * d, z = P.pos.y + Math.sin(a) * d;
+      if (!this._airClear(x, z, 0.9)) continue;
+      this.surfaceBalloon.pos.set(x, 0, z);
       return;
     }
   }
@@ -1520,6 +1599,44 @@ export class SoulPath {
     });
   }
 
+  // Acceptance stage only: every live candle rides the water where it has
+  // risen, bobs, tilts a little and drifts along its wall toward the
+  // direction _buildScatter worked out for it (tgx, tgz), never more than
+  // CANDLE_DRIFT off where it was set down. The candle lights the walls
+  // catch (scatter.lights) follow it, so the map still reads.
+  _floatCandles(time, water) {
+    if (this.stage.stage !== 2) return;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), qt = new THREE.Quaternion(),
+      up = new THREE.Vector3(0, 1, 0), ax = new THREE.Vector3(1, 0, 0), one = new THREE.Vector3(1, 1, 1);
+    const CANDLE_DRIFT = 0.25;
+    for (const st of this.chunkStuff.values()) {
+      const sc = st.scatter;
+      if (!sc?.items?.length) continue;
+      for (let i = 0; i < sc.items.length; i++) {
+        const it = sc.items[i];
+        if (it.spent) continue;
+        const sway = 0.5 + 0.5 * Math.sin(time * 0.17 + i * 0.63);      // 0..1, biased on toward the target
+        const drift = (sway * 0.7 + 0.3) * CANDLE_DRIFT;
+        const x = it.x + it.tgx * drift, z = it.z + it.tgz * drift;
+        const wy = water.heightAt(x, z);
+        const floaty = wy != null;
+        const base = floaty ? wy : 0;
+        const bob = floaty ? Math.sin(time * 1.7 + i * 1.3) * 0.005 : 0;
+        q.setFromAxisAngle(up, it.rot);
+        if (floaty) { qt.setFromAxisAngle(ax, Math.sin(time * 0.6 + i * 2.1) * 0.09); q.multiply(qt); }
+        for (const [name, off] of [['saucer', 0.01], ['wax', 0.09], ['flame', 0.18], ['pool', 0.016]]) {
+          const mesh = sc.meshes[name];
+          if (!mesh) continue;
+          m.compose(new THREE.Vector3(x, base + off + bob, z), q, one);
+          mesh.setMatrixAt(i, m);
+        }
+        const L = sc.lights[i];
+        if (L) { L.x = x; L.y = base + 0.28 + bob; L.z = z; }
+      }
+      for (const name in sc.meshes) sc.meshes[name].instanceMatrix.needsUpdate = true;
+    }
+  }
+
   // marks of a finished goal fade slowly; marks far behind return to the pool
   _tickMarks(time) {
     const p = this.player.pos;
@@ -1553,7 +1670,10 @@ export class SoulPath {
     this._time = time;
     this._tickMarks(time);
     this._tickCandles(time);
-    this.props.update(time, this.player.pos.x, this.player.pos.y);
+    const water = this._water();
+    this._floatCandles(time, water);
+    this.props.update(time, this.player.pos.x, this.player.pos.y, water.level);
+    this.drowned.update(time, water);
     this.chandeliers.update(time, this.camera.position, this.stage.stage === 1);
     const P = this.player, cam = this.camera;
     const memoryStage = this.stage.stage === 1;   // grandmother's room only exists here
@@ -1762,9 +1882,13 @@ export class SoulPath {
 
     // after grandmother's room the souls leave it and roam the corridors
     if (this.visitedRoom && this.stage.stage === 1) this._updateRoamers(dt, time, speed);
-    if (this.stage.stage === 2) { this._hideRoamers(); for (const b of this.balloons || []) b.g.visible = true; this._updateClouds(dt, time, speed); }
-    else if (this.clouds || this.balloons) {            // a cheat can lead back out of the light
+    if (this.stage.stage === 2) {
+      this._hideRoamers(); for (const b of this.balloons || []) b.g.visible = true;
+      if (this.surfaceBalloon) this.surfaceBalloon.g.visible = true;
+      this._updateClouds(dt, time, speed);
+    } else if (this.clouds || this.balloons || this.surfaceBalloon) {            // a cheat can lead back out of the light
       for (const b of this.balloons || []) b.g.visible = false;
+      if (this.surfaceBalloon) this.surfaceBalloon.g.visible = false;
       for (const c of this.clouds || []) for (const sp of c.puffs) sp.visible = false;
     }
     if (this.stage.stage !== 1) this._hideRoamers?.();

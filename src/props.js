@@ -206,6 +206,16 @@ const MEMORY = {
   } },
 };
 
+// A memory-stage toy shape and its footprint, for anything outside this file
+// that wants to drop one on the floor too (drowned.js: a toy the flood left
+// behind). Built once, same cache the kit itself would use.
+const MEMORY_GEO = new Map();
+export function memoryShape(name) {
+  if (!MEMORY_GEO.has(name)) MEMORY_GEO.set(name, shape(MEMORY[name].build, MEMORY[name].crumple || 0));
+  return MEMORY_GEO.get(name);
+}
+export function memoryDims(name) { return MEMORY[name]; }
+
 // ── acceptance: under sheets, in the light ─────────────────────────────────
 const LIGHT = {
   chair: { depth: 0.5, w: 0.5, solid: true, crumple: 0.012, build: put => {
@@ -301,13 +311,19 @@ const TULLE_VERT = /* glsl */`
 #include <fog_pars_vertex>
 attribute float aPhase;
 uniform float uTime;
+uniform float uWaterLevel;
 varying vec2 vUv;
+varying float vWorldY;
 void main(){
   float hang = 1.0 - uv.y;                  // pinned at the rail, free at the hem
   float k = (position.x + position.z) * 4.0;
-  float breath = sin(uTime * 0.9 + k + aPhase) * 0.07 + sin(uTime * 0.53 + k * 2.3) * 0.03;
-  vec3 p = position + normal * (hang * breath + sin(k * 4.5) * 0.02);
+  // wet at the foot: the water drags on the cloth, so it hangs closer to
+  // still there than it sways above the waterline
+  float wet = smoothstep(uWaterLevel + 0.12, uWaterLevel - 0.05, position.y);
+  float breath = (sin(uTime * 0.9 + k + aPhase) * 0.07 + sin(uTime * 0.53 + k * 2.3) * 0.03) * mix(1.0, 0.3, wet);
+  vec3 p = position + normal * (hang * breath + sin(k * 4.5) * 0.02 * mix(1.0, 0.4, wet));
   vUv = uv;
+  vWorldY = position.y;
   vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mvPosition;
   #include <fog_vertex>
@@ -315,10 +331,13 @@ void main(){
 const TULLE_FRAG = /* glsl */`
 #include <common>
 #include <fog_pars_fragment>
+uniform float uWaterLevel;
 varying vec2 vUv;
+varying float vWorldY;
 // Lace tulle: a fine net, gathered into soft folds, a band of lace flowers
 // above a scalloped hem, sprigs scattered over the rest. Where the folds
-// crowd the cloth doubles and reads denser.
+// crowd the cloth doubles and reads denser. Where the hem trails in the
+// water it darkens, clings and holds still.
 float ring(vec2 p, float r, float w){ return smoothstep(w, 0.0, abs(length(p) - r)); }
 void main(){
   vec2 uv = vUv;
@@ -337,7 +356,58 @@ void main(){
   float motif = flower * max(band, sprig * 0.8);
   float a = 0.16 + 0.22 * net + 0.2 * folds + 0.4 * motif;
   vec3 col = vec3(0.9, 0.9, 0.87) * (0.84 + 0.16 * folds) + 0.08 * motif;   // a shade darker than the light, so the folds read
+  float wet = smoothstep(uWaterLevel + 0.12, uWaterLevel - 0.05, vWorldY);
+  col = mix(col, col * vec3(0.5, 0.55, 0.62), wet * 0.65);                 // darker, grey, clinging
+  a = mix(a, min(1.0, a + 0.25), wet);                                     // slightly more solid, less see-through
+  float meniscus = smoothstep(0.035, 0.0, abs(vWorldY - uWaterLevel));
+  col += meniscus * 0.35;                                                  // a thin bright line at the waterline
   gl_FragColor = vec4(col, a);
+  #include <fog_fragment>
+}`;
+
+const WINDOW_VERT = /* glsl */`
+#include <common>
+#include <fog_pars_vertex>
+varying vec2 vUv;
+void main(){
+  vUv = uv;
+  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}`;
+// Petersburg out the glass: the Neva under a white night, low silver-grey
+// water below a thin dark horizon, straw-to-lilac sky above, rain running
+// down. uRain is 0 on tier 0: the drops sit still, nothing streams.
+const WINDOW_FRAG = /* glsl */`
+#include <common>
+#include <fog_pars_fragment>
+uniform float uTime;
+uniform float uRain;
+varying vec2 vUv;
+float hash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+void main(){
+  vec2 uv = vUv;
+  float horizon = 0.45;
+  vec3 col;
+  if (uv.y < horizon) {
+    float t = uv.y / horizon;
+    col = mix(vec3(0.40, 0.43, 0.47), vec3(0.58, 0.60, 0.63), t);          // flat silver-grey water
+    float glint = pow(max(0.0, sin(uv.x * 46.0 + uTime * uRain * 0.5 + t * 9.0)), 24.0);
+    col += glint * 0.3;                                                    // slow moving glints
+    col *= mix(0.55, 1.0, smoothstep(0.0, 0.03, horizon - uv.y));          // a darker line at the embankment's edge
+  } else {
+    float t = (uv.y - horizon) / (1.0 - horizon);
+    col = mix(vec3(0.93, 0.85, 0.68), vec3(0.86, 0.84, 0.93), t);          // warm straw near the water, pale lilac above
+  }
+  // rain: streaks that run, drops that sit still on tier 0 (uRain = 0)
+  vec2 ruv = uv * vec2(9.0, 13.0);
+  float col1 = floor(ruv.x);
+  float speed = 0.5 + hash(vec2(col1, 0.0)) * 0.7;
+  float fall = uTime * uRain * 1.5 * speed;
+  float y = fract(ruv.y - fall - hash(vec2(col1, 1.0)) * 11.0);
+  float streak = smoothstep(0.08, 0.0, abs(fract(ruv.x) - 0.5)) * smoothstep(0.85, 0.55, y);
+  col = mix(col, min(vec3(1.0), col * 1.3 + 0.04), streak * 0.5);
+  gl_FragColor = vec4(col, 1.0);
   #include <fog_fragment>
 }`;
 
@@ -359,7 +429,7 @@ function craneGeometry() {
 }
 
 // ── the kit ─────────────────────────────────────────────────────────────────
-export function createPropKit(atmo) {
+export function createPropKit(atmo, quality = { tier: 2 }) {
   const geos = new Map();
   const geoOf = (stage, name) => {
     const key = stage + name;
@@ -367,17 +437,13 @@ export function createPropKit(atmo) {
     return geos.get(key);
   };
   const mat = atmo.prop({ vertexColors: true, rust: 0.15 });
-  // the light of a window: soft toward the frame, never a white slab
-  const windowTex = (() => {
-    const c = document.createElement('canvas'); c.width = 64; c.height = 96;
-    const g = c.getContext('2d'), gr = g.createRadialGradient(32, 40, 4, 32, 48, 60);
-    gr.addColorStop(0, '#dfe4dc'); gr.addColorStop(1, '#8e968f');
-    g.fillStyle = gr; g.fillRect(0, 0, 64, 96);
-    return new THREE.CanvasTexture(c);
-  })();
-  const windowMat = new THREE.MeshBasicMaterial({ map: windowTex, color: 0xc8cec8, fog: true });
-  const uniforms = { uTime: { value: 0 }, uPlayer: { value: new THREE.Vector3() } };
+  const uniforms = { uTime: { value: 0 }, uPlayer: { value: new THREE.Vector3() }, uWaterLevel: { value: 0 } };
   const fogU = THREE.UniformsLib.fog;
+  // the Neva out the glass, white night, rain: static drops on tier 0
+  const windowMat = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([fogU, { uRain: { value: quality.tier === 0 ? 0 : 1 } }]),
+    vertexShader: WINDOW_VERT, fragmentShader: WINDOW_FRAG, fog: true });
+  windowMat.uniforms.uTime = uniforms.uTime;
   const floatMat = new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([fogU, { uMap: { value: laceTexture() } }]),
     vertexShader: FLOAT_VERT, fragmentShader: FLOAT_FRAG, side: THREE.DoubleSide, fog: true });
@@ -386,7 +452,7 @@ export function createPropKit(atmo) {
     uniforms: THREE.UniformsUtils.merge([fogU, {}]),
     vertexShader: TULLE_VERT, fragmentShader: TULLE_FRAG, side: THREE.DoubleSide, fog: true,
     transparent: true, depthWrite: false });
-  tulleMat.uniforms.uTime = uniforms.uTime;
+  tulleMat.uniforms.uTime = uniforms.uTime; tulleMat.uniforms.uWaterLevel = uniforms.uWaterLevel;
   const crane = craneGeometry(), lace = new THREE.PlaneGeometry(0.42, 0.42).rotateX(-Math.PI / 2 + 0.25).toNonIndexed();
 
   // kinds a stage can leave on the floor, with weights
@@ -395,8 +461,9 @@ export function createPropKit(atmo) {
     [['nevalyashka', 3], ['pyramid', 3], ['yula', 2], ['matryoshki', 3], ['ball', 2], ['slippers', 2], ['stool', 1.5], ['jars', 1.5], ['newspapers', 1]],
     [['armchair', 2], ['mirror', 1.5], ['piano', 1], ['window', 3]],   // no sheeted chair: it read as anything but
   ];
-  const pick = (stage, r) => {
-    const list = KINDS[stage], total = list.reduce((s, [, w]) => s + w, 0);
+  const pick = (stage, r, allowWindow = true) => {
+    const list = allowWindow ? KINDS[stage] : KINDS[stage].filter(([name]) => name !== 'window');
+    const total = list.reduce((s, [, w]) => s + w, 0);
     let x = r * total;
     for (const [name, w] of list) { if ((x -= w) <= 0) return name; }
     return list[0][0];
@@ -413,13 +480,14 @@ export function createPropKit(atmo) {
 
   return {
     // group: the chunk's group · stage: 0 fear, 1 memory, 2 light · walls:
-    // [{ x, z, nx, nz, r }] floor spots against a wall (x, z = the wall face
-    // point, n = into the corridor, r = a random 0..1) · air: [{ x, z, r }]
-    // cell centres for things that float (light only)
+    // [{ x, z, nx, nz, r, run3 }] floor spots against a wall (x, z = the
+    // wall face point, n = into the corridor, r = a random 0..1, run3 =
+    // the wall keeps going at least 3 cells, so a window fits) · air:
+    // [{ x, z, r }] cell centres for things that float (light only)
     build(group, stage, walls, air) {
       const parts = [], windows = [], tulles = [], floats = [], boxes = [], feet = [];
       for (const s of walls) {
-        const name = pick(stage, s.r);
+        const name = pick(stage, s.r, s.run3 !== false);
         const rot = Math.atan2(s.nx, s.nz);
         if (name === 'window') {                   // light where a window should be, tulle before it
           const wm = M(s.x + s.nx * 0.012, 1.7, s.z + s.nz * 0.012, 0, rot);
@@ -436,7 +504,7 @@ export function createPropKit(atmo) {
             for (const x of [-0.62, 0.62]) put(new THREE.BoxGeometry(0.018, 0.018, 0.16), 0x8a7440, 0.5, M(x, 0, -0.08));
             for (let k = 0; k < 11; k++) put(new THREE.TorusGeometry(0.02, 0.004, 4, 10), 0xb89a5a, 0.6, M(-0.55 + k * 0.11, -0.005, 0, 0, Math.PI / 2));
           }).applyMatrix4(M(s.x + s.nx * 0.16, 2.6, s.z + s.nz * 0.16, 0, rot)));
-          const tg = new THREE.PlaneGeometry(1.2, 2.5, 12, 20).applyMatrix4(M(s.x + s.nx * 0.14, 1.33, s.z + s.nz * 0.14, 0, rot));
+          const tg = new THREE.PlaneGeometry(1.2, 2.58, 12, 24).applyMatrix4(M(s.x + s.nx * 0.14, 1.29, s.z + s.nz * 0.14, 0, rot));
           tg.setAttribute('aPhase', new THREE.Float32BufferAttribute(new Array(tg.attributes.position.count).fill(s.r * 40), 1));
           tulles.push(tg);
           continue;
@@ -505,7 +573,7 @@ export function createPropKit(atmo) {
       if (shade) { group.add(shade); meshes.push(shade); }
       return { meshes, boxes };
     },
-    update(time, px, pz) { uniforms.uTime.value = time; uniforms.uPlayer.value.set(px, 0, pz); },
+    update(time, px, pz, waterLevel = 0) { uniforms.uTime.value = time; uniforms.uPlayer.value.set(px, 0, pz); uniforms.uWaterLevel.value = waterLevel; },
   };
 }
 
