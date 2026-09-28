@@ -1007,6 +1007,7 @@ export class SoulPath {
     sw.group.rotation.y = plan.rotY;
     group.add(sw.group);
     sw.phase = 'wait';
+    sw.pic = idx;
     sw.t = 0;
     stuff.stairwell = sw;
   }
@@ -2134,7 +2135,11 @@ export class SoulPath {
       } else if (sw.phase === 'turn') {
         if (!sw.cam || sw.cam.turnT >= STAIR_TURN) { sw.cam = null; sw.phase = 'cool'; }
       } else if (sw.phase === 'cool') {
-        if (d > STAIR_NEAR + 1.5) sw.phase = 'wait';   // walked away: it will open for the next pass
+        if (d > STAIR_NEAR + 1.5) {                    // walked away: it will open for the next pass, onto another stairwell
+          sw.phase = 'wait';
+          sw.pic = ((sw.pic + Math.floor(Math.random() * 4)) % 5) + 1;   // any of the other four
+          sw.setImage(`assets/stairs/stairs_${sw.pic}.webp`);
+        }
       }
       if (sw.cam) this._stairHold(sw, dt);
       eye.set(P.pos.x, P.eyeH ?? EYE_HEIGHT, P.pos.y);

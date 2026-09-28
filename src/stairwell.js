@@ -140,19 +140,30 @@ export function buildStairwell(atmo, imgUrl) {
   const rays = buildLightRays(4.5, { gapK: 0, tint: DEFAULT_TINT });
   g.add(rays.group);
 
-  if (imgUrl) {
-    new THREE.TextureLoader().load(imgUrl, img => {
+  // the photograph behind the door; it may be swapped between visits, so
+  // every pass can open onto another stairwell. Loaded textures are kept.
+  const cache = new Map();
+  let want = null;
+  const show = img => {
+    roomMat.uniforms.uMap.value = img;
+    roomMat.uniforms.uRoomH.value = 2 * ROOM_HW / (img.image.width / img.image.height);   // the far wall shows the whole photograph
+    const c = img.userData.tint ??= photoTint(img.image);   // the photograph's light: its bright pixels' colour
+    roomMat.uniforms.uGain.value = c.gain;
+    roomMat.uniforms.uTint.value.setRGB(c[0], c[1], c[2]);
+    rays.tint.set(c[0], c[1], c[2]);
+    cloudMat.uniforms.uTint.value.setRGB(c[0], c[1], c[2]);
+  };
+  const placeholder = roomMat.uniforms.uMap.value;
+  const setImage = url => {
+    want = url;
+    if (cache.has(url)) { show(cache.get(url)); return; }
+    new THREE.TextureLoader().load(url, img => {
       img.colorSpace = THREE.SRGBColorSpace;
-      roomMat.uniforms.uMap.value.dispose();
-      roomMat.uniforms.uMap.value = img;
-      roomMat.uniforms.uRoomH.value = 2 * ROOM_HW / (img.image.width / img.image.height);   // the far wall shows the whole photograph
-      const c = photoTint(img.image);                    // the photograph's light: its bright pixels' colour
-      roomMat.uniforms.uGain.value = c.gain;
-      roomMat.uniforms.uTint.value.setRGB(c[0], c[1], c[2]);
-      rays.tint.set(c[0], c[1], c[2]);
-      cloudMat.uniforms.uTint.value.setRGB(c[0], c[1], c[2]);
-    }, undefined, () => {}); // missing file: the dark placeholder and the default tint stay
-  }
+      cache.set(url, img);
+      if (want === url) show(img);
+    }, undefined, () => {}); // missing file: whatever shows now stays
+  };
+  if (imgUrl) setImage(imgUrl);
 
   return {
     group: g, pivot, door, rays, tint: rays.tint,
@@ -173,8 +184,11 @@ export function buildStairwell(atmo, imgUrl) {
         e.y = 1.5 + (e.y - 1.5) * 1.2;
       }
     },
+    setImage,
     dispose() {
-      g.traverse(o => { o.geometry?.dispose(); if (o.material?.uniforms?.uMap) o.material.uniforms.uMap.value.dispose(); o.material?.dispose(); });
+      g.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); });
+      placeholder.dispose();
+      for (const img of cache.values()) img.dispose();
       rays.dispose();
     },
   };
