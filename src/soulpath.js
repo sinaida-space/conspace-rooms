@@ -1503,7 +1503,15 @@ export class SoulPath {
       this.balloons = Array.from({ length: 2 }, (_, i) => {   // just a couple, far apart
         const text = qs[order[i % qs.length]];
         const g = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 28, 18), this.atmo.prop({ color: 0xe8f1f8, rust: 0 }));
+        // lit by the sky, not the lamps: a pale gradient with a sheen, so it never reads grey
+        const skin = document.createElement('canvas'); skin.width = 64; skin.height = 64;
+        const sg = skin.getContext('2d'), grad = sg.createLinearGradient(0, 0, 0, 64);
+        grad.addColorStop(0, '#fbfdff'); grad.addColorStop(0.55, '#e3eef7'); grad.addColorStop(1, '#b8cad9');
+        sg.fillStyle = grad; sg.fillRect(0, 0, 64, 64);
+        const hl = sg.createRadialGradient(20, 20, 0, 20, 20, 14); hl.addColorStop(0, 'rgba(255,255,255,0.9)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+        sg.fillStyle = hl; sg.fillRect(0, 0, 64, 64);
+        const skinTex = new THREE.CanvasTexture(skin); skinTex.colorSpace = THREE.SRGBColorSpace;
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 28, 18), new THREE.MeshBasicMaterial({ map: skinTex, fog: true }));
         body.scale.set(1, 1.18, 1);
         const knot = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.04, 10), this.atmo.prop({ color: 0xdfe9f0, rust: 0 }));
         knot.position.y = -0.245; knot.rotation.x = Math.PI;

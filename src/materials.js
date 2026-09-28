@@ -237,7 +237,10 @@ vec3 candleLight(vec3 P, vec3 N){
     vec3 L = uCandle[i].xyz - P;
     float d2 = dot(L, L);
     float ndl = max(dot(N, L * inversesqrt(d2 + 1e-4)), 0.0) * 0.8 + 0.2;
-    acc += uCandleCol[i] * w * ndl / (1.0 + d2 * 2.5);
+    // in the light stage a flame's colour thins to a warm pearl: an orange glow
+    // on wet dark stone read as rust in the narrow flooded corridors
+    vec3 cc = mix(uCandleCol[i], vec3(dot(uCandleCol[i], vec3(0.33))) * vec3(1.0, 0.93, 0.86), 0.75 * uZone.z);
+    acc += cc * w * ndl / (1.0 + d2 * 2.5);
   }
   return acc * (1.0 - 0.7 * uZone.z);               // on pale cloud a flame's glow would blow out
 }
