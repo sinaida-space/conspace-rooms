@@ -3,3 +3,7 @@ SOULS by Alsa Feer/
 reel/
 dist/
 \!CONSPACE-ROOMS_гайд/
+
+# stairwell sources, the site uses the webp copies
+assets/stairs/*.png
+.claude/worktrees/
