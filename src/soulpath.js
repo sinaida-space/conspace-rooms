@@ -18,7 +18,8 @@ import { createPetals } from './petals.js';
 import { createGlowPetals } from './glowPetals.js';
 import { setShadowLight } from './shadows.js';
 import { createPropKit } from './props.js';
-import { buildHallPlants } from './plants.js';
+import { buildHallPlants, ROOM_PLANTS } from './plants.js';
+import { buildIvy } from './ivy.js';
 import { TROPICS } from './tropics.js';
 const LIGHT_PLANTS = ['monstera', ...TROPICS];
 import { AlisaVoices, VOICED } from './alisa.js';
@@ -1554,15 +1555,25 @@ export class SoulPath {
     // everything on a wall may be a curtained window: remember it, a candle keeps off
     (this._flammable ||= new Map()).set(cx + ':' + cz, walls.map(w => ({ x: w.x, z: w.z })));
     const built = this.props.build(group, st, walls, air);
-    // the zone's plant, in a big hall only: fear its pale ficus; the light, more
-    // often, one of its five (the monstera, tropics.js), a different one from place to place
-    const spots = st === 1 ? [] : this._hallPlantSpots(cx, cz, free, rp, 2, st === 2 ? { p: 0.95, side: 5 } : undefined);
-    if (!spots.length) return built;
+    // ivy up the corridor walls (#43): a few patches a chunk, on wall spots
+    // the props left, two cells clear of them
+    const ivySpots = choose(wallSpots.filter(w => walls.every(o => Math.hypot(o.x - (centreOf(w.gi) + w.di * CELL / 2), o.z - (centreOf(w.gj) + w.dj * CELL / 2)) > 2 * CELL)), Math.round(2.5 * Math.max(0.6, dens)), 3)
+      .map(w => ({ x: centreOf(w.gi) + w.di * CELL / 2, z: centreOf(w.gj) + w.dj * CELL / 2, nx: -w.di, nz: -w.dj })).filter(clearOf);
+    const ivy = buildIvy(group, st, ivySpots, hash2i(SEED_PROPS ^ 0x1717, cx, cz), this.atmo);
+    if (ivy) ivy.mesh.userData.keep = true;             // shared leaf and material; ivy.dispose frees the instances
+    // the zone's plants (#39, #43): in halls from 4 x 4 cells, in a corner or the
+    // middle, and in the dead ends of corridors, where nobody has to pass. Fear
+    // its pale ficus; grandmother's zone the light's tropics in her porcelain;
+    // the light one of its five (the monstera, tropics.js), place to place
+    const spots = this._hallPlantSpots(cx, cz, free, rp, 2, st === 2 ? { p: 0.95, side: 4 } : { p: 0.8, side: 4 }).concat(this._deadEndSpots(cx, cz, free, rp));
+    const plantsDispose = () => ivy?.dispose();
+    if (!spots.length) return { ...built, dispose() { built.dispose(); plantsDispose(); } };
     this._flammable.get(cx + ':' + cz).push(...spots.map(q => ({ x: q.x, z: q.z })));   // candles keep off
-    const species = q => LIGHT_PLANTS[Math.floor(Math.abs(Math.sin(q.x * 12.9898 + q.z * 78.233) * 43758.5453) % 1 * LIGHT_PLANTS.length)];
-    const kindOf = q => st === 0 ? 'fear' : (q.corner ? 'accept-corner:' : 'accept-middle:') + species(q);
-    const sets = ['fear', ...LIGHT_PLANTS.flatMap(n => ['accept-corner:' + n, 'accept-middle:' + n])].map(k => buildHallPlants(group, k, spots.filter(q => kindOf(q) === k), this.atmo));
-    return { ...built, boxes: built.boxes.concat(...sets.map(p => p.boxes)), dispose() { built.dispose(); sets.forEach(p => p.dispose()); } };
+    const pickOf = (q, list) => list[Math.floor(Math.abs(Math.sin(q.x * 12.9898 + q.z * 78.233) * 43758.5453) % 1 * list.length)];
+    const kindOf = q => st === 0 ? 'fear' : st === 1 ? 'room:' + pickOf(q, ROOM_PLANTS) : (q.corner ? 'accept-corner:' : 'accept-middle:') + pickOf(q, LIGHT_PLANTS);
+    const kinds = ['fear', ...ROOM_PLANTS.map(n => 'room:' + n), ...LIGHT_PLANTS.flatMap(n => ['accept-corner:' + n, 'accept-middle:' + n])];
+    const sets = kinds.map(k => buildHallPlants(group, k, spots.filter(q => kindOf(q) === k), this.atmo));
+    return { ...built, boxes: built.boxes.concat(...sets.map(p => p.boxes)), dispose() { built.dispose(); plantsDispose(); sets.forEach(p => p.dispose()); } };
   }
 
   // Where a hall takes a plant: a hall of at least 6 x 6 cells, in one of its
@@ -1593,6 +1604,23 @@ export class SoulPath {
       if (out.every(o => Math.hypot(o.x - c.x, o.z - c.z) > 4)) out.push(c);
     }
     return out;
+  }
+
+  // The dead ends of corridors (#43): an open cell with wall on three sides,
+  // off the corridor lattice, free with the cell in front of it, gets a plant
+  // turned toward the way out, about one dead end in two.
+  _deadEndSpots(cx, cz, free, rp) {
+    const out = [];
+    for (let j = 1; j < CHUNK - 1; j++) for (let i = 1; i < CHUNK - 1; i++) {
+      if (EGG_BAND.has(i) || EGG_BAND.has(j)) continue;
+      const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+      if (!free(gi, gj)) continue;
+      const open = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([di, dj]) => !solidAtGlobal(gi + di, gj + dj));
+      if (open.length !== 1 || !free(gi + open[0][0], gj + open[0][1]) || rp() > 0.5) continue;
+      const [di, dj] = open[0];
+      out.push({ x: centreOf(gi) - di * 0.1, z: centreOf(gj) - dj * 0.1, rot: Math.atan2(di, dj) });
+    }
+    return out.slice(0, 2);
   }
 
   // Nothing is set down on top of something else: the ways through doors and
