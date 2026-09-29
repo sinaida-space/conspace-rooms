@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { roundedBox } from './geom.js';
 import { hash2i, mulberry32, CONSPACE_SEED } from './world.js';
 import { t } from './i18n.js';
+import { record } from './placement.js';
 
 // ── conspace-rooms · drowned.js ─────────────────────────────────────────────
 // What fear and memory left on the flooded floor of the acceptance stage: a
@@ -329,10 +330,12 @@ export function createDrowned(atmo, quality) {
 
       const created = [];
       const myFloaters = [];
-      const place = build => {
+      const place = (kind, build) => {
         const s = takeSpot();
         if (!s) return;
-        const out = build(settle(s), r() * Math.PI * 2);
+        const at = settle(s);
+        const out = build(at, r() * Math.PI * 2);
+        record({ kind: 'drowned ' + kind, x: at.x, z: at.z, y: 0.1, mount: out.floater ? 'air' : 'floor', ok: true, why: out.floater ? 'floats by design' : 'lies on the floor by design', parent: group });
         created.push(...out.meshes);
         if (out.floater) { floaters.push(out.floater); myFloaters.push(out.floater); }
       };
@@ -341,17 +344,17 @@ export function createDrowned(atmo, quality) {
       const budget = low ? 1 : 2;
       for (let n = 0; n < budget; n++) {
         const kind = pick(['clock', 'calendar', 'letter', 'photo', 'record'], r());
-        if (kind === 'clock') place((p, rot) => buildClock(group, atmo, p, rot, r));
-        else if (kind === 'calendar') place((p, rot) => buildCalendar(group, atmo, p, rot, r));
-        else if (kind === 'record') place((p, rot) => buildRecord(group, atmo, p, rot, r));
-        else if (kind === 'letter') place((p, rot) => buildLetter(group, atmo, p, rot, r, r() < 1 / 6, false));
-        else place((p, rot) => buildPhoto(group, atmo, p, rot, r, false));
+        if (kind === 'clock') place('clock', (p, rot) => buildClock(group, atmo, p, rot, r));
+        else if (kind === 'calendar') place('calendar', (p, rot) => buildCalendar(group, atmo, p, rot, r));
+        else if (kind === 'record') place('record', (p, rot) => buildRecord(group, atmo, p, rot, r));
+        else if (kind === 'letter') place('letter', (p, rot) => buildLetter(group, atmo, p, rot, r, r() < 1 / 6, false));
+        else place('photo', (p, rot) => buildPhoto(group, atmo, p, rot, r, false));
       }
 
       // once in a while, a letter or photograph never made it to the floor at all
       if (r() < 0.22) {
-        if (r() < 0.5) place((p, rot) => buildLetter(group, atmo, p, rot, r, false, true));
-        else place((p, rot) => buildPhoto(group, atmo, p, rot, r, true));
+        if (r() < 0.5) place('letter', (p, rot) => buildLetter(group, atmo, p, rot, r, false, true));
+        else place('photo', (p, rot) => buildPhoto(group, atmo, p, rot, r, true));
       }
 
       return {

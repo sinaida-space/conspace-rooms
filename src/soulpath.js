@@ -17,6 +17,7 @@ import { showCard } from './card.js';
 import { createPetals } from './petals.js';
 import { createPropKit } from './props.js';
 import { createDrowned } from './drowned.js';
+import { mountOrDrop } from './placement.js';
 import { buildStairwell } from './stairwell.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
@@ -518,6 +519,7 @@ export class SoulPath {
         mesh.position.copy(pos);
         mesh.rotation.y = Math.atan2(slot.normal.x, slot.normal.z);
         group.add(mesh);
+        mountOrDrop(mesh, { x: pos.x, z: pos.z, nx: slot.normal.x, nz: slot.normal.z, y: WRITING_Y, kind: 'writing', w: 0.75 });
         stuff.taken = [[pos.x, pos.z, 1.3]];
         const w = { mesh, zone, seed: rw(), behindT: 0 };
         this._writeOn(w);
@@ -549,6 +551,7 @@ export class SoulPath {
       group.add(mesh);
       return mesh;
     };
+    const hangOrDrop = (mesh, sl, kind, w) => mountOrDrop(mesh, { x: mesh.position.x, z: mesh.position.z, nx: sl.normal.x, nz: sl.normal.z, y: mesh.position.y, kind, w });
     long.slice(0, nPost).forEach(sl => {
       const off = (rpo() < 0.5 ? -1 : 1) * (sl.length * CELL / 2 - 0.9);
       const mesh = onWall(sl, 0.78, 1.04, 1.6, off);
@@ -556,6 +559,7 @@ export class SoulPath {
       (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.0]);
       const p = { mesh, q: Math.floor(rpo() * 1000) };
       this._printPoster(p);
+      hangOrDrop(mesh, sl, 'poster', 0.62);                // after the print: the board is scaled wide by then
       stuff.posters.push(p);
     });
     const carpetWall = long[nPost];
@@ -565,6 +569,7 @@ export class SoulPath {
       mesh.material.uniforms.uMap.value = carpetTexture(seed);
       mesh.material.uniforms.uHasMap.value = 1;
       mesh.visible = this.stage.stage === 1;
+      hangOrDrop(mesh, carpetWall, 'wall carpet', 1.0);
       stuff.carpets.push(mesh);
       (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.2]);
     }

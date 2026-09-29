@@ -6,6 +6,7 @@ import { ORIGIN } from './zones.js';
 import { roundedBox } from './geom.js';
 import { contactShadows } from './shadows.js';
 import { t, getLang } from './i18n.js';
+import { mountOrDrop } from './placement.js';
 
 // ── conspace-rooms · ward.js ────────────────────────────────────────────────
 // What the hospital left behind. In the fear stage a few rooms hold a small
@@ -636,6 +637,7 @@ export function createWardKit(atmo, quality) {
         mesh.rotation.set(0, s.rot, s.tilt);
         mesh.userData.keepMaterial = true;
         group.add(mesh);
+        mountOrDrop(mesh, { x: s.x, z: s.z, nx: Math.sin(s.rot), nz: Math.cos(s.rot), y: 1.98, kind: 'ward sign', w: cross ? 0.12 : 0.36 });
       }
       if (geos.length) {
         const mesh = new THREE.Mesh(mergeGeometries(geos), bodyMat);

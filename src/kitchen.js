@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { roundedBox } from './geom.js';
 import { CEIL_H, CELL, solidAtGlobal } from './world.js';
 import { t, getLang } from './i18n.js';
+import { mountOrDrop } from './placement.js';
 
 // rounded edges: radius a third of the thinnest side, capped at 4 cm
 const box = (w, h, d) => roundedBox(w, h, d, Math.min(0.04, Math.min(w, h, d) * 0.3));
@@ -468,6 +469,8 @@ export function buildKitchen(parent, X, Z) {
   calFace.rotation.set(-Math.PI / 2, 0, 0.35);
   calBack.rotation.y = 0.35;
   calFace.receiveShadow = false;
+  const calW = group.localToWorld(new THREE.Vector3(cal.x, 0.03, cal.z));
+  mountOrDrop(calBack, { x: calW.x, z: calW.z, nx: 0, nz: 0, y: 0.03, kind: 'calendar', fallen: true });   // it fell: laid on the floor above, only recorded
 
   // ── a closed hardback, faded cloth cover, left on top of the television ──
   const bk = { x: -0.24, y: 1.04, z: tv.z - 0.02 };

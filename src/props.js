@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
 import { roundedBox } from './geom.js';
 import { contactShadows } from './shadows.js';
+import { wallBehind, record } from './placement.js';
 
 // ── conspace-rooms · props.js ───────────────────────────────────────────────
 // Things left along the corridors, so that hardly a corridor is quite empty.
@@ -638,6 +639,10 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
         const name = pick(stage, s.r, s.run3 !== false);
         const rot = Math.atan2(s.nx, s.nz);
         if (name === 'window') {                   // light where a window should be, tulle before it
+          // a window is merged geometry, so it cannot lie down: with no wall behind it is not built
+          const held = [-0.78, 0, 0.78].every(k => wallBehind(s.x - s.nz * k, s.z + s.nx * k, s.nx, s.nz));
+          record({ kind: 'window', x: s.x, z: s.z, y: 1.7, mount: 'wall', ok: held, why: held ? undefined : 'no wall behind, window skipped', parent: group });
+          if (!held) continue;
           const wm = M(s.x + s.nx * 0.012, 1.7, s.z + s.nz * 0.012, 0, rot);
           windows.push(new THREE.PlaneGeometry(0.9, 1.3).applyMatrix4(wm));
           for (const [bw, bh, by] of [[0.95, 0.05, 2.37], [0.95, 0.05, 1.03], [0.04, 1.3, 1.7]]) {
