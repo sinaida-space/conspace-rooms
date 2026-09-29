@@ -544,7 +544,7 @@ export class Artworks {
     const pinchNow = !!(this.player.hand.present && this.player.hand.pinch);
     const pinchEdge = pinchNow && !this._prevPinch;
     this._prevPinch = pinchNow;
-    if (candidate && (this._pickPressed || pinchEdge)) this._openInspect(candidate);
+    if (candidate && (this._pickPressed || pinchEdge) && !this.player.locked) this._openInspect(candidate);   // never mid-crossing (the tunnel holds the walk)
     this._pickPressed = false;
   }
 

@@ -1156,6 +1156,7 @@ export class SoulPath {
     this.audio?.chime();
     if (!tunnel) { if (this.stage.go(target)) this.post?.burst(1.6); return; }
     this._crossing = true;
+    if (this.artworks.inspecting) this.artworks._closeInspect();
     const held = !P.locked;
     if (held) { P.locked = true; P.vel.set(0, 0); }
     this.post?.burst(0.8);
@@ -1703,6 +1704,15 @@ export class SoulPath {
     }
     const hung = this.wallThings.build(group, st, hangSpots);
     built.hung = hung.hung;
+    // what the event director already took down stays down when the chunk is built again
+    for (const h of built.hung) {
+      h.home = st + ':' + h.mesh.position.x.toFixed(2) + ':' + h.mesh.position.z.toFixed(2);
+      const rest = this._fallen?.get(h.home);
+      if (!rest) continue;
+      h.fallen = true;
+      h.mesh.position.copy(rest.pos);
+      h.mesh.rotation.copy(rest.rot);
+    }
     const plantsDispose = () => { ivy?.dispose(); hung.dispose(); };
     if (!spots.length) return { ...built, dispose() { built.dispose(); plantsDispose(); } };
     this._flammable.get(cx + ':' + cz).push(...spots.map(q => ({ x: q.x, z: q.z })));   // candles keep off
@@ -2595,15 +2605,20 @@ export class SoulPath {
 
   // anything of _petalObstacles() within pad of (x, z)?
   _nearThings(x, z, pad) {
-    return this._petalObstacles(true).some(o => Math.hypot(o.x - x, o.z - z) < o.r + pad);
+    return this._petalObstacles().some(o => Math.hypot(o.x - x, o.z - z) < o.r + pad);
   }
   // Everything standing in the water near the visitor, as circles
   // { x, z, r }: the petals flow round them, never through.
+  // Things stand still: the per-frame list is gathered again only every half
+  // second or when the visitor steps into another chunk.
   _petalObstacles(fresh = false) {
+    const P = this.player.pos, cx = Math.floor(P.x / (CHUNK * CELL)), cz = Math.floor(P.y / (CHUNK * CELL));
+    const now = performance.now(), key = cx + ':' + cz + ':' + this.stage.stage;
+    if (!fresh && this._obst && this._obstKey === key && now - this._obstAt < 500) return this._obst;
     const out = fresh ? [] : (this._obst ??= []);
     out.length = 0;
+    if (!fresh) { this._obstKey = key; this._obstAt = now; }
     if (this.stage.stage !== 2) return out;
-    const P = this.player.pos, cx = Math.floor(P.x / (CHUNK * CELL)), cz = Math.floor(P.y / (CHUNK * CELL));
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
       const st = this.chunkStuff.get((cx + dx) + ':' + (cz + dz));
       if (!st) continue;

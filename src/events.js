@@ -241,6 +241,8 @@ export class EventDirector {
         m.position.y = water + (0.004 - water) * sink;
         return true;
       }
+      // where it lies, for the chunk to remember if it is built again (soulpath.js)
+      if (h.home) (this.soul._fallen ??= new Map()).set(h.home, { pos: m.position.clone(), rot: m.rotation.clone() });
       return false;
     });
     return { dist: d };
