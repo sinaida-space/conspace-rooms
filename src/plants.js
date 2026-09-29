@@ -254,9 +254,11 @@ function concreteGeo(S = 0.45, wall = 0.055) {
 
 // The concrete cube planter, 0.45 m, standing on y = 0. Faked-light material,
 // so it is lit by the zone (fixtures, flicker) like everything in the corridors.
+let CUBE = null;                         // geometry and material drawn once, shared by every cube
 export function buildConcreteCube(atmo) {
-  const geo = concreteGeo();
-  const mesh = new THREE.Mesh(geo, atmo.prop({ map: concreteAtlas(), rust: 0.12 }));
+  CUBE ||= { geo: concreteGeo(), mat: atmo.prop({ map: concreteAtlas(), rust: 0.12 }) };
+  const mesh = new THREE.Mesh(CUBE.geo, CUBE.mat);
+  mesh.userData.keep = true;
   mesh.userData.soilY = 0.45 - 0.055;
   return mesh;
 }

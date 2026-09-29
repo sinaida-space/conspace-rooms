@@ -136,8 +136,6 @@ function potFor(stage, atmo) {
     const cube = buildConcreteCube(atmo);
     cube.scale.setScalar(0.8);
     cube.userData.soilY *= 0.8;
-    cube.userData.keep = true;                            // shared geometry; its own material goes in dispose()
-    cube.userData.ownMaterial = true;
     return cube;
   }
   const pot = buildPorcelainPot();
@@ -225,7 +223,7 @@ export function buildIvy(group, stage, patches, seed, atmo) {
     meshes: made, pots,
     dispose() {
       for (const mesh of made) { group.remove(mesh); mesh.dispose(); }
-      for (const pot of potMeshes) { group.remove(pot); if (pot.userData.ownMaterial) pot.material.dispose(); }
+      for (const pot of potMeshes) group.remove(pot);      // pots share their geometry and materials
     },
   };
 }

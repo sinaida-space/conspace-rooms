@@ -1290,6 +1290,18 @@ export class SoulPath {
     this._placeStairwell(zone, { x: P.pos.x, z: P.pos.y });
   }
 
+  // The first metal door, done with or never met, leaves once it is well out
+  // of sight, so the second can open somewhere ahead.
+  _retireStairwell() {
+    const plan = this.stairwellPlan;
+    if (!plan) return;
+    const stuff = this.chunkStuff.get(plan.cx + ':' + plan.cz), sw = stuff?.stairwell;
+    if (sw && !['wait', 'cool'].includes(sw.phase)) return;          // mid-dream: let it finish
+    if (Math.hypot(plan.x - this.player.pos.x, plan.z - this.player.pos.y) < 14) return;
+    if (sw) { sw.group.parent?.remove(sw.group); sw.dispose?.(); stuff.stairwell = null; }
+    this.stairwellPlan = null;
+  }
+
   // Find a wall run beside one of the zone's cells for the metal door, clear
   // of corners, of works and of `away` (a portal, or the visitor), and set it there.
   _placeStairwell(zone, away) {
@@ -1312,6 +1324,7 @@ export class SoulPath {
         }
         if (!slot) continue;
         this.stairwellPlan = { x: at.x, z: at.z, rotY: Math.atan2(slot.normal.x, slot.normal.z), cx, cz };
+        this._stairCount = (this._stairCount || 0) + 1;
         this._clearAround(at.x, at.z, 2.4);
         const stuff = this.chunkStuff.get(cx + ':' + cz);
         if (stuff) {
@@ -1392,15 +1405,20 @@ export class SoulPath {
       }
     }
 
-    // turns of the corridor, walking: the first one after the first work
-    // brings the metal door into the corridor ahead; after the third work
-    // they count toward the portal
+    // The metal door onto the stairwell (#43) comes twice: at the very start
+    // of fear, as soon as the visitor walks, down the corridor ahead; and again
+    // between the second work and the third, on a turn of the corridor, once
+    // the first is out of sight. After the third work turns count toward the portal.
+    const stairs = this._stairCount || 0;
+    const now = performance.now();
+    if (speed > 0.5 && !stairs && !this.stairwellPlan && now - (this._stairAheadT || 0) > 700) { this._stairAheadT = now; this._summonStairwellAhead(); }   // a try a beat, not every frame
+    if (stairs === 1 && this.stageSeen[0] === 2) this._retireStairwell();
     if (speed > 0.5) {
       const axis = ((Math.round(P.yaw / (Math.PI / 2)) % 4) + 4) % 4;
       if (f.axis === null) f.axis = axis;
       else if (axis !== f.axis) {
         f.axis = axis;
-        if (this.stageSeen[0] >= 1 && !this.stairwellPlan) this._summonStairwellAhead();
+        if (!this.stairwellPlan && (stairs === 0 || (stairs === 1 && this.stageSeen[0] === 2))) this._summonStairwellAhead();
         if (this.stageSeen[0] >= PORTAL_SEEN_FEAR) f.turns++;
       }
     }
