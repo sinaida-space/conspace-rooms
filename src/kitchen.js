@@ -912,6 +912,14 @@ export function buildScatter(group, items) {
     count: items.length,
     lights: items.map(it => ({ x: it.x, y: 0.28, z: it.z, col: it.flame })), // for the walls to catch
     items, meshes,                     // soulpath dims flames in place: instance i is items[i]
+    // set candle i down elsewhere (its light follows)
+    move(i, x, z) {
+      const it = items[i];
+      it.x = x; it.z = z;
+      q.setFromAxisAngle(up, it.rot);
+      for (const [name, y] of parts[it.type]) { m.compose(new THREE.Vector3(x, y, z), q, one); meshes[name].setMatrixAt(i, m); meshes[name].instanceMatrix.needsUpdate = true; }
+      Object.assign(this.lights[i], { x, z });
+    },
     dispose() { this.disposed = true; for (const name in meshes) { group.remove(meshes[name]); meshes[name].dispose(); } }, // frees instance buffers only
   };
 }

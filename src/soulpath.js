@@ -66,6 +66,7 @@ const ROUTE_CELLS = 30;          // how much of the route gets marks (~36 m)
 const MARK_EVERY = 2;            // cells between marks
 const MARK_POOL = 28;             // marks stay where they were scratched, so the pool is larger
 const CANDLE_NEAR = 12;          // metres: candles within this of a work tell whether it is seen
+const CANDLE_FILL = 1.8;          // metres: no stretch of wall further than this from a candle
 const CANDLE_CURTAIN_GAP = 1.4;  // metres: no flame this close to a window and its curtains
 const CANDLE_DIE = 2.6;          // seconds a candle gutters before it is only an ember
 const EMBER = new THREE.Color(0x2e0c04);
@@ -1461,14 +1462,16 @@ export class SoulPath {
     const unseen = arts.filter(a => !a.seen);
     const prox = d => { const k = Math.max(0, Math.min(1, 1 - d / 45)); return k * k * (3 - 2 * k); };
     const YELLOW = new THREE.Color(0xffd27a), RED = new THREE.Color(0xff2a14), PALE_WAX = new THREE.Color(0xe6dac0), RED_WAX = new THREE.Color(0x8e1216);
-    const items = [];
+    const items = [], wallAt = [];
     const wardCells = this._wardCells.get(cx + ':' + cz);
     for (let j = 0; j < CHUNK; j++) for (let i = 0; i < CHUNK; i++) {
       const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
       if (solidAtGlobal(gi, gj)) continue;
       if (wardCells?.has(cellKey(gi, gj))) continue;  // the hospital's things own these cells
-      if (cornerDist(centreOf(gi), centreOf(gj)) < PROP_FREE) continue;   // the holy zone round a corner stays bare
       const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([di, dj]) => solidAtGlobal(gi + di, gj + dj));
+      const cd = cornerDist(centreOf(gi), centreOf(gj));
+      if (side && cd >= 1.2) wallAt.push({ gi, gj, side });   // the fill below may come nearer a corner
+      if (cd < PROP_FREE) continue;                     // the holy zone round a corner stays bare of the trail
       const r = rnd();
       if (!side) continue;                              // only along walls, so paths stay clear
       const x = centreOf(gi) + side[0] * 0.36 + (rnd() - 0.5) * 0.3;
@@ -1494,6 +1497,26 @@ export class SoulPath {
       for (const a of unseen) { const d = Math.hypot(a.x - x, a.z - z); if (d < tgd) { tgd = d; tgx = a.x - x; tgz = a.z - z; } }
       if (tgd < Infinity && tgd > 1e-3) { tgx /= tgd; tgz /= tgd; }
       if (this._nearFlammable(cx, cz, x, z) || this._keepOut(cx, cz, x, z, 0.25)) continue;
+      items.push({ type: st === 2 ? 'boatCandle' : 'candle', x, z, rot: rnd() * 6.28, flame, wax, spent, tgx, tgz });
+    }
+    // The floor under the map (#43): wherever a wall is further than CANDLE_FILL
+    // from any candle, here or next door, one more is set down, so at least two
+    // are always in sight and the way can be read. They take the colour of
+    // their place like the rest.
+    const others = [];
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (dx || dz)
+      for (const it of this.chunkStuff.get((cx + dx) + ':' + (cz + dz))?.scatter?.items || []) if (!it.gone) others.push(it);
+    const lit = (x, z) => items.some(it => Math.hypot(it.x - x, it.z - z) < CANDLE_FILL) || others.some(it => Math.hypot(it.x - x, it.z - z) < CANDLE_FILL);
+    for (const { gi, gj, side } of wallAt) {
+      const x = centreOf(gi) + side[0] * 0.36, z = centreOf(gj) + side[1] * 0.36;
+      if (lit(x, z) || this._nearFlammable(cx, cz, x, z) || this._keepOut(cx, cz, x, z, 0.25)) continue;
+      const pp = seekRoom ? 0 : prox(near(portals, x, z)), pk = st === 1 ? Math.max(0, Math.min(1, 1 - near(kitchens, x, z) / 70)) : 0;
+      const du = near(unseen, x, z), spent = du > CANDLE_NEAR && near(arts, x, z) < CANDLE_NEAR;
+      const flame = spent ? EMBER.clone() : st === 0 ? YELLOW.clone().lerp(RED, pp) : seekRoom ? YELLOW.clone().lerp(RED, pk) : st === 1 ? RED.clone().lerp(YELLOW, pp) : new THREE.Color(0xfff4dc);
+      const wax = st === 1 ? PALE_WAX.clone().lerp(RED_WAX, pk) : PALE_WAX.clone();
+      let tgx = 0, tgz = 0, tgd = Infinity;
+      for (const p of portals.concat(unseen)) { const d = Math.hypot(p.x - x, p.z - z); if (d < tgd) { tgd = d; tgx = p.x - x; tgz = p.z - z; } }
+      if (tgd < Infinity && tgd > 1e-3) { tgx /= tgd; tgz /= tgd; }
       items.push({ type: st === 2 ? 'boatCandle' : 'candle', x, z, rot: rnd() * 6.28, flame, wax, spent, tgx, tgz });
     }
     return buildScatter(group, items);
@@ -1658,8 +1681,22 @@ export class SoulPath {
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
       const sc = this.chunkStuff.get((cx + dx) + ':' + (cz + dz))?.scatter;
       if (!sc?.items) continue;
+      const ccx = cx + dx, ccz = cz + dz;
       sc.items.forEach((it, i) => {
         if (it.gone || !mine.some(f => Math.hypot(f.x - it.x, f.z - it.z) < CANDLE_CURTAIN_GAP)) return;
+        // first try the nearest place along a wall within 3 m that is clear of cloth and of other candles
+        let best = null, bd = Infinity;
+        const gi0 = cellOf(it.x), gj0 = cellOf(it.z);
+        for (let gj = gj0 - 3; gj <= gj0 + 3; gj++) for (let gi = gi0 - 3; gi <= gi0 + 3; gi++) {
+          if (solidAtGlobal(gi, gj)) continue;
+          const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([a, b]) => solidAtGlobal(gi + a, gj + b));
+          if (!side) continue;
+          const x = centreOf(gi) + side[0] * 0.36, z = centreOf(gj) + side[1] * 0.36, d = Math.hypot(x - it.x, z - it.z);
+          if (d >= bd || d > 3 || this._nearFlammable(ccx, ccz, x, z) || this._keepOut(ccx, ccz, x, z, 0.25)
+            || sc.items.some((o, j) => j !== i && !o.gone && Math.hypot(o.x - x, o.z - z) < 0.8)) continue;
+          bd = d; best = { x, z };
+        }
+        if (best) { sc.move(i, best.x, best.z); return; }
         it.gone = true;
         for (const name in sc.meshes) { sc.meshes[name].setMatrixAt(i, zero); sc.meshes[name].instanceMatrix.needsUpdate = true; }
         if (sc.lights?.[i]) sc.lights[i].col = dark;
@@ -2406,13 +2443,17 @@ export class SoulPath {
     if (this.stage.stage !== 2) return;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), qt = new THREE.Quaternion(),
       up = new THREE.Vector3(0, 1, 0), ax = new THREE.Vector3(1, 0, 0), one = new THREE.Vector3(1, 1, 1);
-    const CANDLE_DRIFT = 0.25;
+    const CANDLE_DRIFT = 0.25, FLOAT_NEAR = 18, at = new THREE.Vector3(), px = this.player.pos.x, pz = this.player.pos.y;
     for (const st of this.chunkStuff.values()) {
       const sc = st.scatter;
       if (!sc?.items?.length) continue;
+      let moved = false;
       for (let i = 0; i < sc.items.length; i++) {
         const it = sc.items[i];
         if (it.spent || it.gone) continue;
+        // far off in the milky air a candle holds still: only those within FLOAT_NEAR ride the water
+        if (Math.abs(it.x - px) > FLOAT_NEAR || Math.abs(it.z - pz) > FLOAT_NEAR) continue;
+        moved = true;
         const sway = 0.5 + 0.5 * Math.sin(time * 0.17 + i * 0.63);      // 0..1, biased on toward the target
         const drift = (sway * 0.7 + 0.3) * CANDLE_DRIFT;
         const x = it.x + it.tgx * drift, z = it.z + it.tgz * drift;
@@ -2425,13 +2466,13 @@ export class SoulPath {
         for (const [name, off] of [['boat', 0.0], ['saucer', 0.01], ['wax', 0.09], ['flame', 0.18], ['pool', 0.016]]) {
           const mesh = sc.meshes[name];
           if (!mesh) continue;
-          m.compose(new THREE.Vector3(x, base + off + bob, z), q, one);
+          m.compose(at.set(x, base + off + bob, z), q, one);
           mesh.setMatrixAt(i, m);
         }
         const L = sc.lights[i];
         if (L) { L.x = x; L.y = base + 0.28 + bob; L.z = z; }
       }
-      for (const name in sc.meshes) sc.meshes[name].instanceMatrix.needsUpdate = true;
+      if (moved) for (const name in sc.meshes) sc.meshes[name].instanceMatrix.needsUpdate = true;
     }
   }
 
