@@ -69,10 +69,10 @@ async function boot() {
   const quality = new Quality();
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.tier > 0, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(quality.p.pixelRatio, devicePixelRatio));
+  renderer.setPixelRatio(quality.pixelRatio);
   // when the governor steps the tier down, render fewer pixels right away
   quality.onDowngrade = () => {
-    renderer.setPixelRatio(Math.min(quality.p.pixelRatio, devicePixelRatio));
+    renderer.setPixelRatio(quality.pixelRatio);
     renderer.setSize(innerWidth, innerHeight);
     window.__app?.post?.resize();
   };

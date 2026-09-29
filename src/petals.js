@@ -342,7 +342,7 @@ export function createPetals(scene, camera, quality) {
     update(dt, time) {
       now = time;
       shared.uTime.value = time;
-      shared.uViewH.value = innerHeight * Math.min(quality.p.pixelRatio, devicePixelRatio || 1);
+      shared.uViewH.value = innerHeight * quality.pixelRatio;
       if (sparkles.visible && time > sparkEnd) sparkles.visible = false;
       if (time < followEnd) { corner(); flowU.uCorner.value.copy(_c); }   // uniform only, no buffers
     },

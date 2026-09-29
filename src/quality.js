@@ -25,6 +25,7 @@ export class Quality {
     // FPS governor state
     this._samples = [];
     this._cooldown = 0;
+    this.scale = 1;          // render scale, 1 down to 0.6 (govern)
     this.onDowngrade = null;
   }
 
@@ -45,27 +46,38 @@ export class Quality {
   }
 
   get p() { return TABLE[this.tier]; }
+  // the pixel ratio to render at: the tier's, never above the screen's, times
+  // the render scale the governor lowers once the tiers have run out
+  get pixelRatio() { return Math.min(this.p.pixelRatio, devicePixelRatio) * this.scale; }
   get canHands() { // hand tracking only where the GPU can afford a second model
     return !this.device.isPhone && this.tier >= 1 && this.device.hasCamera;
   }
 
   // called each frame with delta time; steps tier down under sustained low FPS
   govern(dt) {
-    // a desktop never drops to tier 0: that tier has no lamp shadows and a
-    // denser fog, and the whole corridor would change its light mid-walk (#43)
-    if (this.tier === (this.isMobile ? 0 : 1)) return;
     this._cooldown -= dt;
     this._samples.push(dt);
     if (this._samples.length < 120) return;
-    const avg = this._samples.reduce((a, b) => a + b, 0) / this._samples.length;
+    // the median frame, so one hitch (a chunk built, a stage changed) is not read as a slow machine
+    const median = this._samples.sort((a, b) => a - b)[60];
     this._samples.length = 0;
     const target = this.isMobile ? 1 / 24 : 1 / 52; // desktop aims for 60: step down below ~52
-    if (avg > target && this._cooldown <= 0) {
+    if (median <= target || this._cooldown > 0) return;
+    // a desktop never drops to tier 0: that tier has no lamp shadows and a
+    // denser fog, and the whole corridor would change its light mid-walk (#43).
+    // At the lowest tier allowed it renders fewer pixels instead, which the
+    // television of the post pass hides, down to 0.6 of them
+    if (this.tier <= (this.isMobile ? 0 : 1)) {
+      if (this.scale <= 0.6) return;
+      this.scale = Math.max(0.6, +(this.scale - 0.15).toFixed(2));
+      this._cooldown = 8;
+      console.warn('[quality] sustained low fps — render scale', this.scale);
+    } else {
       this.tier--;
       this._cooldown = 12; // don't cascade
       console.warn('[quality] sustained low fps — stepping down to', this.p.name);
-      if (this.onDowngrade) this.onDowngrade(this.tier);
     }
+    if (this.onDowngrade) this.onDowngrade(this.tier);
   }
 
   persist(allowed) {
