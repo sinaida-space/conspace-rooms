@@ -3,6 +3,7 @@ import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
 import { GLTFLoader } from '../vendor/addons/GLTFLoader.js';
 import { shape, ficusBuild, plantLook, plantRng } from './props.js';
 import { CELL, solidAtGlobal } from './world.js';
+import { contactShadows } from './shadows.js';
 
 // ── conspace-rooms · plants.js ──────────────────────────────────────────────
 // DRAFTS of the plants each zone will get, behind ?plantdraft=fear|room|accept
@@ -506,12 +507,14 @@ function monsteraSkin() {
   return { map: srgbTex(col), normal };
 }
 
-// UVs for the model, which has none worth keeping (a palette atlas): the
-// mesh falls apart into 19 pieces, 9 of them leaves. Each leaf gets its own
-// frame from its vertices (the longest axis runs stalk to tip, the stalk end
-// is the one nearer the plant's axis) and is laid onto the leaf skin. Stems
-// go to the plain corner.
-function monsteraUVs(geo) {
+// The model reworked into something closer to a plant. It falls apart into
+// 19 pieces, 9 of them leaves. Each piece gets its own frame from its
+// vertices (power iteration on the covariance): the leaves are laid onto the
+// leaf skin (longest axis stalk to tip, the stalk end the one nearer the
+// plant's axis), pressed to half their thickness and tinted a little apart;
+// the stems, far too fat for the blades, are pulled in to 45% of their girth
+// around their own axis. Stems use the plain corner of the skin.
+function monsteraShape(geo) {
   const p = geo.attributes.position, ix = geo.index, n = p.count;
   const par = new Int32Array(n).map((_, i) => i);
   const find = x => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
@@ -528,44 +531,78 @@ function monsteraUVs(geo) {
   }
   const groups = new Map();
   for (let i = 0; i < n; i++) { const r = find(id[i]); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(i); }
-  const uv = new Float32Array(n * 2).fill(0.02);
-  const v = new THREE.Vector3(), c = new THREE.Vector3();
+  const uv = new Float32Array(n * 2).fill(0.02), color = new Float32Array(n * 3).fill(1);
+  const v = new THREE.Vector3(), rnd = plantRng(5150);
+  const mul = (M, x) => new THREE.Vector3(M[0] * x.x + M[1] * x.y + M[2] * x.z, M[3] * x.x + M[4] * x.y + M[5] * x.z, M[6] * x.x + M[7] * x.y + M[8] * x.z);
+  const axis = M => { let x = new THREE.Vector3(0.3, 0.9, 0.2); for (let k = 0; k < 40; k++) x = mul(M, x).normalize(); return x; };
   for (const verts of groups.values()) {
-    if (verts.length < 200) continue;                      // a stem: stays on the stalk corner
-    c.set(0, 0, 0);
+    const c = new THREE.Vector3();
     for (const i of verts) c.add(v.fromBufferAttribute(p, i));
     c.divideScalar(verts.length);
-    // covariance and its main axis by power iteration; the second axis the same way, deflated
     const C = [0, 0, 0, 0, 0, 0, 0, 0, 0];
     for (const i of verts) {
       v.fromBufferAttribute(p, i).sub(c);
       const a = [v.x, v.y, v.z];
       for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) C[r * 3 + q] += a[r] * a[q];
     }
-    const mul = (M, x) => new THREE.Vector3(M[0] * x.x + M[1] * x.y + M[2] * x.z, M[3] * x.x + M[4] * x.y + M[5] * x.z, M[6] * x.x + M[7] * x.y + M[8] * x.z);
-    const axis = M => { let x = new THREE.Vector3(0.3, 0.9, 0.2); for (let k = 0; k < 40; k++) x = mul(M, x).normalize(); return x; };
-    const e1 = axis(C);
-    const l1 = mul(C, e1).dot(e1);
-    const D = C.slice();
+    const e1 = axis(C), l1 = mul(C, e1).dot(e1), D = C.slice();
     for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) D[r * 3 + q] -= l1 * e1.getComponent(r) * e1.getComponent(q);
-    const e2 = axis(D);
-    // the stalk end is the end nearer the plant's axis (x = z = 0)
+    const e2 = axis(D), e3 = new THREE.Vector3().crossVectors(e1, e2).normalize();
+    if (verts.length < 200) {                              // a stem: thinner around its own axis
+      for (const i of verts) {
+        v.fromBufferAttribute(p, i).sub(c);
+        const s = v.dot(e1), along = e1.clone().multiplyScalar(s), off = v.clone().sub(along).multiplyScalar(0.45);
+        v.copy(c).add(along).add(off); p.setXYZ(i, v.x, v.y, v.z);
+      }
+      continue;
+    }
     let lo = Infinity, hi = -Infinity, loR = 0, hiR = 0, wMax = 0;
     for (const i of verts) {
       v.fromBufferAttribute(p, i);
-      const s = v.clone().sub(c).dot(e1), rr = Math.hypot(v.x, v.z);
+      const rr = Math.hypot(v.x, v.z); v.sub(c);
+      const s = v.dot(e1);
       if (s < lo) { lo = s; loR = rr; } if (s > hi) { hi = s; hiR = rr; }
-      wMax = Math.max(wMax, Math.abs(v.clone().sub(c).dot(e2)));
+      wMax = Math.max(wMax, Math.abs(v.dot(e2)));
     }
     const flip = loR > hiR ? -1 : 1, len = hi - lo;
+    const tint = 0.9 + rnd() * 0.2, warm = (rnd() - 0.5) * 0.08;
     for (const i of verts) {
       v.fromBufferAttribute(p, i).sub(c);
-      const s = v.dot(e1), w = v.dot(e2);
+      const s = v.dot(e1), w = v.dot(e2), d = v.dot(e3);
       uv[i * 2] = 0.5 + w / (2 * wMax) * 0.96;
       uv[i * 2 + 1] = flip > 0 ? (s - lo) / len : (hi - s) / len;
+      v.copy(c).addScaledVector(e1, s).addScaledVector(e2, w).addScaledVector(e3, d * 0.5);
+      p.setXYZ(i, v.x, v.y, v.z);
+      color[i * 3] = tint + warm; color[i * 3 + 1] = tint; color[i * 3 + 2] = tint - warm;
     }
   }
   geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.setAttribute('color', new THREE.BufferAttribute(color, 3));
+  geo.computeVertexNormals();
+}
+
+// The plant's shadow on the floor: its own triangles flattened along the
+// light onto y = 0, dark and see-through, so the slits and holes of the
+// leaves show in it. Five pale copies from slightly different directions
+// stack into a soft edge; inside each copy depth writes with a strict test
+// keep overlapping leaves (and both faces of a blade) from darkening twice.
+// dir: toward the light (world, need not be normalised).
+export function plantShadow(geo, dir, opacity = 0.26) {
+  const out = new THREE.Group();
+  const JITTER = [[0, 0], [0.09, 0.03], [-0.09, -0.03], [0.03, -0.09], [-0.03, 0.09]];
+  JITTER.forEach(([jx, jz], k) => {
+    const L = new THREE.Vector3(dir.x + jx * dir.y, dir.y, dir.z + jz * dir.y).normalize(), y = 0.004 + k * 0.0012;
+    const flat = geo.clone(), q = flat.attributes.position;
+    for (let i = 0; i < q.count; i++) {
+      const t = q.getY(i) / L.y;
+      q.setXYZ(i, q.getX(i) - L.x * t, y, q.getZ(i) - L.z * t);
+    }
+    for (const k of Object.keys(flat.attributes)) if (k !== 'position') flat.deleteAttribute(k);
+    const m = new THREE.Mesh(flat, new THREE.MeshBasicMaterial({ color: 0x2a1c34, transparent: true, opacity: opacity / JITTER.length * 1.7, depthWrite: true, depthFunc: THREE.LessDepth, side: THREE.DoubleSide }));
+    m.renderOrder = 1;
+    out.add(m);
+  });
+  return out;
 }
 
 // A soft room of light for the leaves to mirror: a pale sky above, a lilac
@@ -610,12 +647,12 @@ export async function loadMonstera(atmo, { soilY = 0.475, scale = 0.68, renderer
   geo.translate(0, -MONSTERA_POT_TOP, 0);
   geo.scale(scale, scale, scale);
   geo.translate(0, soilY, 0);
-  monsteraUVs(geo);
+  monsteraShape(geo);
   const skin = monsteraSkin();
   const mat = new THREE.MeshPhysicalMaterial({
     map: skin.map, normalMap: skin.normal, normalScale: new THREE.Vector2(0.8, 0.8),
     roughness: 0.42, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.18,
-    envMap: leafEnvironment(renderer), envMapIntensity: 1.2, side: THREE.DoubleSide,
+    envMap: leafEnvironment(renderer), envMapIntensity: 1.2, side: THREE.DoubleSide, vertexColors: true,
   });
   return new THREE.Mesh(geo, mat);
 }
@@ -678,7 +715,12 @@ export async function placePlantDraft(kind, { scene, player, atmo, renderer }) {
   } else {
     const planter = buildRoundPlanter(atmo);
     add(planter);
-    add(await loadMonstera(atmo, { soilY: planter.userData.soilY, renderer }));
+    const monstera = await loadMonstera(atmo, { soilY: planter.userData.soilY, renderer });
+    add(monstera);
+    // its shadow falls away from the sun; the group turns, so the direction goes into the group's frame
+    const toSun = new THREE.Vector3(-3, 5, 2).applyAxisAngle(new THREE.Vector3(0, 1, 0), -group.rotation.y);
+    group.add(plantShadow(monstera.geometry, toSun));
+    scene.add(contactShadows([{ x: best.x, z: best.z, w: 0.46, d: 0.46, rot: 0, h: 0, k: 0.55 }]));   // world frame: it looks for the nearest fixture
     // a sun through a high window, so the wax on the leaves has something to catch
     const sun = new THREE.DirectionalLight(0xfff4e4, 3);
     sun.position.set(best.x - 3, 5, best.z + 2); sun.target = group;
