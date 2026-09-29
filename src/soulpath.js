@@ -1144,11 +1144,29 @@ export class SoulPath {
       const a0 = p.west ? prev.x - p.x : prev.z - p.z, a1 = p.west ? cur.x - p.x : cur.z - p.z;
       const along = p.west ? cur.z - p.z : cur.x - p.x;
       if (!p.group.visible) continue;
-      if (Math.sign(a0) !== Math.sign(a1) && Math.abs(along) < p.span / 2 && this.stage.go(p.target)) {
-        this.post?.burst(1.6);
-        this.audio?.chime();
-      }
+      if (Math.sign(a0) !== Math.sign(a1) && Math.abs(along) < p.span / 2 && p.target > this.stage.stage && !this._crossing) this._cross(p.target);
     }
+  }
+
+  // The crossing: the tunnel closes in over the world (tunnel.js), the stage
+  // changes while it hides everything, the walk is held still, and the throat
+  // opens onto the new stage. Without the tunnel (no WebGL extras) at once.
+  _cross(target) {
+    const tunnel = window.__app?.tunnel, P = this.player;
+    this.audio?.chime();
+    if (!tunnel) { if (this.stage.go(target)) this.post?.burst(1.6); return; }
+    this._crossing = true;
+    const held = !P.locked;
+    if (held) { P.locked = true; P.vel.set(0, 0); }
+    this.post?.burst(0.8);
+    tunnel.start(this.stage.stage, target, () => {
+      if (this.stage.go(target)) this.stage.t = 0.4;      // most of the blend happens unseen: the throat opens onto the new look
+      this.post?.burst(1.2);
+    }, () => {
+      if (held) P.locked = false;
+      this._crossing = false;
+      this._prevPos = { x: P.pos.x, z: P.pos.y };
+    });
   }
 
   // The one portal leading past the current stage, if it has been summoned
