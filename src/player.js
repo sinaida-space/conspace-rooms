@@ -230,6 +230,8 @@ export class Player {
         const axis = Math.round(this.yaw / (Math.PI / 2)) * (Math.PI / 2);
         this.yaw += wrapAngle(axis - this.yaw) * Math.min(1, dt * ALIGN_RATE);
       }
+      // and the eyes come back to the horizon: nobody walks looking at the ceiling
+      if (performance.now() - (this._lookAt || 0) > 800) this.pitch += (0 - this.pitch) * Math.min(1, dt * ALIGN_RATE);
     }
     const resolved = this._collide(nx, nz);
     // kill velocity component lost to the wall (so accel doesn't build up into it)
