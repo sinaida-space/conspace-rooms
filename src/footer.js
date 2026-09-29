@@ -67,6 +67,26 @@ export function renderFooter(lang, target = document.getElementById('site-footer
       <a href="https://www.instagram.com/uvaliss/" ${ext}>@uvaliss</a>
       <a href="https://open.spotify.com/playlist/0145rQE2XluEkz3YWbEQLp?si=6c33fb59e0ad4ff4" ${ext}>${c.playlist}</a>
     </div>`;
+  // Easter egg: the version line looks like plain print, yet a click on it opens Snake
+  target.querySelector('.footer-version').addEventListener('click', openSnake);
+  listenKonami(target);
+}
+
+const openSnake = () => import('./snake.js').then(m => m.openSnake());
+
+// ↑ ↑ ↓ ↓ ← → ← → B A opens Snake too, only while the footer is on screen, so
+// the arrows never fire it mid-walk. Letters by key position, any layout.
+const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
+let konamiOn = false;
+function listenKonami(footer) {
+  if (konamiOn) return;
+  konamiOn = true;
+  let i = 0;
+  addEventListener('keydown', e => {
+    if (!footer.getClientRects().length || document.querySelector('.snake-modal')) { i = 0; return; }
+    i = e.code === KONAMI[i] ? i + 1 : (e.code === KONAMI[0] ? 1 : 0);
+    if (i === KONAMI.length) { i = 0; openSnake(); }
+  });
 }
 
 // Je suis le spectre d'une rose que tu portais hier au bal.

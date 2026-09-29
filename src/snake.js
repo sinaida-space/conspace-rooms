@@ -1,4 +1,5 @@
-// Snake on the 404 page: a click on the flickering number opens it.
+// Snake: opened by the flickering number on the 404 page, the version line in
+// the footer, or the Konami code wherever the footer is on screen.
 // Vanilla port of the SnakeEasterEgg from sinaida.eu, recoloured to this site:
 // phosphor-green snake with an ECG pulse in its head, coral roses to eat.
 
@@ -19,6 +20,23 @@ const COPY = {
   ru: { start: 'НАЖМИ ЛЮБУЮ КЛАВИШУ', swipe: 'или смахни, чтобы начать', restart: 'R ИЛИ ТАП, ЧТОБЫ ЗАНОВО', keys: '↑ ↓ ← → или WASD', close: 'Закрыть' },
 };
 
+const STYLE = `
+/* flat window over the page, the scanlines still run over it */
+.snake-modal { position: fixed; inset: 0; z-index: 25; display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(1, 8, 5, 0.88); }
+.snake-panel { width: 100%; max-width: 344px; border: 1px solid var(--accent); background: var(--bg);
+  box-shadow: 0 0 40px rgba(57, 255, 106, 0.18); }
+.snake-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px;
+  padding: 6px 12px; border-bottom: 1px solid var(--dim); color: var(--accent); font-size: 0.85em; letter-spacing: 0.08em; }
+.snake-bar b { font-weight: 400; }
+.snake-hint { border-bottom: 0; border-top: 1px solid var(--dim); color: var(--dim); }
+.snake-close, .snake-pad button { font: inherit; color: var(--accent); background: none; cursor: pointer; text-shadow: inherit; }
+.snake-close { border: 0; padding: 0; }
+.snake-panel canvas { display: block; width: calc(100% - 24px); height: auto; margin: 12px; outline: none; touch-action: none; }
+.snake-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 0 12px 12px; }
+.snake-pad button { border: 1px solid var(--dim); padding: 8px; }
+@media (hover: hover) and (pointer: fine) { .snake-pad { display: none; } }`;
+
 function randomFood(snake) {
   let p;
   do p = { x: Math.floor(Math.random() * GRID), y: Math.floor(Math.random() * GRID) };
@@ -28,6 +46,11 @@ function randomFood(snake) {
 
 export function openSnake() {
   if (document.querySelector('.snake-modal')) return;
+  if (!document.getElementById('snake-style')) {
+    const st = document.createElement('style');
+    st.id = 'snake-style'; st.textContent = STYLE;
+    document.head.appendChild(st);
+  }
   const t = COPY[document.documentElement.lang] || COPY.en;
   const C = { bg: css('--bg'), fg: css('--fg'), dim: css('--dim'), green: css('--accent'), rose: css('--tri-coral') };
   const font = size => `${size}px ${css('--font-dos')}`;

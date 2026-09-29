@@ -36,21 +36,6 @@
   .lost-ways a { text-decoration: none; border-bottom: 1px solid currentColor; }
   .lost-ways .hint { color: var(--dim); }
   .lost-code:focus-visible { outline: 1px dashed var(--dim); outline-offset: 6px; }
-  /* snake: flat window over the page, scanlines still run over it */
-  .snake-modal { position: fixed; inset: 0; z-index: 25; display: flex; align-items: center; justify-content: center;
-    padding: 16px; background: rgba(1, 8, 5, 0.88); }
-  .snake-panel { width: 100%; max-width: 344px; border: 1px solid var(--accent); background: var(--bg);
-    box-shadow: 0 0 40px rgba(57, 255, 106, 0.18); }
-  .snake-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px;
-    padding: 6px 12px; border-bottom: 1px solid var(--dim); color: var(--accent); font-size: 0.85em; letter-spacing: 0.08em; }
-  .snake-bar b { font-weight: 400; }
-  .snake-hint { border-bottom: 0; border-top: 1px solid var(--dim); color: var(--dim); }
-  .snake-close, .snake-pad button { font: inherit; color: var(--accent); background: none; cursor: pointer; text-shadow: inherit; }
-  .snake-close { border: 0; padding: 0; }
-  .snake-panel canvas { display: block; width: calc(100% - 24px); height: auto; margin: 12px; outline: none; touch-action: none; }
-  .snake-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 0 12px 12px; }
-  .snake-pad button { border: 1px solid var(--dim); padding: 8px; }
-  @media (hover: hover) and (pointer: fine) { .snake-pad { display: none; } }
   @media (prefers-reduced-motion: reduce) { .lost-code { animation: none; } }
 </style>
 </head>
@@ -91,7 +76,7 @@
   renderFooter(document.documentElement.lang);
   // the number is a door after all: behind it, a snake
   document.querySelectorAll('.lost-code').forEach(b => b.addEventListener('click', () =>
-    import('./src/snake404.js').then(m => m.openSnake())));
+    import('./src/snake.js').then(m => m.openSnake())));
 </script>
 </body>
 </html>
