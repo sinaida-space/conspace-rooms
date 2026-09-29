@@ -1128,6 +1128,28 @@ export class SoulPath {
       if (d >= STAIR_BEFORE_MIN && d <= STAIR_BEFORE_MAX) zone.push({ gi: pi, gj: pj });
       if (d > STAIR_BEFORE_MAX) break;
     }
+    this._placeStairwell(zone, portal);
+  }
+
+  // The metal door on the first turn after the first work is seen: along the
+  // corridor the visitor has just turned into, 4 to 14 m ahead, on a side wall.
+  _summonStairwellAhead() {
+    if (this.stairwellPlan) return;
+    const P = this.player, fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+    const ax = Math.abs(fx) > Math.abs(fz) ? Math.sign(fx) : 0, az = ax ? 0 : Math.sign(fz);
+    const zone = [];
+    for (let d = 0.6; d < 14; d += CELL) {
+      const x = P.pos.x + ax * d, z = P.pos.y + az * d;
+      if (!this.world.isWalkable(x, z)) break;
+      if (d >= 4) zone.push({ gi: cellOf(x), gj: cellOf(z) });
+    }
+    this._placeStairwell(zone, { x: P.pos.x, z: P.pos.y });
+  }
+
+  // Find a wall run beside one of the zone's cells for the metal door, clear
+  // of corners, of works and of `away` (a portal, or the visitor), and set it there.
+  _placeStairwell(zone, away) {
+    const portal = away;
     for (const clear of [CORNER_FREE, 1.8]) {          // the holy zone first; only if no slot at all, a smaller one
       for (const w of zone) {
         const cx = Math.floor(w.gi / CHUNK), cz = Math.floor(w.gj / CHUNK);
@@ -1199,12 +1221,7 @@ export class SoulPath {
       const dx = x - P.pos.x, dz = z - P.pos.y, d = Math.hypot(dx, dz);
       if (d < FIND_NEAR && (fx * dx + fz * dz) / (d || 1) > 0.3) { f.found.add(key); f[kind]++; }
     };
-    for (const [ck, st] of this.chunkStuff) {
-      st.writings.forEach((w, i) => look('w' + ck + ':' + i, w.mesh.position.x, w.mesh.position.z, 'writings'));
-      (st.posters || []).forEach((p, i) => look('b' + ck + ':' + i, p.mesh.position.x, p.mesh.position.z, 'writings'));
-      (st.props?.walls || []).concat(st.props?.air || []).forEach((p, i) => look('p' + ck + ':' + i, p.x, p.z, 'things'));
-      (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || []).forEach((b, i) => look('m' + ck + ':' + i, b.x, b.z, 'things'));
-    }
+    for (const t of this._fearFinds()) look(t.key, t.x, t.z, t.kind);
 
     // the next work is due
     const shownSeen = [...f.ids].every(id => this.seen.has(id));
@@ -1226,12 +1243,31 @@ export class SoulPath {
       }
     }
 
-    // turns of the corridor after the third work, walking
-    if (this.stageSeen[0] >= PORTAL_SEEN_FEAR && speed > 0.5) {
+    // turns of the corridor, walking: the first one after the first work
+    // brings the metal door into the corridor ahead; after the third work
+    // they count toward the portal
+    if (speed > 0.5) {
       const axis = ((Math.round(P.yaw / (Math.PI / 2)) % 4) + 4) % 4;
       if (f.axis === null) f.axis = axis;
-      else if (axis !== f.axis) { f.axis = axis; f.turns++; }
+      else if (axis !== f.axis) {
+        f.axis = axis;
+        if (this.stageSeen[0] >= 1 && !this.stairwellPlan) this._summonStairwellAhead();
+        if (this.stageSeen[0] >= PORTAL_SEEN_FEAR) f.turns++;
+      }
     }
+  }
+
+  // Everything in fear that counts as a find: scrawls and boards on the walls,
+  // things lying about, the ward's beds and chairs. Keys are stable per chunk.
+  _fearFinds() {
+    const out = [];
+    for (const [ck, st] of this.chunkStuff) {
+      st.writings.forEach((w, i) => out.push({ key: 'w' + ck + ':' + i, x: w.mesh.position.x, z: w.mesh.position.z, kind: 'writings' }));
+      (st.posters || []).forEach((p, i) => out.push({ key: 'b' + ck + ':' + i, x: p.mesh.position.x, z: p.mesh.position.z, kind: 'writings' }));
+      (st.props?.walls || []).concat(st.props?.air || []).forEach((p, i) => out.push({ key: 'p' + ck + ':' + i, x: p.x, z: p.z, kind: 'things' }));
+      (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || []).forEach((b, i) => out.push({ key: 'm' + ck + ':' + i, x: b.x, z: b.z, kind: 'things' }));
+    }
+    return out;
   }
 
   // Threshold check, run every frame: cheap when nothing is due.
@@ -1294,7 +1330,7 @@ export class SoulPath {
       // unseen works draw candles to them; around works already seen they are embers
       const du = near(unseen, x, z), spent = du > CANDLE_NEAR && near(arts, x, z) < CANDLE_NEAR;
       const pa = du < CANDLE_NEAR ? 1 - du / CANDLE_NEAR : 0;
-      if (r > 0.035 + 0.05 * Math.max(pp, pk) + 0.08 * pa) continue;
+      if (r > (st === 0 ? 0.06 : 0.035) + 0.05 * Math.max(pp, pk) + 0.08 * pa) continue;   // fear is lit more often: the candles are its map
       const flame = st === 0 ? YELLOW.clone().lerp(RED, pp)
         : seekRoom ? YELLOW.clone().lerp(RED, pk)        // before the room: everything reddens toward it
           : st === 1 ? RED.clone().lerp(YELLOW, pp)      // after: the flame yellows toward the way into the light
@@ -1947,7 +1983,25 @@ export class SoulPath {
       this._markTarget = target;
     }
     let goalFn, goalKey;
-    if (target) {
+    const portal = this.summonedPortals?.[this.stage.stage + 1];
+    let find = null;
+    if (!portal && !target && this.stage.stage === 0 && this._fear) {   // fear, waiting: lead to what is still to be found
+      let fd = 30;
+      for (const t of this._fearFinds()) {
+        if (this._fear.found.has(t.key)) continue;
+        const d = Math.hypot(t.x - p.x, t.z - p.y);
+        if (d > 2 && d < fd) { fd = d; find = t; }
+      }
+    }
+    if (portal) {                                        // the way on is open: every mark points to it
+      const tx = cellOf(portal.x - 0.01), tz = cellOf(portal.z - 0.01);
+      goalFn = (i, j) => (Math.abs(i - tx) <= 1 && Math.abs(j - tz) <= 1 ? Infinity : -Math.hypot(i - tx, j - tz));
+      goalKey = `p${tx},${tz}`;
+    } else if (find && !target) {
+      const tx = cellOf(find.x), tz = cellOf(find.z);
+      goalFn = (i, j) => (Math.abs(i - tx) <= 1 && Math.abs(j - tz) <= 1 ? Infinity : -Math.hypot(i - tx, j - tz));
+      goalKey = `f${find.key}`;
+    } else if (target) {
       const tx = cellOf(target.centerWorld.x + target.normal.x * 0.9);
       const tz = cellOf(target.centerWorld.z + target.normal.z * 0.9);
       goalFn = (i, j) => (i === tx && j === tz ? Infinity : -Math.hypot(i - tx, j - tz));
