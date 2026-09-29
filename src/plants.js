@@ -734,25 +734,40 @@ export function plantMist({ radius = 0.9, height = 2.3, count = 46, seed = 606 }
 // dir: toward the light, in the plant's frame (need not be normalised).
 const FLOOR = [{ m: new THREE.Vector3(0, -1, 0), d: 0 }];
 export function plantShadow(geo, dir, { opacity = 0.26, planes = FLOOR, color = 0x2a1c34 } = {}) {
-  const out = new THREE.Group();
-  const JITTER = [[0, 0], [0.09, 0.03], [-0.09, -0.03], [0.03, -0.09], [-0.03, 0.09]];
+  // fewer soft copies where the machine is weaker: 5 on the top tier, 3, then 2
+  const tier = globalThis.window?.__app?.quality?.tier ?? 2;
+  const JITTER = [[0, 0], [0.09, 0.03], [-0.09, -0.03], [0.03, -0.09], [-0.03, 0.09]].slice(0, [2, 3, 5][tier] ?? 5);
   const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: opacity / JITTER.length * 1.7, depthWrite: true, depthFunc: THREE.LessDepth, side: THREE.DoubleSide });
+  // every copy on every plane goes into one geometry, in order, so the plant's
+  // shadow is one draw call; each later copy lies a hair closer and so still
+  // stacks over the one before, while inside a copy the strict test holds
+  const src = geo.attributes.position, index = geo.index, parts = [], v = new THREE.Vector3();
   for (const { m, d } of planes) JITTER.forEach(([jx, jz], k) => {
     const L = new THREE.Vector3(dir.x + jx * dir.y, dir.y, dir.z + jz * dir.y).normalize();
     const lm = L.dot(m);
     if (lm > -0.05) return;                        // the light runs along this plane or comes from behind it
-    const dd = d - 0.004 - k * 0.0012, flat = geo.clone(), q = flat.attributes.position, v = new THREE.Vector3();
-    for (let i = 0; i < q.count; i++) {
-      v.fromBufferAttribute(q, i);
+    const dd = d - 0.004 - k * 0.0012, q = new Float32Array(src.count * 3);
+    for (let i = 0; i < src.count; i++) {
+      v.fromBufferAttribute(src, i);
       const t = (v.dot(m) - dd) / lm;
       v.addScaledVector(L, -Math.max(t, 0));
-      q.setXYZ(i, v.x, v.y, v.z);
+      q[i * 3] = v.x; q[i * 3 + 1] = v.y; q[i * 3 + 2] = v.z;
     }
-    for (const n of Object.keys(flat.attributes)) if (n !== 'position') flat.deleteAttribute(n);
-    const mesh = new THREE.Mesh(flat, mat);
-    mesh.renderOrder = 1;
-    out.add(mesh);
+    parts.push(q);
   });
+  const out = new THREE.Group();
+  if (!parts.length) return out;
+  const flat = new THREE.BufferGeometry(), pos = new Float32Array(parts.length * src.count * 3);
+  parts.forEach((q, n) => pos.set(q, n * src.count * 3));
+  flat.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  if (index) {
+    const n = index.count, idx = new Uint32Array(parts.length * n);
+    for (let c = 0; c < parts.length; c++) for (let i = 0; i < n; i++) idx[c * n + i] = index.getX(i) + c * src.count;
+    flat.setIndex(new THREE.BufferAttribute(idx, 1));
+  }
+  const mesh = new THREE.Mesh(flat, mat);
+  mesh.renderOrder = 1;
+  out.add(mesh);
   return out;
 }
 
