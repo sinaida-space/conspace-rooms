@@ -300,6 +300,47 @@ function cloudTexture() {
 }
 
 let GLOW = null;
+// In the grandmother's rooms the way is shown by what she kept pressed in a
+// book: a dried sprig of lily of the valley, head first, or a few faded rose
+// petals scattered the way to go. Drawn pointing to +x.
+function driedTexture(kind) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 128;
+  const g = c.getContext('2d');
+  const rnd = mulberry32(kind * 977 + 5);
+  if (kind === 0) {
+    g.strokeStyle = '#7d7448'; g.lineWidth = 3; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(20, 78); g.bezierCurveTo(80, 70, 150, 60, 222, 44); g.stroke();   // the stem, arching on
+    for (const [x, y, a] of [[60, 86, 0.25], [96, 52, -0.3]]) {                                  // two long leaves, dry and curled
+      g.save(); g.translate(x, y); g.rotate(a);
+      g.fillStyle = 'rgba(118,116,70,0.9)'; g.beginPath(); g.ellipse(0, 0, 58, 9, 0, 0, 6.29); g.fill();
+      g.strokeStyle = 'rgba(80,74,44,0.8)'; g.lineWidth = 1; g.beginPath(); g.moveTo(-54, 0); g.lineTo(54, 0); g.stroke();
+      g.restore();
+    }
+    for (let i = 0; i < 9; i++) {                                                                  // the bells, gone ivory and brown at the rims
+      const u = 0.35 + i * 0.075, x = 20 + u * 202, y = 78 - u * 34 + (i % 2 ? 11 : -9);
+      g.strokeStyle = '#7d7448'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x, 78 - u * 34); g.lineTo(x, y); g.stroke();
+      const r = 6.5 - i * 0.3;
+      const gr = g.createRadialGradient(x - 1, y - 1, 0, x, y, r);
+      gr.addColorStop(0, '#f4ecd4'); gr.addColorStop(0.7, '#e2d3a8'); gr.addColorStop(1, '#9a7c4a');
+      g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 6.29); g.fill();
+    }
+  } else {
+    for (let i = 0; i < 11; i++) {                                                                 // petals, most of them further on
+      const u = Math.pow(rnd(), 0.6), x = 24 + u * 210, y = 64 + (rnd() - 0.5) * 70, r = 9 + rnd() * 7;
+      g.save(); g.translate(x, y); g.rotate(rnd() * 6.28);
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, r);
+      gr.addColorStop(0, '#c9a08e'); gr.addColorStop(0.75, '#a87468'); gr.addColorStop(1, '#6e4a3e');
+      g.fillStyle = gr; g.beginPath(); g.ellipse(0, 0, r, r * 0.7, 0, 0, 6.29); g.fill();
+      g.strokeStyle = 'rgba(90,60,50,0.5)'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(-r * 0.6, 0); g.lineTo(r * 0.5, 0); g.stroke();
+      g.restore();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  return tex;
+}
+
 function glowTexture() {
   if (GLOW) return GLOW;
   const c = document.createElement('canvas'); c.width = c.height = 64;
@@ -348,6 +389,9 @@ export class SoulPath {
       polygonOffset: true, polygonOffsetFactor: -2, fog: true,
     });
     const markGeo = new THREE.PlaneGeometry(0.5, 0.25);
+    const driedGeo = new THREE.PlaneGeometry(0.72, 0.36);
+    const driedMats = [0, 1].map(k => new THREE.MeshBasicMaterial({ map: driedTexture(k), color: 0xd8cfbe, fog: false, transparent: true,   // pale like paper in the half-dark
+      alphaTest: 0.15, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
     this.marks = Array.from({ length: MARK_POOL }, () => {
       const m = new THREE.Mesh(markGeo, this.markMat.clone());   // own opacity, shared texture
       m.visible = false;
@@ -360,6 +404,11 @@ export class SoulPath {
       fly.visible = false;
       scene.add(fly);
       m.userData.fly = fly;
+      // in the grandmother's rooms, dried flowers on the floor by the wall
+      const dried = new THREE.Mesh(driedGeo, driedMats[m.id % 2]);
+      dried.visible = false; dried.renderOrder = 1;
+      scene.add(dried);
+      m.userData.dried = dried;
       return m;
     });
     this._repathT = 0;
@@ -1853,6 +1902,34 @@ export class SoulPath {
     }
   }
 
+  // Straight into the nearest grandmother's room, the world switched to the
+  // red rooms on the way (for checks: window.__app.soul._jumpToRoom()).
+  _jumpToRoom() {
+    const P = this.player;
+    const cx = Math.floor(P.pos.x / (CHUNK * CELL)), cz = Math.floor(P.pos.y / (CHUNK * CELL));
+    let best = null, bd = Infinity;
+    for (let dz = -12; dz <= 12; dz++) for (let dx = -12; dx <= 12; dx++) {
+      const k = kitchenPlan(cx + dx, cz + dz);
+      if (!k) continue;
+      const d = Math.hypot(k.x - P.pos.x, k.z - P.pos.y);
+      if (d < bd) { bd = d; best = k; }
+    }
+    if (!best) return;
+    if (this.artworks.inspecting) this.artworks._closeInspect();
+    this.player.auto = null;
+    this.stage.set(1);
+    // stand a step from the table, looking at it
+    const sx = best.x - 1.4, sz = best.z - 1.4;
+    const ok = !solidAtGlobal(cellOf(sx), cellOf(sz));
+    P.pos.set(ok ? sx : best.x, ok ? sz : best.z - 1.2);
+    P.vel.set(0, 0);
+    P.yaw = Math.atan2(-(best.x - P.pos.x), -(best.z - P.pos.y));
+    P.pitch = -0.25;
+    this._prevPos = { x: P.pos.x, z: P.pos.y };      // not a walk through anything
+    this.world.update(P.pos.x, P.pos.y);
+    this.post?.burst(1.4);
+  }
+
   // Cheat 00000: the finale always happens in acceptance. From anywhere
   // else the world first turns to the light, then every work counts as
   // seen and the arch of roses rises.
@@ -2143,11 +2220,19 @@ export class SoulPath {
 
   // marks of a finished goal fade slowly; marks far behind return to the pool
   _tickMarks(time) {
-    const p = this.player.pos, light = this.stage.stage === 2;
+    const p = this.player.pos, light = this.stage.stage === 2, home = this.stage.stage === 1;
     for (const m of this.marks) {
-      const fly = m.userData.fly;
-      m.material.visible = !light;                       // no red in the light: fireflies lead there
+      const fly = m.userData.fly, dried = m.userData.dried;
+      m.material.visible = this.stage.stage === 0;       // red only in fear: flowers at home, fireflies in the light
       fly.visible = light && m.visible;
+      dried.visible = home && m.visible;
+      if (dried.visible) {
+        const nx = Math.sin(m.rotation.y), nz = Math.cos(m.rotation.y);
+        const ax = nz * m.scale.x, az = -nx * m.scale.x;                    // the way the scratch points
+        dried.position.set(m.position.x + nx * 0.62, 0.012, m.position.z + nz * 0.62);   // clear of the candles by the wall
+        dried.rotation.set(-Math.PI / 2, 0, Math.atan2(-az, ax));
+        dried.scale.setScalar(m.material.opacity);                          // a fading goal: the flowers shrink away
+      }
       if (fly.visible) {
         const nx = Math.sin(m.rotation.y), nz = Math.cos(m.rotation.y);   // off the wall, into the corridor
         const ax = nz * m.scale.x, az = -nx * m.scale.x;                    // the way the scratch points

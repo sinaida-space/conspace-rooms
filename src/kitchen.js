@@ -594,9 +594,18 @@ export function buildKitchen(parent, X, Z) {
         g.fillRect(sx, sy, big ? 2 : 1, big ? 2 : 1);
         if (big) { const gl = g.createRadialGradient(sx + 1, sy + 1, 0, sx + 1, sy + 1, 5); gl.addColorStop(0, 'rgba(255,245,220,0.35)'); gl.addColorStop(1, 'rgba(255,245,220,0)'); g.fillStyle = gl; g.fillRect(sx - 5, sy - 5, 12, 12); }
       }
-      g.fillStyle = '#05060c'; for (let i = 0; i < w; i += 9) g.fillRect(i, h - 14 - (i * 37 % 17), 9, 20);   // rooftops
+      const moon = g.createRadialGradient(w * 0.7, h * 0.2, 0, w * 0.7, h * 0.2, 26);   // the moon and its halo
+      moon.addColorStop(0, 'rgba(255,250,228,1)'); moon.addColorStop(0.28, 'rgba(255,246,215,0.95)'); moon.addColorStop(0.33, 'rgba(190,200,255,0.25)'); moon.addColorStop(1, 'rgba(120,140,220,0)');
+      g.fillStyle = moon; g.fillRect(0, 0, w, h * 0.45);
+      g.fillStyle = '#0b0d18'; g.fillRect(0, h * 0.58, w, h);                 // the house across the yard
+      g.fillStyle = '#05060c'; for (let i = 0; i < w; i += 9) g.fillRect(i, h * 0.58 - 6 - (i * 37 % 11), 9, 10);   // its roofline and chimneys
+      for (let r = 0; r < 5; r++) for (let c = 0; c < 6; c++) {                  // its windows: a few still lit, warm
+        const lit = (r * 7 + c * 13) % 5 === 0, x = 6 + c * 20, y = h * 0.64 + r * 18;
+        g.fillStyle = lit ? ((r + c) % 2 ? '#f0b050' : '#e8c880') : '#141828';
+        g.fillRect(x, y, 10, 12);
+      }
     }));
-    put(wg, new THREE.PlaneGeometry(0.86, 1.08), new THREE.MeshBasicMaterial({ map: sky, fog: false }), 0, 1.45, 0.012, false).receiveShadow = false;
+    put(wg, new THREE.PlaneGeometry(0.86, 1.08), new THREE.MeshBasicMaterial({ map: sky, fog: false }), 0, 1.45, 0.045, false)   // in front of the wallpaper, behind the glazing bars.receiveShadow = false;
     for (const [w, h, px, py] of [[0.98, 0.06, 0, 2.02], [0.98, 0.06, 0, 0.88], [0.06, 1.2, -0.46, 1.45], [0.06, 1.2, 0.46, 1.45], [0.03, 1.08, 0, 1.45], [0.86, 0.03, 0, 1.72]])
       put(wg, box(w, h, 0.05), frameMat, px, py, 0.03);
     put(wg, box(1.12, 0.035, 0.26), frameMat, 0, 0.86, 0.13);                                   // the sill
