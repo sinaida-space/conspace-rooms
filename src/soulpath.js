@@ -119,6 +119,9 @@ const EGG_BAND = new Set([4, 5, 10, 11]);   // the corridor lattice, mirrored fr
 const mod16 = v => ((v % CHUNK) + CHUNK) % CHUNK;   // a global cell's position on that lattice
 const SKY = '#cfe6ff';                              // the questions of the light, pale sky blue
 const SOUL_COLORS = [0xffd27a, 0x5dff8a, 0xd0202a]; // someone close · a child · a grown-up
+const FEAR_SOUL = 0x4f7dff;      // the souls of the hospital: blue, half see-through
+const FEAR_SOUL_PEAK = 0.5;      // their brightest; the corridor shows through them
+const BALLOON_READ = 4;          // seconds a balloon waits, its question read, before it lets go
 
 // Portals no longer sit at fixed, distance-rolled spots: the fear portal and
 // the one into the light are each summoned once, at a corridor crossing near
@@ -1660,7 +1663,10 @@ export class SoulPath {
   _hideRoamers() {
     if (this._roamersHidden || !this.roamers) return;
     this._roamersHidden = true;
-    for (const r of this.roamers) { r.sprite.visible = false; r.tail.forEach(t => { t.visible = false; }); }
+    this._hideSouls(this.roamers);
+  }
+  _hideSouls(list) {
+    for (const r of list || []) { r.sprite.visible = false; r.tail.forEach(t => { t.visible = false; }); }
   }
   _askAccept(time) {
     if (this.finale) return;
@@ -1736,9 +1742,7 @@ export class SoulPath {
   _updateBalloons(dt, time, speed) {
     const P = this.player;
     if (!this.balloons) {
-      const qs = t('acceptQuestions'), order = this._soulOrder(4, qs.length);
-      this.balloons = Array.from({ length: 2 }, (_, i) => {   // just a couple, far apart
-        const text = qs[order[i % qs.length]];
+      this.balloons = Array.from({ length: 2 }, () => {   // just a couple, far apart
         const g = new THREE.Group();
         // lit by the sky, not the lamps: a pale gradient with a sheen, so it never reads grey
         const skin = document.createElement('canvas'); skin.width = 64; skin.height = 64;
@@ -1756,29 +1760,41 @@ export class SoulPath {
         const string = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xc9d2d6, transparent: true, opacity: 0.7, fog: true }));
         g.add(body, knot, string);
         this.scene.add(g);
-        const b = { g, text, pos: new THREE.Vector3(), seed: Math.random() * 10, gone: false, back: 0, rise: 0 };
+        const b = { g, text: this._nextBalloonText(), pos: new THREE.Vector3(), seed: Math.random() * 10, gone: false, back: 0, rise: 0, readUntil: 0 };
         this._spawnBalloon(b);
         return b;
       });
     }
     for (const b of this.balloons) {
       const dP = Math.hypot(P.pos.x - b.pos.x, P.pos.y - b.pos.z);
-      if (b.gone) {                                          // let go: it rises into the fog
-        b.rise += dt * 0.6; b.g.position.y = b.pos.y + b.rise * b.rise;
-        if (time > b.back) this._spawnBalloon(b);
+      if (b.gone && time < b.readUntil) {                    // its question is being read: it tugs at the string
+        const k = 1 - (b.readUntil - time) / BALLOON_READ;
+        b.g.position.y = b.pos.y + k * k * 0.12 + Math.sin(time * 5 + b.seed) * 0.015 * k;
+        continue;
+      }
+      if (b.gone) {                                          // read: it lets go and rises into the fog
+        b.rise += dt * 0.6; b.g.position.y = b.pos.y + 0.12 + b.rise * b.rise;
+        if (time > b.back) { b.text = this._nextBalloonText(); this._spawnBalloon(b); }
         continue;
       }
       if (dP > 26) { this._spawnBalloon(b); continue; }
       b.g.position.set(b.pos.x + Math.sin(time * 0.4 + b.seed) * 0.05, b.pos.y + Math.sin(time * 0.9 + b.seed) * 0.05, b.pos.z + Math.cos(time * 0.35 + b.seed) * 0.05);
       b.g.rotation.set(Math.sin(time * 0.6 + b.seed) * 0.06, time * 0.1 + b.seed, 0);   // turning slowly on its string
       if (dP < 1.1 && this._soulReady(time) && !this.finale) {
-        b.gone = true; b.back = time + 16; b.rise = 0;
+        b.gone = true; b.readUntil = time + BALLOON_READ; b.back = b.readUntil + 16; b.rise = 0;
         this._soulAt = time; this._walked = 0;
         if (!this.asked.includes(b.text)) this.asked.push(b.text);
         this.audio?.whisper?.();
         this._say(t('balloonLabel'), b.text, SKY);
       }
     }
+  }
+  // The balloons ask the dreams first, then the light's other questions.
+  _nextBalloonText() {
+    const dreams = t('dreamQuestions'), rest = t('acceptQuestions');
+    const dOrder = this._soulOrder(4, dreams.length), rOrder = this._soulOrder(6, rest.length);
+    const i = this._balloonIdx = (this._balloonIdx ?? -1) + 1;
+    return i < dreams.length ? dreams[dOrder[i]] : rest[rOrder[(i - dreams.length) % rest.length]];
   }
   _spawnBalloon(b) {
     const P = this.player;
@@ -1853,20 +1869,41 @@ export class SoulPath {
       return;
     }
   }
+  _makeSouls(cats, colorOf, peak = 1) {
+    return cats.map(cat => {
+      const mk = (k) => new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: colorOf(cat), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: k * peak }));
+      const sprite = mk(1); sprite.scale.set(0.35, 0.35, 1); this.scene.add(sprite);
+      const tail = [0.6, 0.42, 0.28].map(k => { const t2 = mk(k); t2.scale.set(0.35 * k, 0.35 * k, 1); this.scene.add(t2); return t2; });
+      const r = { cat, peak, sprite, tail, pos: new THREE.Vector3(), aim: new THREE.Vector3(), gone: false, back: 0, seed: Math.random() * 10 };
+      this._spawnRoamer(r);
+      return r;
+    });
+  }
   _updateRoamers(dt, time, speed) {
-    const P = this.player;
     this._roamersHidden = false;                       // hidden again whenever the walk leaves the red rooms
-    if (!this.roamers) {
-      this.roamers = [0, 1, 2, 0, 1].map(cat => {
-        const mk = (k) => new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: SOUL_COLORS[cat], transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: k }));
-        const sprite = mk(1); sprite.scale.set(0.35, 0.35, 1); this.scene.add(sprite);
-        const tail = [0.6, 0.42, 0.28].map(k => { const t2 = mk(k); t2.scale.set(0.35 * k, 0.35 * k, 1); this.scene.add(t2); return t2; });
-        const r = { cat, sprite, tail, pos: new THREE.Vector3(), aim: new THREE.Vector3(), gone: false, back: 0, seed: Math.random() * 10 };
-        this._spawnRoamer(r);
-        return r;
-      });
-    }
-    for (const r of this.roamers) {
+    this.roamers ??= this._makeSouls([0, 1, 2, 0, 1], cat => SOUL_COLORS[cat]);
+    this._tickSouls(this.roamers, dt, time, speed, r => this._askSoul(r.cat, null, time));
+  }
+  // The hospital has its own souls: three blue, half see-through, asking
+  // about fear. Same manners as the red rooms' souls.
+  _updateFearSouls(dt, time, speed) {
+    this.fearSouls ??= this._makeSouls([0, 0, 0], () => FEAR_SOUL, FEAR_SOUL_PEAK);
+    this._tickSouls(this.fearSouls, dt, time, speed, () => this._askFear(time));
+  }
+  _askFear(time) {
+    if (this.finale) return;
+    this._soulAt = time; this._walked = 0;
+    const qs = t('fearSouls');
+    const order = this._soulOrder(5, qs.length);
+    this._soulIdx[5] = this._soulIdx[5] || 0;
+    const text = qs[order[this._soulIdx[5]++ % qs.length]];
+    if (!this.asked.includes(text)) this.asked.push(text);
+    this.audio?.whisper?.();
+    this._say(t('fearSoulLabel'), text, '#' + new THREE.Color(FEAR_SOUL).lerp(new THREE.Color(0xffffff), 0.45).getHexString());
+  }
+  _tickSouls(list, dt, time, speed, ask) {
+    const P = this.player;
+    for (const r of list) {
       r.sprite.visible = true;
       if (r.gone) {
         r.sprite.material.opacity = Math.max(0, r.sprite.material.opacity - dt);
@@ -1890,14 +1927,14 @@ export class SoulPath {
         const nx = r.pos.x + step.x, nz = r.pos.z + step.z;
         if (!solidAtGlobal(cellOf(nx), cellOf(nz))) r.pos.add(step); else r.aim.copy(r.pos); // never through walls
       }
-      r.sprite.material.opacity = Math.min(1, r.sprite.material.opacity + dt * 0.5);
+      r.sprite.material.opacity = Math.min(r.peak, r.sprite.material.opacity + dt * 0.5);
       r.sprite.position.set(r.pos.x, r.pos.y + Math.sin(time * 0.9 + r.seed) * 0.1, r.pos.z);
       const s2 = 0.32 + 0.05 * Math.sin(time * 3 + r.seed); r.sprite.scale.set(s2, s2, 1);
       let lead = r.sprite.position;
       for (const t of r.tail) { t.visible = true; t.position.lerp(lead, Math.min(1, dt * 4)); lead = t.position; }
       if (dP < 1.1 && this._soulReady(time)) {
         r.gone = true; r.back = time + 12;
-        this._askSoul(r.cat, null, time);
+        ask(r);
       }
     }
   }
@@ -2583,6 +2620,9 @@ export class SoulPath {
       for (const c of this.clouds || []) for (const sp of c.puffs) sp.visible = false;
     }
     if (this.stage.stage !== 1) this._hideRoamers?.();
+    if (this.stage.stage === 0) this._updateFearSouls(dt, time, speed);
+    else if (this.fearSouls && !this._fearHidden) this._hideSouls(this.fearSouls);
+    this._fearHidden = this.stage.stage !== 0;
 
     // all the works seen: the arch of roses, once nothing else holds the view
     if (!this.finale && this.seen.size >= this.total && !P.locked) this._beginFinale();
