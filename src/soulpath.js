@@ -1570,7 +1570,31 @@ export class SoulPath {
       return out;
     };
     const nWall = Math.round((st === 2 ? 5 : 7) * dens);
-    const walls = choose(wallSpots, nWall, dens > 1.2 ? 2 : 3).map(s => ({
+    // the halls too (#43): along the walls of every hall from 4 x 4, about one
+    // thing to five cells of its edge, clear of its corners (a plant may stand there)
+    const hallWalls = [];
+    for (const rm of chunkRooms(cx, cz)) {
+      if (rm.x1 - rm.x0 + 1 < 4 || rm.y1 - rm.y0 + 1 < 4) continue;
+      const here = [];
+      for (let j = rm.y0; j <= rm.y1; j++) for (let i = rm.x0; i <= rm.x1; i++) {
+        const edge = i === rm.x0 || i === rm.x1 || j === rm.y0 || j === rm.y1;
+        const nearCorner = (i - rm.x0 < 2 || rm.x1 - i < 2) && (j - rm.y0 < 2 || rm.y1 - j < 2);
+        if (!edge || nearCorner) continue;
+        const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+        // a hall's wall is not a corridor's: its things may come nearer a corner
+        if (solidAtGlobal(gi, gj) || reserved.has(cellKey(gi, gj)) || ward?.has(cellKey(gi, gj)) || cornerDist(centreOf(gi), centreOf(gj)) < 1.2
+          || !avoid.every(([ai, aj, r]) => Math.max(Math.abs(gi - ai), Math.abs(gj - aj)) > r)) continue;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (solidAtGlobal(gi + di, gj + dj)) {
+          const tx = di !== 0 ? 0 : 1, tz = di !== 0 ? 1 : 0;
+          const run3 = !solidAtGlobal(gi + tx, gj + tz) && !solidAtGlobal(gi - tx, gj - tz)
+            && solidAtGlobal(gi + tx + di, gj + tz + dj) && solidAtGlobal(gi - tx + di, gj - tz + dj);
+          here.push({ gi, gj, di, dj, run3 });
+        }
+      }
+      const edgeCells = 2 * (rm.x1 - rm.x0 + rm.y1 - rm.y0);
+      hallWalls.push(...choose(here, Math.round(edgeCells / 5 * Math.min(1.5, Math.max(0.6, dens))), 3));
+    }
+    const walls = choose(wallSpots, nWall, dens > 1.2 ? 2 : 3).concat(hallWalls).map(s => ({
       x: centreOf(s.gi) + s.di * CELL / 2, z: centreOf(s.gj) + s.dj * CELL / 2, nx: -s.di, nz: -s.dj, r: rp(), run3: s.run3 }));
     const air = st === 2 ? choose(airSpots, Math.round(4 * dens), dens > 1.2 ? 3 : 4).map(s => ({ x: centreOf(s.gi), z: centreOf(s.gj), r: rp() })) : [];
     const sp = this.stairwellPlan, clearOf = q => Object.values(this.summonedPortals || {}).every(p => !p || Math.hypot(p.x - q.x, p.z - q.z) > 2.6)
@@ -1592,7 +1616,7 @@ export class SoulPath {
     // middle, and in the dead ends of corridors, where nobody has to pass. Fear
     // its pale ficus; grandmother's zone the light's tropics in her porcelain;
     // the light one of its five (the monstera, tropics.js), place to place
-    const spots = this._hallPlantSpots(cx, cz, free, rp, 2, st === 2 ? { p: 0.95, side: 4 } : { p: 0.8, side: 4 }).concat(this._deadEndSpots(cx, cz, free, rp));
+    const spots = this._hallPlantSpots(cx, cz, free, rp, 1, st === 2 ? { p: 0.95, side: 4 } : { p: 0.8, side: 4 }).concat(this._deadEndSpots(cx, cz, free, rp));
     const plantsDispose = () => ivy?.dispose();
     if (!spots.length) return { ...built, dispose() { built.dispose(); plantsDispose(); } };
     this._flammable.get(cx + ':' + cz).push(...spots.map(q => ({ x: q.x, z: q.z })));   // candles keep off
@@ -1627,8 +1651,12 @@ export class SoulPath {
       const mi = Math.floor((rm.x0 + rm.x1) / 2), mj = Math.floor((rm.y0 + rm.y1) / 2), gi = cx * CHUNK + mi, gj = cz * CHUNK + mj;
       if (ok(mi, mj) && clear(gi, gj)) cands.push({ x: centreOf(gi), z: centreOf(gj), rot: rp() * 6.28 });
       if (!cands.length) continue;
-      const c = cands[Math.floor(rp() * cands.length)];
-      if (out.every(o => Math.hypot(o.x - c.x, o.z - c.z) > 4)) out.push(c);
+      // one plant a hall, two in a big one (a corner each), four metres apart
+      const big = rm.x1 - rm.x0 + 1 >= 6 && rm.y1 - rm.y0 + 1 >= 6;
+      for (let n = 0; n < (big ? 2 : 1) && cands.length; n++) {
+        const c = cands.splice(Math.floor(rp() * cands.length), 1)[0];
+        if (out.every(o => Math.hypot(o.x - c.x, o.z - c.z) > 4)) out.push(c);
+      }
     }
     return out;
   }
