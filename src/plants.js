@@ -806,19 +806,21 @@ export async function loadMonstera(atmo, { soilY = 0.475, count = 9, sector = Ma
 // Returns { boxes, dispose } like props.build.
 const protos = {};
 const TO_SUN = new THREE.Vector3(-3, 5, 2);   // the monstera's shadow: one direction for every hall, the light zone is diffuse
+// the prototype's meshes are shared by every clone: a chunk going away must not dispose them (soulpath.js)
+const keepAll = g => { g.traverse(o => { o.userData.keep = true; }); return g; };
 function protoOf(kind, atmo) {
   if (protos[kind]) return protos[kind];
   if (kind === 'fear') {
     const g = new THREE.Group(), cube = buildConcreteCube(atmo);
     g.add(cube, palePlant(atmo, cube.userData.soilY));
-    protos[kind] = Promise.resolve({ group: g, w: 0.5 });
+    protos[kind] = Promise.resolve({ group: keepAll(g), w: 0.5 });
   } else {
     protos[kind] = (async () => {
       const g = new THREE.Group(), planter = buildRoundPlanter(atmo);
       const corner = kind === 'accept-corner';
       const monstera = await loadMonstera(atmo, { soilY: planter.userData.soilY, count: corner ? 7 : 9, sector: corner ? 1.05 : Math.PI, renderer: window.__app?.renderer });
       g.add(planter, monstera);
-      return { group: g, w: 0.62, mist: true, leaves: monstera.geometry };
+      return { group: keepAll(g), w: 0.62, mist: true, leaves: monstera.geometry };
     })();
   }
   return protos[kind];

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { roundedBox } from './geom.js';
 import { hash2i, mulberry32, CONSPACE_SEED } from './world.js';
-import { t } from './i18n.js';
+import { t, getLang } from './i18n.js';
 import { record } from './placement.js';
 
 // ── conspace-rooms · drowned.js ─────────────────────────────────────────────
@@ -123,7 +123,7 @@ function recordTexture() {
   g.fillStyle = '#a8202a'; g.beginPath(); g.arc(cx, cy, 34, 0, Math.PI * 2); g.fill();
   g.strokeStyle = 'rgba(0, 0, 0, 0.25)'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, 34, 0, Math.PI * 2); g.stroke();
   g.fillStyle = '#e9dfc4'; g.font = '9px "Courier New", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText('МЕЛОДИЯ', cx, cy - 6);
+  g.fillText(getLang() === 'ru' ? 'МЕЛОДИЯ' : 'MELODIYA', cx, cy - 6);
   g.fillText('33', cx, cy + 8);
   g.fillStyle = '#0a0a0a'; g.beginPath(); g.arc(cx, cy, 3, 0, Math.PI * 2); g.fill();
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;

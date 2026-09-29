@@ -71,7 +71,10 @@ const ANCHORS = [                     // cells along the wall, depth from the wa
   { type: 'drip', cells: 1, depth: 0.5, w: 1.5 },
 ];
 const SMALL = ['pills', 'pills', 'blister', 'ampoules', 'syringe', 'bandage', 'tray', 'stethoscope', 'bedpan', 'hotwater', 'stool', 'history', 'history', 'xray'];
-const SIGNS = ['ПРОЦЕДУРНАЯ', 'ПЕРЕВЯЗОЧНАЯ', 'ПОСТ', 'ИЗОЛЯТОР', 'ПРИЁМНЫЙ ПОКОЙ', 'НЕ ВХОДИТЬ', '+'];
+const SIGNS = {   // in the language of the game; same order, so a room keeps its sign across languages
+  ru: ['ПРОЦЕДУРНАЯ', 'ПЕРЕВЯЗОЧНАЯ', 'ПОСТ', 'ИЗОЛЯТОР', 'ПРИЁМНЫЙ ПОКОЙ', 'НЕ ВХОДИТЬ', '+'],
+  en: ['TREATMENT ROOM', 'DRESSING ROOM', 'NURSES', 'ISOLATION', 'ADMISSIONS', 'NO ENTRY', '+'],
+};
 
 export function wardPlan(cx, cz, reserved, withModels = true) {
   const r = mulberry32(hash2i(SEED_WARD, cx, cz));
@@ -152,7 +155,7 @@ export function wardPlan(cx, cz, reserved, withModels = true) {
 
   // an enamel plaque above it, on its own wall
   const sign = r() < 0.5 ? {
-    text: SIGNS[Math.floor(r() * SIGNS.length)],
+    text: SIGNS[getLang() === 'ru' ? 'ru' : 'en'][Math.floor(r() * SIGNS.ru.length)],
     x: wallX + nx * 0.012, z: wallZ + nz * 0.012, rot: Math.atan2(nx, nz), tilt: (r() - 0.5) * 0.08,
   } : null;
 
@@ -432,7 +435,7 @@ function historyTexture() {
   const edge = g.createRadialGradient(128, 181, 90, 128, 181, 240); edge.addColorStop(0, 'rgba(0,0,0,0)'); edge.addColorStop(1, 'rgba(110,80,40,0.35)');
   g.fillStyle = edge; g.fillRect(0, 0, 256, 362);
   g.fillStyle = '#2b2a2a'; g.font = '600 15px "Times New Roman", serif'; g.textAlign = 'center';
-  g.fillText('ИСТОРИЯ БОЛЕЗНИ', 128, 34); g.font = '12px "Times New Roman", serif';
+  g.fillText(getLang() === 'ru' ? 'ИСТОРИЯ БОЛЕЗНИ' : 'CASE HISTORY', 128, 34); g.font = '12px "Times New Roman", serif';
   g.fillText('№ ' + (1000 + Math.floor(Math.random() * 8999)), 128, 52);
   g.strokeStyle = 'rgba(40,40,40,0.35)'; g.lineWidth = 1;
   for (let y = 78; y < 340; y += 17) { g.beginPath(); g.moveTo(18, y); g.lineTo(238, y); g.stroke(); }

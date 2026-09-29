@@ -1267,8 +1267,15 @@ export class SoulPath {
         if (f.ids.has(a.art.id) || this.seen.has(a.art.id)) continue;
         const dx = a.centerWorld.x - P.pos.x, dz = a.centerWorld.z - P.pos.y, d = Math.hypot(dx, dz);
         if (first ? d > 30 : (d < 6 || d > 22)) continue;
-        if (!first && ((fx * dx + fz * dz) / (d || 1) > 0.2 && this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3))) continue;   // never appears in plain view
-        if (d < bd) { bd = d; best = a; }
+        const inSight = this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3);
+        if (!first && (fx * dx + fz * dz) / (d || 1) > 0.2 && inSight) continue;   // never appears in plain view
+        // the first two hang where the visitor can see them from where they
+        // stand, ahead rather than behind; a work behind a wall in the next
+        // corridor would leave the walk with nothing, and the third waits on
+        // both being seen. Only after 15 m with none in sight, the nearest.
+        if (first && !inSight && this._walked < 15) continue;
+        const cost = first && inSight && (fx * dx + fz * dz) / (d || 1) < 0.5 ? d + 60 : d;   // any in sight ahead before one to the side
+        if (cost < bd) { bd = cost; best = a; }
       }
       if (best) {
         f.shown.add(keyOf(best)); f.ids.add(best.art.id); best.hidden = false; if (best.sub) best.sub.visible = true;
