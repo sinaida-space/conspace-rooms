@@ -1171,7 +1171,7 @@ export class SoulPath {
   }
   _ensureStairwellFor(cx, cz, group, stuff) {
     const plan = this.stairwellPlan;
-    if (!plan || plan.cx !== cx || plan.cz !== cz || stuff.stairwell) return;
+    if (!plan || plan.cx !== cx || plan.cz !== cz || stuff.stairwell || this.stage.stage !== 0) return;
     const idx = (hash2i(SEED_STAIR, 0, 0) % 5) + 1;
     const sw = buildStairwell(this.atmo, `assets/stairs/stairs_${idx}.webp`);
     sw.group.position.set(plan.x, 0, plan.z);
@@ -1327,6 +1327,16 @@ export class SoulPath {
     if (sw && !['wait', 'cool'].includes(sw.phase)) return;          // mid-dream: let it finish
     const P = this.player;
     if (Math.hypot(plan.x - P.pos.x, plan.z - P.pos.y) < 14 || this._lineOfSight(P.pos.x, P.pos.y, plan.x + Math.sin(plan.rotY) * 0.3, plan.z + Math.cos(plan.rotY) * 0.3)) return;   // never vanishes in view
+    if (sw) { sw.group.parent?.remove(sw.group); sw.dispose?.(); stuff.stairwell = null; }
+    this.stairwellPlan = null;
+  }
+
+  // The metal door is fear's alone: once the stage has left fear it is taken
+  // away at once, wherever it stands (the crossing hides it) (#43).
+  _dropStairwell() {
+    const plan = this.stairwellPlan;
+    if (!plan) return;
+    const stuff = this.chunkStuff.get(plan.cx + ':' + plan.cz), sw = stuff?.stairwell;
     if (sw) { sw.group.parent?.remove(sw.group); sw.dispose?.(); stuff.stairwell = null; }
     this.stairwellPlan = null;
   }
@@ -2749,6 +2759,7 @@ export class SoulPath {
     // view can be turned only a few degrees while it is held. As the door
     // shuts the view comes round, level, onto the way on, and the walk is the
     // visitor's again. It re-arms once they have walked away.
+    if (this.stage.stage !== 0) this._dropStairwell();
     const eye = new THREE.Vector3();
     for (const s of this.chunkStuff.values()) {
       const sw = s.stairwell;
