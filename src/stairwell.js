@@ -232,7 +232,11 @@ export function buildStairwell(atmo, imgUrl) {
   const skins = [leafSkin, frameSkin];
   const bulbAt = new THREE.Vector3();
   door.material.map?.dispose(); door.material.dispose(); door.material = leafSkin;
-  for (const m of dw.group.children) if (m.isMesh) { m.material.map?.dispose(); m.material.dispose(); m.material = frameSkin; }
+  for (const m of dw.group.children) if (m.isMesh) {
+    m.material.map?.dispose(); m.material.dispose(); m.material = frameSkin;
+    // a steel frame sits nearly flush: 6 cm proud of the wall, not the 16 of a timber architrave
+    m.scale.z = 0.16 / (WALL_T + 0.05); m.position.z = -0.04;
+  }
   for (const m of pivot.children) if (m.isMesh && m !== door) m.material.color?.setRGB(0.32, 0.3, 0.28);   // handle and peephole: dark worn steel
 
   // the room behind, one quad exactly the size of the opening. Vertices are
