@@ -1,5 +1,6 @@
 // Welcome screen: collab statement, links, machine capability check, mode select.
 import { detectDevice } from './device.js';
+import { keyCode } from './input.js';
 import { t, getLang, setLang, langFromUrl, applyStatic } from './i18n.js';
 import { renderFooter } from './footer.js';
 
@@ -409,21 +410,21 @@ export class UI {
     };
     addEventListener('keydown', e => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
-      if (e.code === 'Tab') {
+      if (keyCode(e) === 'Tab') {
         e.preventDefault();
         if (!e.repeat) setMenu(menu.classList.contains('hidden'));
         return;
       }
-      if (e.code === 'KeyQ') {
+      if (keyCode(e) === 'KeyQ') {
         if (!qHeld) { qHeld = true; qStart = performance.now(); finishBtn?.classList.add('charging'); qRaf = requestAnimationFrame(qStep); }
         return;
       }
       if (e.repeat) return;
-      if (e.code === 'KeyN') $('btn-mute')?.click();
-      else if (e.code === 'KeyH') $('btn-main-screen')?.click();
-      else if (e.code === 'KeyC') { const cb = $('btn-clip'); if (cb && !cb.classList.contains('hidden')) cb.click(); }
+      if (keyCode(e) === 'KeyN') $('btn-mute')?.click();
+      else if (keyCode(e) === 'KeyH') $('btn-main-screen')?.click();
+      else if (keyCode(e) === 'KeyC') { const cb = $('btn-clip'); if (cb && !cb.classList.contains('hidden')) cb.click(); }
     });
-    addEventListener('keyup', e => { if (e.code === 'KeyQ') qCancel(); });
+    addEventListener('keyup', e => { if (keyCode(e) === 'KeyQ') qCancel(); });
     addEventListener('blur', qCancel);
 
     const fsBtn = $('btn-fullscreen');
@@ -468,8 +469,8 @@ export class UI {
       document.exitPointerLock?.();
       const done = v => { removeEventListener('keydown', onKey, true); wrap.remove(); res(v); };
       const onKey = e => {
-        if (e.code === 'Escape') { e.stopPropagation(); done(false); }
-        if (e.code === 'Enter') { e.stopPropagation(); done(true); }
+        if (keyCode(e) === 'Escape') { e.stopPropagation(); done(false); }
+        if (keyCode(e) === 'Enter') { e.stopPropagation(); done(true); }
       };
       addEventListener('keydown', onKey, true);
       wrap.addEventListener('click', e => {

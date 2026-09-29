@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Quality } from './quality.js';
-import { InputRouter } from './input.js';
+import { InputRouter, keyCode } from './input.js';
 import { UI, detectCapabilities } from './ui.js';
 import { t, applyStatic, setLang, langFromUrl, getLang } from './i18n.js';
 import { mixZone, SoulStage } from './zones.js';
@@ -10,7 +10,7 @@ import { installBugReport, setBugSource, bugTick, bugFrame } from './bugreport.j
 installBugReport();   // R R R anywhere: a picture of the state to screenshot and send
 // F: full screen, on every screen and in every mode
 addEventListener('keydown', e => {
-  if (e.code !== 'KeyF' || e.repeat || e.metaKey || e.ctrlKey || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+  if (keyCode(e) !== 'KeyF' || e.repeat || e.metaKey || e.ctrlKey || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
   if (document.fullscreenElement) document.exitFullscreen?.();
   else document.documentElement.requestFullscreen?.().catch(() => {});
 });

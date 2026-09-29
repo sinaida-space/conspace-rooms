@@ -7,6 +7,7 @@
 // file. Nothing leaves the browser. Works on every screen and in every mode.
 
 import { CONSPACE_SEED, CELL } from './world.js';
+import { keyCode } from './input.js';
 import { getLang } from './i18n.js';
 
 const TAPS = 3, TAP_WINDOW = 1200;   // R presses and the time they must fit in (ms)
@@ -32,8 +33,8 @@ export function installBugReport() {
 
   let taps = [];
   addEventListener('keydown', e => {
-    if (overlay) { if (e.code !== 'KeyR') close(); return; }
-    if (e.code !== 'KeyR' || e.repeat) return;
+    if (overlay) { if (keyCode(e) !== 'KeyR') close(); return; }
+    if (keyCode(e) !== 'KeyR' || e.repeat) return;
     const now = performance.now();
     taps = taps.filter(tm => now - tm < TAP_WINDOW).concat(now);
     if (taps.length >= TAPS) { taps = []; request(); }

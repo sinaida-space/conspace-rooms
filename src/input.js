@@ -92,3 +92,17 @@ export class InputRouter {
 }
 
 // Je suis le spectre d'une rose que tu portais hier au bal.
+
+// The physical key behind a keydown, in any layout and any case: e.code when
+// the browser gives it (it names the key, not the letter), else the letter
+// mapped back from the Russian layout onto the English keys ('ь' -> KeyM).
+const RU = 'йцукенгшщзхъфывапролджэячсмитьбю', EN = 'qwertyuiop[]asdfghjkl;\'zxcvbnm,.';
+export function keyCode(e) {
+  if (e.code) return e.code;
+  let k = (e.key || '').toLowerCase();
+  const i = RU.indexOf(k);
+  if (i >= 0) k = EN[i];
+  if (/^[a-z]$/.test(k)) return 'Key' + k.toUpperCase();
+  if (/^[0-9]$/.test(k)) return 'Digit' + k;
+  return e.key === ' ' ? 'Space' : e.key;
+}

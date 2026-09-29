@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { keyCode } from './input.js';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, mulberry32 } from './world.js';
 import { zoneWeights, ORIGIN } from './zones.js';
 import { t, getLang } from './i18n.js';
@@ -364,13 +365,13 @@ export class SoulPath {
     // guide: five presses of the M key (any layout: physical key) toggles it
     this.guide = null; this._mTimes = []; this._fiveTimes = [];
     addEventListener('keydown', e => {
-      if (e.code !== 'KeyM' || e.repeat) return;
+      if (keyCode(e) !== 'KeyM' || e.repeat) return;
       const now = performance.now();
       this._mTimes = this._mTimes.filter(tm => now - tm < 2500).concat(now);
       if (this._mTimes.length >= 5) { this._mTimes = []; this._toggleGuide(); }
     });
     addEventListener('keydown', e => {
-      if ((e.code !== 'Digit5' && e.code !== 'Numpad5') || e.repeat) return;
+      if ((keyCode(e) !== 'Digit5' && keyCode(e) !== 'Numpad5') || e.repeat) return;
       const now = performance.now();
       this._fiveTimes = this._fiveTimes.filter(tm => now - tm < 3000).concat(now);
       if (this._fiveTimes.length >= 5) { this._fiveTimes = []; this._jumpToRoom(); }
@@ -378,7 +379,7 @@ export class SoulPath {
     // five presses of 7: stand before the last work, every other one already seen
     this._sevenTimes = [];
     addEventListener('keydown', e => {
-      if ((e.code !== 'Digit7' && e.code !== 'Numpad7') || e.repeat) return;
+      if ((keyCode(e) !== 'Digit7' && keyCode(e) !== 'Numpad7') || e.repeat) return;
       const now = performance.now();
       this._sevenTimes = this._sevenTimes.filter(tm => now - tm < 3000).concat(now);
       if (this._sevenTimes.length >= 5) { this._sevenTimes = []; this._jumpToLastWork(); }
@@ -389,7 +390,7 @@ export class SoulPath {
     // is found they go out and the souls begin to wander
     this._bTimes = [];
     addEventListener('keydown', e => {
-      if (e.code !== 'KeyB' || e.repeat) return;
+      if (keyCode(e) !== 'KeyB' || e.repeat) return;
       const now = performance.now();
       this._bTimes = this._bTimes.filter(tm => now - tm < 3000).concat(now);
       if (this._bTimes.length < 5) return;
@@ -403,7 +404,7 @@ export class SoulPath {
     // five presses of 0: straight into the light, the acceptance stage
     this._zeroTimes = [];
     addEventListener('keydown', e => {
-      if ((e.code !== 'Digit0' && e.code !== 'Numpad0') || e.repeat) return;
+      if ((keyCode(e) !== 'Digit0' && keyCode(e) !== 'Numpad0') || e.repeat) return;
       const now = performance.now();
       this._zeroTimes = this._zeroTimes.filter(tm => now - tm < 3000).concat(now);
       if (this._zeroTimes.length >= 5) { this._zeroTimes = []; if (this.stage.set(2)) this.post?.burst(1.4); }
@@ -412,7 +413,7 @@ export class SoulPath {
     // five presses of 1: back into fear, the hospital, from wherever
     this._oneTimes = [];
     addEventListener('keydown', e => {
-      if ((e.code !== 'Digit1' && e.code !== 'Numpad1') || e.repeat) return;
+      if ((keyCode(e) !== 'Digit1' && keyCode(e) !== 'Numpad1') || e.repeat) return;
       const now = performance.now();
       this._oneTimes = this._oneTimes.filter(tm => now - tm < 3000).concat(now);
       if (this._oneTimes.length >= 5) { this._oneTimes = []; if (this.stage.set(0)) this.post?.burst(1.4); }
