@@ -19,7 +19,8 @@ export class AudioEngine {
     this.bed.connect(this.master);
 
     // the music: lo-fi corridors, a gramophone in grandmother's room (music.js)
-    this.music = new Music(ctx, this.bed);
+    this.musicDuck = ctx.createGain(); this.musicDuck.connect(this.bed);   // Alisa's voice sinks the music (alisa.js)
+    this.music = new Music(ctx, this.musicDuck);
     // the flooded acceptance stage: surf, drips, wet steps (waterSound.js)
     this.water = new WaterSound(ctx, this.bed);
 
@@ -318,6 +319,9 @@ export class AudioEngine {
     this.bed.gain.setTargetAtTime(0, now, 1.4);
     this._stopAmbience = startAmbience(this.ctx, this.master, index);
   }
+
+  // The music under Alisa's voice: level 0..1, eased.
+  duckMusic(level) { if (this.musicDuck) this.musicDuck.gain.setTargetAtTime(level, this.ctx.currentTime, level < 1 ? 0.6 : 1.5); }
 
   // The music and the crackle follow the zone.
   setZone(zone) {

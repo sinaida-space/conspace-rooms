@@ -17,6 +17,7 @@ import { showCard } from './card.js';
 import { createPetals } from './petals.js';
 import { createPropKit } from './props.js';
 import { buildHallPlants } from './plants.js';
+import { AlisaVoices, VOICED } from './alisa.js';
 import { createDrowned } from './drowned.js';
 import { mountOrDrop } from './placement.js';
 import { buildStairwell } from './stairwell.js';
@@ -2566,8 +2567,13 @@ export class SoulPath {
   _updateVoices(zone) {
     if (!this.audio?.setArtVoices) return;
     const P = this.player;
+    // Alisa's voiced works (alisa.js): their note is hers until they have spoken
+    const alisa = (this._alisa ||= new AlisaVoices(this.audio));
+    const voiced = this.artworks.active.filter(a => !a.hidden && VOICED.has(a.art.id))
+      .map(a => ({ key: a.chunkKey + ':' + a.art.id, id: a.art.id, x: a.centerWorld.x, z: a.centerWorld.z }));
+    alisa.update({ x: P.pos.x, z: P.pos.y }, voiced);
     const near = this.artworks.active
-      .filter(a => !a.hidden)
+      .filter(a => !a.hidden && !alisa.holds(a.chunkKey + ':' + a.art.id, a.art.id))
       .map(a => ({ a, d: Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y) }))
       .filter(o => o.d < 30)
       .sort((u, v) => u.d - v.d)

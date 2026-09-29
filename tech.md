@@ -13,7 +13,7 @@ CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko 
 - Vanilla JavaScript modules, no build step, hosted on Vercel.
 - three.js r166 for 3D, bundled with the project. Procedural GLSL materials: the labyrinth uses no texture files.
 - The labyrinth is generated from a seed (the date and time of the visit), so every visit is new.
-- Music and sound are synthesized live with Web Audio; no recordings are used.
+- Music and sound are synthesized live with Web Audio; the only recordings are Alisa's voice at seven of the works.
 - Gesture control uses MediaPipe Tasks Vision in the browser, only after the visitor chooses it.
 - Typeface: Departure Mono by Helena Zhang (SIL Open Font License 1.1), self-hosted.
 - Two CC0 3D models from Poly Haven (Old Bed Frame, Wheelchair 01) and a CC0 Monstera Plant by Isa Lousberg from Poly Pizza; everything else is drawn in code.
