@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CONSPACE_SEED, solidAtGlobal, CELL, CHUNK, chunkRooms, wallSlots } from './world.js';
+import { CONSPACE_SEED, solidAtGlobal, CELL, CHUNK, CHUNK_M, chunkRooms, wallSlots } from './world.js';
 import { t, getLang } from './i18n.js';
 
 // ── conspace-rooms · artworks.js ────────────────────────────────────────────
@@ -104,17 +104,17 @@ function usableSpan(slot, cx, cz) {
   return { ...slot, position: { x: alongZ ? p.x : mid, y: p.y, z: alongZ ? mid : p.z }, length: (end - start) / CELL };
 }
 
-// How the works keep apart (#40). A step is one tap of W, about 0.75 m:
-// between the edges of two works at least five of them; in a corridor all
-// the works of a stretch hang on one wall, never across from each other; a
-// big hall (6 x 6 cells and more) holds one. The rule is settled among the
-// candidate runs of a chunk and its eight neighbours: a run keeps its work
-// when it outranks every run it clashes with (corridors rank first, then a
-// draw of the chunk), so both sides of a chunk border agree without either
-// looking further. The chunk's quota applies after, and only takes away.
-const STEP = 0.75, MIN_GAP = 5 * STEP;
-const BLOCK = 1.35 + FRAME_BORDER * 2 + PLACARD_GAP + PLACARD_W;   // the widest work with its placard
-const APART = MIN_GAP + BLOCK;                                      // centre to centre
+// How the works keep apart (#40, #43). A step is one tap of W, about 0.75 m;
+// a work comes about every 25–30 of them, so each chunk (19.2 m) hangs one,
+// on the run nearest a point jittered round its middle, and the rhythm holds
+// across chunks. Two works never closer than APART centre to centre; in a
+// corridor all the works of a stretch hang on one wall, never across from
+// each other; a big hall (6 x 6 cells and more) holds one. The rule is
+// settled among the candidate runs of a chunk and its eight neighbours: a
+// run keeps its work when it outranks every run it clashes with, so both
+// sides of a chunk border agree without either looking further.
+const STEP = 0.75;
+const APART = 18 * STEP;                                            // centre to centre: the floor under the rhythm
 const ONE_SIDE = 12;                                                // m along a corridor: the stretch whose works share a wall
 const BIG_HALL = 6;
 
@@ -134,12 +134,16 @@ function candidatesOf(cx, cz) {
   let c = candCache.get(key);
   if (c) return c;
   const rand = mulberry32(hash2i(DECK_SEED, cx, cz));
-  const target = 3 + Math.floor(rand() * 3);                  // 3–5 works a chunk: the labyrinth is a gallery, works may repeat
+  const target = 1;                                           // one a chunk: about one every 25–30 steps
+  const mx = (cx + 0.3 + rand() * 0.4) * CHUNK_M, mz = (cz + 0.3 + rand() * 0.4) * CHUNK_M;   // the chunk's middle, jittered
   const list = [];
   for (const s of wallSlots(cx, cz)) {
     const span = usableSpan(s, cx, cz);
     const clear = span ? frontClear(span) : 0;
-    if (clear) list.push({ slot: span, clear, r: rand(), rank: clear * 2 + rand(), x: span.position.x, z: span.position.z, n: span.normal, hall: hallOf(span), key: span.cellKey });
+    if (!clear) continue;
+    const x = span.position.x, z = span.position.z;
+    // nearest the middle wins; a corridor counts as 2 m nearer
+    list.push({ slot: span, clear, r: rand(), rank: -Math.hypot(x - mx, z - mz) + clear * 2 + rand() * 0.1, x, z, n: span.normal, hall: hallOf(span), key: span.cellKey });
   }
   c = { target, list };
   candCache.set(key, c);
@@ -167,10 +171,10 @@ function chunkArtworkPlan(cx, cz, slots, deck) {
   const around = [];
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) around.push(...candidatesOf(cx + dx, cz + dz).list);
   const kept = list.filter(c => around.every(o => o === c || !clash(c, o) || outranks(c, o)));
-  kept.sort((a, b) => b.clear - a.clear || a.r - b.r);        // corridors first, shuffled within
+  kept.sort((a, b) => b.rank - a.rank);
   const chosen = kept.slice(0, target);
   const ord = ringOrdinal(cx, cz);
-  return chosen.map(({ slot }, i) => ({ slot, artIndex: deck[(ord * 5 + i) % deck.length] }));
+  return chosen.map(({ slot }, i) => ({ slot, artIndex: deck[(ord + i) % deck.length] }));
 }
 
 // The wall runs that carry a work in this chunk, so other things keep off them.

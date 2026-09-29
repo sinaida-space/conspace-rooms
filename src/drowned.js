@@ -340,8 +340,8 @@ export function createDrowned(atmo, quality) {
         if (out.floater) { floaters.push(out.floater); myFloaters.push(out.floater); }
       };
 
-      // two hero things a chunk (one on tier 0), each on its own patch of open floor
-      const budget = low ? 1 : 2;
+      // four hero things a chunk (fewer as the quality steps down), each on its own patch of open floor
+      const budget = Math.max(1, Math.round(2 * (quality.p?.density ?? 1)));
       for (let n = 0; n < budget; n++) {
         const kind = pick(['clock', 'calendar', 'letter', 'photo', 'record'], r());
         if (kind === 'clock') place('clock', (p, rot) => buildClock(group, atmo, p, rot, r));

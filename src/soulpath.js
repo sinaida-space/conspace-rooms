@@ -1476,7 +1476,7 @@ export class SoulPath {
       // unseen works draw candles to them; around works already seen they are embers
       const du = near(unseen, x, z), spent = du > CANDLE_NEAR && near(arts, x, z) < CANDLE_NEAR;
       const pa = du < CANDLE_NEAR ? 1 - du / CANDLE_NEAR : 0;
-      if (r > (st === 0 ? 0.06 : 0.035) + 0.05 * Math.max(pp, pk) + 0.08 * pa) continue;   // fear is lit more often: the candles are its map
+      if (r > ((st === 0 ? 0.06 : 0.035) + 0.05 * Math.max(pp, pk) + 0.08 * pa) * Math.max(1, this.quality.p.density)) continue;   // fear is lit more often: the candles are its map
       const flame = st === 0 ? YELLOW.clone().lerp(RED, pp)
         : seekRoom ? YELLOW.clone().lerp(RED, pk)        // before the room: everything reddens toward it
           : st === 1 ? RED.clone().lerp(YELLOW, pp)      // after: the flame yellows toward the way into the light
@@ -1535,18 +1535,19 @@ export class SoulPath {
           wallSpots.push({ gi, gj, di, dj, run3 });
         }
     }
+    const dens = this.quality.p.density;
     const choose = (list, n, gap) => {
       const out = [];
-      for (let tries = 0; tries < 60 && out.length < n && list.length; tries++) {
+      for (let tries = 0; tries < 60 * Math.max(1, dens) && out.length < n && list.length; tries++) {
         const s = list[Math.floor(rp() * list.length)];
         if (out.every(o => Math.max(Math.abs(o.gi - s.gi), Math.abs(o.gj - s.gj)) >= gap)) out.push(s);
       }
       return out;
     };
-    const nWall = st === 2 ? (low ? 3 : 5) : (low ? 4 : 7);
-    const walls = choose(wallSpots, nWall, 3).map(s => ({
+    const nWall = Math.round((st === 2 ? 5 : 7) * dens);
+    const walls = choose(wallSpots, nWall, dens > 1.2 ? 2 : 3).map(s => ({
       x: centreOf(s.gi) + s.di * CELL / 2, z: centreOf(s.gj) + s.dj * CELL / 2, nx: -s.di, nz: -s.dj, r: rp(), run3: s.run3 }));
-    const air = st === 2 ? choose(airSpots, low ? 2 : 4, 4).map(s => ({ x: centreOf(s.gi), z: centreOf(s.gj), r: rp() })) : [];
+    const air = st === 2 ? choose(airSpots, Math.round(4 * dens), dens > 1.2 ? 3 : 4).map(s => ({ x: centreOf(s.gi), z: centreOf(s.gj), r: rp() })) : [];
     const sp = this.stairwellPlan, clearOf = q => Object.values(this.summonedPortals || {}).every(p => !p || Math.hypot(p.x - q.x, p.z - q.z) > 2.6)
       && (!sp || Math.hypot(sp.x - q.x, sp.z - q.z) > 3);
     for (const list of [walls, air]) for (let i = list.length - 1; i >= 0; i--) if (!clearOf(list[i])) list.splice(i, 1);

@@ -3,9 +3,11 @@
 import { detectDevice } from './device.js';
 
 const TABLE = [
-  { name: 'LOW',    pixelRatio: 1,   post: false, particles: 900,  segments: 16 },
-  { name: 'MEDIUM', pixelRatio: 1.25, post: true, particles: 2000, segments: 24 },
-  { name: 'HIGH',   pixelRatio: 1.5,  post: true, particles: 3200, segments: 32 }, // CRT post hides the difference from 2×
+  // density: how many candles and things a chunk sets out (1 = the old count); the
+  // governor stepping down thins the chunks built after it
+  { name: 'LOW',    pixelRatio: 1,   post: false, particles: 900,  segments: 16, density: 0.6 },
+  { name: 'MEDIUM', pixelRatio: 1.25, post: true, particles: 2000, segments: 24, density: 1.5 },
+  { name: 'HIGH',   pixelRatio: 1.5,  post: true, particles: 3200, segments: 32, density: 2 }, // CRT post hides the difference from 2×
 ];
 
 export class Quality {
