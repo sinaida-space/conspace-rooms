@@ -118,6 +118,60 @@ const FEAR = {
   } },
 };
 
+// the hospital's leftovers (#43): a drip stand, a wheelchair, a gurney, a
+// folding screen, a bedside cabinet and the scales with a height rod.
+// Local frame as above: x along the wall, -z toward it.
+const ENAMEL = 0xd9d6c8, VINYL = 0x2f3b36, CURTAIN = 0xb9c4b0;
+Object.assign(FEAR, {
+  drip: { depth: 0.5, w: 0.5, solid: true, build: put => {
+    for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; put(cyl(0.01, 0.01, 0.28, 6), STEEL, 0.5, M(Math.cos(a) * 0.12, 0.03, Math.sin(a) * 0.12, 0, -a, Math.PI / 2 - 0.12)); put(sphere(0.022, 8, 6), 0x222222, 0.3, M(Math.cos(a) * 0.24, 0.022, Math.sin(a) * 0.24)); }
+    put(cyl(0.012, 0.012, 1.85, 8), STEEL, 0.6, M(0, 0.95, 0));
+    put(cyl(0.006, 0.006, 0.34, 6), STEEL, 0.6, M(0, 1.86, 0, 0, 0, Math.PI / 2));
+    put(roundedBox(0.1, 0.17, 0.035, 0.015), 0xdfe6dc, 0.9, M(-0.14, 1.7, 0));                 // an empty bag
+    put(cyl(0.004, 0.004, 0.9, 5), 0xcfd6cc, 0.8, M(-0.14, 1.18, 0.02, 0.05));               // its line hanging down
+  } },
+  wheelchair: { depth: 0.66, w: 0.62, solid: true, build: put => {
+    for (const x of [-0.29, 0.29]) {
+      put(new THREE.TorusGeometry(0.28, 0.014, 6, 28), 0x1c1c1c, 0.3, M(x, 0.29, -0.05, 0, Math.PI / 2));
+      put(new THREE.TorusGeometry(0.24, 0.006, 6, 24), STEEL, 0.7, M(x + Math.sign(x) * 0.02, 0.29, -0.05, 0, Math.PI / 2));
+      put(sphere(0.045, 8, 6), 0x1c1c1c, 0.3, M(x * 0.8, 0.05, 0.26));                          // castors in front
+      put(cyl(0.012, 0.012, 0.9, 8), STEEL, 0.6, M(x * 0.82, 0.5, -0.2, -0.12));                 // the back frame and handles
+    }
+    put(roundedBox(0.46, 0.04, 0.42, 0.015), VINYL, 0.4, M(0, 0.5, 0.02));
+    put(roundedBox(0.44, 0.38, 0.03, 0.012), VINYL, 0.4, M(0, 0.74, -0.22, -0.12));
+    put(roundedBox(0.36, 0.02, 0.1, 0.01), STEEL, 0.5, M(0, 0.1, 0.33, 0.4));                    // footplate
+  } },
+  gurney: { depth: 0.62, w: 1.9, solid: true, build: put => {
+    for (const x of [-0.85, 0.85]) for (const z of [-0.24, 0.24]) { put(cyl(0.014, 0.014, 0.72, 8), STEEL, 0.6, M(x, 0.4, z)); put(sphere(0.045, 8, 6), 0x1c1c1c, 0.3, M(x, 0.045, z)); }
+    put(roundedBox(1.86, 0.06, 0.58, 0.02), STEEL, 0.5, M(0, 0.76, 0));
+    put(roundedBox(1.8, 0.09, 0.54, 0.04), 0x8d8f7e, 0.15, M(0, 0.84, 0));                      // a worn mattress
+    put(roundedBox(1.1, 0.03, 0.56, 0.02), 0xcfcab8, 0.1, M(0.3, 0.9, 0.01, 0, 0.05, 0.02));    // a sheet pushed down
+  } },
+  screen: { depth: 0.3, w: 1.5, build: put => {
+    for (const [x, a] of [[-0.5, 0.35], [0, 0], [0.5, -0.35]]) {
+      const t = M(x, 0, a ? 0.1 : 0, 0, a);
+      for (const u of [-0.24, 0.24]) put(cyl(0.01, 0.01, 1.7, 6), STEEL, 0.6, t.clone().multiply(M(u, 0.85, 0)));
+      put(new THREE.BoxGeometry(0.46, 1.3, 0.004), CURTAIN, 0.15, t.clone().multiply(M(0, 1.0, 0)));   // stretched cloth, stained low
+      put(new THREE.BoxGeometry(0.46, 0.25, 0.006), 0x9da38e, 0.15, t.clone().multiply(M(0, 0.44, 0)));
+    }
+  } },
+  cabinet: { depth: 0.42, w: 0.46, solid: true, build: put => {
+    put(roundedBox(0.44, 0.72, 0.4, 0.01), ENAMEL, 0.45, M(0, 0.36, 0));
+    put(new THREE.BoxGeometry(0.4, 0.004, 0.005), 0x6f6d64, 0.3, M(0, 0.56, 0.2));               // drawer seam
+    put(roundedBox(0.08, 0.015, 0.02, 0.005), STEEL, 0.7, M(0, 0.62, 0.21));
+    put(roundedBox(0.36, 0.26, 0.005, 0.004), 0xcac6b5, 0.4, M(0, 0.26, 0.2));                  // the door
+    put(cyl(0.03, 0.03, 0.08, 10), 0x6a3a14, 0.85, M(0.1, 0.76, 0.05));                           // a brown medicine bottle
+    put(roundedBox(0.2, 0.02, 0.14, 0.01), ENAMEL, 0.6, M(-0.08, 0.73, 0.02, 0, 0.3));            // a kidney tray
+  } },
+  scales: { depth: 0.45, w: 0.42, solid: true, build: put => {
+    put(roundedBox(0.4, 0.08, 0.42, 0.02), ENAMEL, 0.45, M(0, 0.04, 0.02));
+    put(cyl(0.02, 0.02, 1.95, 8), ENAMEL, 0.5, M(0, 1.02, -0.17));
+    put(roundedBox(0.3, 0.05, 0.06, 0.01), STEEL, 0.6, M(0, 1.2, -0.13));                         // the beam with its weights
+    put(roundedBox(0.03, 0.04, 0.05, 0.005), 0x333333, 0.4, M(0.06, 1.2, -0.09));
+    put(roundedBox(0.2, 0.012, 0.1, 0.004), STEEL, 0.6, M(0, 1.9, -0.1));                         // the height rod's slider
+  } },
+});
+
 // ── memory: the toys, and the house around them ─────────────────────────────
 const MEMORY = {
   // a roly-poly doll: an egg of a body, painted with a white apron and a
@@ -643,7 +697,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
 
   // kinds a stage can leave on the floor, with weights
   const KINDS = [
-    [['chair', 3], ['bucket', 2], ['bottles', 3], ['box', 2], ['oxygen', 1]],
+    [['chair', 1.2], ['bucket', 1.5], ['bottles', 1.5], ['box', 1.2], ['oxygen', 1], ['drip', 2], ['wheelchair', 1.5], ['gurney', 1], ['screen', 1.3], ['cabinet', 1.8], ['scales', 1]],
     [['nevalyashka', 3], ['pyramid', 3], ['yula', 2], ['matryoshki', 3], ['ball', 2], ['slippers', 2], ['stool', 1.5], ['jars', 1.5], ['newspapers', 1]],
     [['armchair', 2], ['mirror', 1.5], ['piano', 1], ['window', 3]],   // no sheeted chair: it read as anything but; plants wait for the drafts (#39)
   ];

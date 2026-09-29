@@ -1574,7 +1574,7 @@ export class SoulPath {
     // thing to five cells of its edge, clear of its corners (a plant may stand there)
     const hallWalls = [];
     for (const rm of chunkRooms(cx, cz)) {
-      if (rm.x1 - rm.x0 + 1 < 4 || rm.y1 - rm.y0 + 1 < 4) continue;
+      if (rm.x1 - rm.x0 + 1 < 4 || rm.y1 - rm.y0 + 1 < 4 || rp() < 0.35) continue;   // about a third of the halls stay bare
       const here = [];
       for (let j = rm.y0; j <= rm.y1; j++) for (let i = rm.x0; i <= rm.x1; i++) {
         const edge = i === rm.x0 || i === rm.x1 || j === rm.y0 || j === rm.y1;
