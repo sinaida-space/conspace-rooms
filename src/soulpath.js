@@ -1821,7 +1821,9 @@ export class SoulPath {
     } else {                                            // slam, turn
       c.turnT += dt;
       const e = ease(Math.min(1, c.turnT / STAIR_TURN));
-      P.pos.set(c.spot.x, c.spot.z);
+      if (sw.phase === 'turn') c.backT = (c.backT || 0) + dt;
+      const back = ease(Math.min(1, (c.backT || 0) / STAIR_TURN));   // and, once shut, steps back to where the walk was
+      P.pos.set(c.spot.x + (c.from.x - c.spot.x) * back, c.spot.z + (c.from.z - c.spot.z) * back);
       P.yaw = c.yawFrom + wrap(c.way - c.yawFrom) * e;
       P.pitch = c.pitchFrom * (1 - e);
     }
@@ -2761,7 +2763,8 @@ export class SoulPath {
         if (sw.t >= STAIR_HOLD) {
           sw.phase = 'slam'; sw.t = 0;
           if (sw.cam) {                                   // the view will come round onto the way on
-            sw.cam.way = this._wayYaw(this.summonedPortals[this.stage.stage + 1]) ?? sw.cam.doorYaw;
+            // back onto the path, facing the way the visitor was walking, square to the corridor (#43)
+            sw.cam.way = Math.round(sw.cam.yaw0 / (Math.PI / 2)) * (Math.PI / 2);
             sw.cam.yawFrom = P.yaw; sw.cam.pitchFrom = P.pitch; sw.cam.turnT = 0;
           }
         }
@@ -2780,7 +2783,7 @@ export class SoulPath {
           if (!this._stairDone) { this._stairDone = true; this._say(null, t('stairDream')); }
         }
       } else if (sw.phase === 'turn') {
-        if (!sw.cam || sw.cam.turnT >= STAIR_TURN) { sw.cam = null; sw.phase = 'cool'; }
+        if (!sw.cam || (sw.cam.turnT >= STAIR_TURN && (sw.cam.backT || 0) >= STAIR_TURN)) { sw.cam = null; sw.phase = 'cool'; }
       } else if (sw.phase === 'cool') {
         if (d > STAIR_NEAR + 1.5 || (DREAM_PREVIEW && sw.t > 3)) {   // walked away (or judging a sketch: a pause): it opens for the next pass, onto another stairwell
           sw.phase = 'wait';
