@@ -439,15 +439,165 @@ export function buildRoundPlanter(atmo) {
 
 // ── the CC0 monstera ────────────────────────────────────────────────────────
 const MONSTERA_POT_TOP = 1.0;   // native units: the model's own pot ends at y = 1.0, foliage stems rise out of it
+const LEAF_TEX = 1024;
+
+// The leaf skin, drawn once: u across the blade (0.5 = the midrib), v from
+// the stalk (0) to the tip (1). Deep glossy green with a lighter midrib, a
+// fan of lateral veins curving out to the margin, a paler rim and a faint
+// mottle. The height canvas (veins sunk into the blade) becomes a normal map.
+// The corner u, v < 0.04 is plain stalk green for the stems.
+function monsteraSkin() {
+  const S = LEAF_TEX, rnd = plantRng(9091);
+  const col = canvasOf(S, S), g = col.getContext('2d');
+  const hgt = canvasOf(S, S), h = hgt.getContext('2d');
+  const base = g.createLinearGradient(0, S, 0, 0);          // v = 0 at the bottom row of the canvas (flipY)
+  base.addColorStop(0, '#2c6a34'); base.addColorStop(0.6, '#2a6532'); base.addColorStop(1, '#357a3c');
+  g.fillStyle = base; g.fillRect(0, 0, S, S);
+  h.fillStyle = '#808080'; h.fillRect(0, 0, S, S);
+  // mottle: soft darker and lighter patches in the blade
+  for (let k = 0; k < 90; k++) {
+    const x = rnd() * S, y = rnd() * S, r = 20 + rnd() * 70, dark = rnd() < 0.5;
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, dark ? 'rgba(10,30,14,0.18)' : 'rgba(70,120,60,0.12)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  // lateral veins: from the midrib, rising toward the tip, curving out to both margins
+  const vein = (ctx, side, y0, colr, w) => {
+    ctx.strokeStyle = colr; ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(S / 2, y0);
+    ctx.bezierCurveTo(S / 2 + side * S * 0.08, y0 - S * 0.1, S / 2 + side * S * 0.3, y0 - S * 0.2, S / 2 + side * S * 0.52, y0 - S * 0.24);
+    ctx.stroke();
+  };
+  for (let k = 0; k < 8; k++) {
+    const y0 = S * (0.9 - k * 0.1) + (rnd() - 0.5) * 16;
+    for (const side of [-1, 1]) {
+      vein(g, side, y0, 'rgba(110,160,85,0.35)', 6 - k * 0.4);
+      vein(g, side, y0, 'rgba(170,210,130,0.28)', 1.4);
+      vein(h, side, y0, '#5a5a5a', 7);
+    }
+  }
+  // the midrib: a raised pale band down the middle, widest at the stalk
+  for (let y = 0; y < S; y += 2) {
+    const w = 5 + 18 * (y / S);
+    g.fillStyle = 'rgba(150,190,110,0.8)'; g.fillRect(S / 2 - w / 2, y, w, 2);
+    g.fillStyle = 'rgba(210,230,170,0.5)'; g.fillRect(S / 2 - w / 6, y, w / 3, 2);
+    h.fillStyle = '#b0b0b0'; h.fillRect(S / 2 - w / 2, y, w, 2);
+  }
+  // a paler rim at both margins
+  for (const x0 of [0, S]) {
+    const gr = g.createLinearGradient(x0, 0, S / 2, 0);
+    gr.addColorStop(0, 'rgba(90,140,70,0.45)'); gr.addColorStop(0.12, 'rgba(90,140,70,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, S, S);
+  }
+  grain(g, 0, 0, S, S, 7, rnd);
+  // stalk corner
+  g.fillStyle = '#3f6b2e'; g.fillRect(0, S - 40, 40, 40);
+  h.fillStyle = '#808080'; h.fillRect(0, S - 40, 40, 40);
+  // height to normal (Sobel), strength k
+  const hd = h.getImageData(0, 0, S, S).data, nrm = canvasOf(S, S), ng = nrm.getContext('2d'), out = ng.createImageData(S, S), k = 2.2;
+  const H = (x, y) => hd[(((y + S) % S) * S + ((x + S) % S)) * 4] / 255;
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const dx = (H(x + 1, y) - H(x - 1, y)) * k, dy = (H(x, y + 1) - H(x, y - 1)) * k;
+    const l = Math.hypot(dx, dy, 1), i = (y * S + x) * 4;
+    out.data[i] = (-dx / l * 0.5 + 0.5) * 255; out.data[i + 1] = (dy / l * 0.5 + 0.5) * 255; out.data[i + 2] = (1 / l * 0.5 + 0.5) * 255; out.data[i + 3] = 255;
+  }
+  ng.putImageData(out, 0, 0);
+  const normal = new THREE.CanvasTexture(nrm); normal.colorSpace = THREE.NoColorSpace; normal.anisotropy = 8;
+  return { map: srgbTex(col), normal };
+}
+
+// UVs for the model, which has none worth keeping (a palette atlas): the
+// mesh falls apart into 19 pieces, 9 of them leaves. Each leaf gets its own
+// frame from its vertices (the longest axis runs stalk to tip, the stalk end
+// is the one nearer the plant's axis) and is laid onto the leaf skin. Stems
+// go to the plain corner.
+function monsteraUVs(geo) {
+  const p = geo.attributes.position, ix = geo.index, n = p.count;
+  const par = new Int32Array(n).map((_, i) => i);
+  const find = x => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
+  const weld = new Map();   // one id per position, so pieces split at uv seams stay whole
+  const id = new Int32Array(n);
+  for (let i = 0; i < n; i++) {
+    const k = `${p.getX(i).toFixed(5)},${p.getY(i).toFixed(5)},${p.getZ(i).toFixed(5)}`;
+    if (!weld.has(k)) weld.set(k, i);
+    id[i] = weld.get(k);
+  }
+  for (let t = 0; t < ix.count; t += 3) {
+    const a = find(id[ix.getX(t)]), b = find(id[ix.getX(t + 1)]), c = find(id[ix.getX(t + 2)]);
+    par[b] = a; par[find(c)] = a;
+  }
+  const groups = new Map();
+  for (let i = 0; i < n; i++) { const r = find(id[i]); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(i); }
+  const uv = new Float32Array(n * 2).fill(0.02);
+  const v = new THREE.Vector3(), c = new THREE.Vector3();
+  for (const verts of groups.values()) {
+    if (verts.length < 200) continue;                      // a stem: stays on the stalk corner
+    c.set(0, 0, 0);
+    for (const i of verts) c.add(v.fromBufferAttribute(p, i));
+    c.divideScalar(verts.length);
+    // covariance and its main axis by power iteration; the second axis the same way, deflated
+    const C = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    for (const i of verts) {
+      v.fromBufferAttribute(p, i).sub(c);
+      const a = [v.x, v.y, v.z];
+      for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) C[r * 3 + q] += a[r] * a[q];
+    }
+    const mul = (M, x) => new THREE.Vector3(M[0] * x.x + M[1] * x.y + M[2] * x.z, M[3] * x.x + M[4] * x.y + M[5] * x.z, M[6] * x.x + M[7] * x.y + M[8] * x.z);
+    const axis = M => { let x = new THREE.Vector3(0.3, 0.9, 0.2); for (let k = 0; k < 40; k++) x = mul(M, x).normalize(); return x; };
+    const e1 = axis(C);
+    const l1 = mul(C, e1).dot(e1);
+    const D = C.slice();
+    for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) D[r * 3 + q] -= l1 * e1.getComponent(r) * e1.getComponent(q);
+    const e2 = axis(D);
+    // the stalk end is the end nearer the plant's axis (x = z = 0)
+    let lo = Infinity, hi = -Infinity, loR = 0, hiR = 0, wMax = 0;
+    for (const i of verts) {
+      v.fromBufferAttribute(p, i);
+      const s = v.clone().sub(c).dot(e1), rr = Math.hypot(v.x, v.z);
+      if (s < lo) { lo = s; loR = rr; } if (s > hi) { hi = s; hiR = rr; }
+      wMax = Math.max(wMax, Math.abs(v.clone().sub(c).dot(e2)));
+    }
+    const flip = loR > hiR ? -1 : 1, len = hi - lo;
+    for (const i of verts) {
+      v.fromBufferAttribute(p, i).sub(c);
+      const s = v.dot(e1), w = v.dot(e2);
+      uv[i * 2] = 0.5 + w / (2 * wMax) * 0.96;
+      uv[i * 2 + 1] = flip > 0 ? (s - lo) / len : (hi - s) / len;
+    }
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+// A soft room of light for the leaves to mirror: a pale sky above, a lilac
+// horizon, a dark floor and one bright window, prefiltered once.
+let leafEnv = null;
+function leafEnvironment(renderer) {
+  if (leafEnv || !renderer) return leafEnv;
+  const env = new THREE.Scene();
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'varying vec3 vDir; void main(){ float y = vDir.y; vec3 top = vec3(1.0, 0.97, 0.92); vec3 hor = vec3(0.62, 0.55, 0.66); vec3 low = vec3(0.08, 0.07, 0.08); vec3 c = y > 0.0 ? mix(hor, top, pow(y, 0.6)) : mix(hor, low, pow(-y, 0.5)); gl_FragColor = vec4(c, 1.0); }',
+  }));
+  const win = new THREE.Mesh(new THREE.PlaneGeometry(4, 5), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 3, 2.8), side: THREE.DoubleSide }));
+  win.position.set(-6, 3, 4); win.lookAt(0, 1, 0);
+  env.add(sky, win);
+  const pm = new THREE.PMREMGenerator(renderer);
+  leafEnv = pm.fromScene(env, 0.02).texture;
+  pm.dispose();
+  return leafEnv;
+}
+
 // Monstera Plant (Poly Pizza), Isa Lousberg, CC0. `soilY`: our planter's soil,
 // `scale`: 0.68 makes the whole plant about 2.3 m with the planter under it.
-export async function loadMonstera(atmo, { soilY = 0.475, scale = 0.68 } = {}) {
+// Only its shape is kept: the leaves get our skin and a waxy physical material.
+export async function loadMonstera(atmo, { soilY = 0.475, scale = 0.68, renderer = null } = {}) {
   const gltf = await new GLTFLoader().loadAsync('assets/models/monstera.glb');
   gltf.scene.updateMatrixWorld(true);
   let src = null;
   gltf.scene.traverse(o => { if (!src && o.isMesh) src = o; });
   const geo = src.geometry.clone().applyMatrix4(src.matrixWorld);
-  for (const n of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(n)) geo.deleteAttribute(n);
+  for (const n of Object.keys(geo.attributes)) if (!['position', 'normal'].includes(n)) geo.deleteAttribute(n);
   // keep only what stands above the pot's rim: drop triangles that lie below it
   const p = geo.attributes.position, ix = geo.index, keep = [];
   const cut = MONSTERA_POT_TOP + 0.02;
@@ -460,11 +610,14 @@ export async function loadMonstera(atmo, { soilY = 0.475, scale = 0.68 } = {}) {
   geo.translate(0, -MONSTERA_POT_TOP, 0);
   geo.scale(scale, scale, scale);
   geo.translate(0, soilY, 0);
-  const map = src.material.map;
-  if (map) { map.colorSpace = THREE.NoColorSpace; map.needsUpdate = true; }
-  // the palette's greens, gently lifted toward the light, no grime
-  const mesh = new THREE.Mesh(geo, atmo.prop({ map, color: 0xf2f6e6, rust: 0 }));
-  return mesh;
+  monsteraUVs(geo);
+  const skin = monsteraSkin();
+  const mat = new THREE.MeshPhysicalMaterial({
+    map: skin.map, normalMap: skin.normal, normalScale: new THREE.Vector2(0.8, 0.8),
+    roughness: 0.42, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.18,
+    envMap: leafEnvironment(renderer), envMapIntensity: 1.2, side: THREE.DoubleSide,
+  });
+  return new THREE.Mesh(geo, mat);
 }
 
 // ── the draft hook ──────────────────────────────────────────────────────────
@@ -488,7 +641,7 @@ function lineClear(x0, z0, x1, z1) {
 // Builds the draft plant of a zone, stands it on the floor 2.2 m ahead of the
 // visitor, clear of the walls (if the spawn has no room, at the nearest open
 // place, with the visitor moved to face it), and lights it.
-export async function placePlantDraft(kind, { scene, player, atmo }) {
+export async function placePlantDraft(kind, { scene, player, atmo, renderer }) {
   const R = kind === 'accept' ? 1.2 : 0.7;               // how much clear floor the plant wants around it
   const sx = player.pos.x, sz = player.pos.y;
   // the nearest spot with room, on a 0.3 m grid; the visitor stands 2.2 m off on a clear line
@@ -525,7 +678,11 @@ export async function placePlantDraft(kind, { scene, player, atmo }) {
   } else {
     const planter = buildRoundPlanter(atmo);
     add(planter);
-    add(await loadMonstera(atmo, { soilY: planter.userData.soilY }));
+    add(await loadMonstera(atmo, { soilY: planter.userData.soilY, renderer }));
+    // a sun through a high window, so the wax on the leaves has something to catch
+    const sun = new THREE.DirectionalLight(0xfff4e4, 3);
+    sun.position.set(best.x - 3, 5, best.z + 2); sun.target = group;
+    scene.add(sun, new THREE.HemisphereLight(0xf4eef6, 0x4a4450, 1.4));
   }
   scene.add(group);
   player.pos.set(best.vx, best.vz);

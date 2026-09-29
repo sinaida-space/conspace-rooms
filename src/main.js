@@ -346,7 +346,7 @@ async function boot() {
     if (['clouds', 'fogtop', 'plants'].some(k => new URLSearchParams(location.search).has(k))) stage.set(2);   // a ceiling sketch: straight into the light to judge it
     const plantDraft = new URLSearchParams(location.search).get('plantdraft');   // fear|room|accept: one draft plant in front of the visitor (#39)
     if (plantDraft === 'accept') stage.set(2);
-    if (plantDraft) import('./plants.js').then(m => m.placePlantDraft(plantDraft, { scene, player, atmo }));
+    if (plantDraft) import('./plants.js').then(m => m.placePlantDraft(plantDraft, { scene, player, atmo, renderer }));
     if (new URLSearchParams(location.search).has('dbg')) import('./debug.js').then(m => m.openDebug({ renderer, quality, post, atmo }));   // phone debugging
   }
 }
