@@ -72,17 +72,107 @@ export class AudioEngine {
       this.water.step(running, (dx, dz, dist) => this.drip(dx, dz, dist));
       return;
     }
-    const ctx = this.ctx, t = ctx.currentTime;
+    const running = (window.__app?.player?.vel?.length?.() ?? 0) > 3.2;
     this._stepFoot = !this._stepFoot;
-    const base = this._stepFoot ? 66 : 61;
-    const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = base;
-    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 300; bp.Q.value = 1.1;
+    const detune = 1 + (Math.random() * 2 - 1) * 0.04;   // no two steps alike
+    const surface = this._surface();
+    if (surface === 'tile') this._stepTile(running, detune);
+    else if (surface === 'parquet') this._stepParquet(running, detune);
+    else if (surface === 'rug') this._stepRug(running, detune);
+    else this._stepSoft(running, detune);
+  }
+
+  // what is underfoot: a rug, grandmother's parquet, the light's softness, or tile
+  _surface() {
+    if (this._forceSurface === undefined) {   // ?steps=tile|parquet|rug|soft, read once
+      const f = new URLSearchParams(location.search).get('steps');
+      this._forceSurface = ['tile', 'parquet', 'rug', 'soft'].includes(f) ? f : null;
+    }
+    if (this._forceSurface) return this._forceSurface;
+    const p = window.__app?.player?.pos;
+    if (p && window.__app?.soul?.onRug?.(p.x, p.y) === true) return 'rug';
+    const z = this._zone;
+    if (!z) return this._inRoom ? 'parquet' : 'tile';
+    const top = Math.max(z.fear, z.memory, z.accept);
+    if (this._inRoom || z.memory === top) return 'parquet';
+    if (z.accept === top) return 'soft';
+    return 'tile';
+  }
+
+  // one 0.3 s noise buffer, built once and shared by every step
+  _noiseBuf() {
+    if (!this._noise) {
+      const ctx = this.ctx, n = Math.floor(ctx.sampleRate * 0.3);
+      this._noise = ctx.createBuffer(1, n, ctx.sampleRate);
+      const d = this._noise.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    }
+    return this._noise;
+  }
+
+  // low body: a decaying triangle thump through a filter into bed
+  _body(t, freq, peak, dur, type, cutoff, q = 1.1) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = freq;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = cutoff; f.Q.value = q;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.05, t + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(f); f.connect(g); g.connect(this.bed);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  // a short filtered noise burst into bed
+  _burst(t, type, freq, q, peak, dur) {
+    const ctx = this.ctx;
+    const n = ctx.createBufferSource(); n.buffer = this._noiseBuf();
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    n.connect(f); f.connect(g); g.connect(this.bed);
+    n.start(t); n.stop(t + dur + 0.02);
+  }
+
+  // hospital tile: hard click, low body, a faint echo off the walls
+  _stepTile(running, detune) {
+    const t = this.ctx.currentTime, k = running ? 1.25 : 1, len = running ? 0.8 : 1;
+    const base = (this._stepFoot ? 66 : 61) * detune;
+    this._burst(t, 'bandpass', 2500 * detune, 1.2, 0.03 * k, 0.025 * len);
+    this._body(t, base, 0.05 * k, 0.16 * len, 'bandpass', 300);
+    const e = t + 0.09 + Math.random() * 0.05;   // echo 90-140 ms later, about 25%
+    this._burst(e, 'bandpass', 2300 * detune, 1.2, 0.03 * k * 0.25, 0.03 * len);
+    this._body(e, base, 0.05 * k * 0.25, 0.14 * len, 'bandpass', 300);
+  }
+
+  // grandmother's floor: a softened thump, now and then a board creaks
+  _stepParquet(running, detune) {
+    const ctx = this.ctx, t = ctx.currentTime, k = running ? 1.2 : 1;
+    this._body(t, (this._stepFoot ? 66 : 61) * detune, 0.05 * k, 0.16, 'lowpass', 900, 0.7);
+    if (Math.random() > 1 / 3) return;
+    const f0 = (180 + Math.random() * 140) * detune, dur = 0.12 + Math.random() * 0.08;
+    const o = ctx.createOscillator(); o.type = Math.random() < 0.5 ? 'sawtooth' : 'triangle';
+    o.frequency.setValueAtTime(f0, t + 0.02);
+    o.frequency.linearRampToValueAtTime(f0 * (0.85 + Math.random() * 0.3), t + 0.02 + dur);   // slow random glide
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f0; bp.Q.value = 6;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.02, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.02 + dur);
     o.connect(bp); bp.connect(g); g.connect(this.bed);
-    o.start(t); o.stop(t + 0.18);
+    o.start(t + 0.02); o.stop(t + dur + 0.05);
+  }
+
+  // a rug: a dull low thump, no click
+  _stepRug(running, detune) {
+    this._body(this.ctx.currentTime, (this._stepFoot ? 66 : 61) * detune, 0.05 * 0.6 * (running ? 1.2 : 1), 0.18, 'lowpass', 350, 0.7);
+  }
+
+  // the light: barely there, an airy brush and no body
+  _stepSoft(running, detune) {
+    this._burst(this.ctx.currentTime, 'lowpass', 1400 * detune, 0.5, 0.05 * 0.4 * (running ? 1.2 : 1), 0.11);
   }
 
   // the flooded acceptance stage, called every frame by water.js
@@ -231,13 +321,14 @@ export class AudioEngine {
 
   // The music and the crackle follow the zone.
   setZone(zone) {
+    this._zone = zone;
     if (!this.ctx || !this.music) return;
     this.music.setZone(zone);
     this.crackleGain.gain.setTargetAtTime((0.011 + (this._speedS || 0) * 0.012) * (zone.fear + 0.4 * zone.memory), this.ctx.currentTime, 0.4);
   }
 
   // Grandmother's room: the corridor music gives way to the gramophone.
-  hush(on) { this.music?.room(on); }
+  hush(on) { this._inRoom = !!on; this.music?.room(on); }
 
   // A presence door gives way for a moment, then slams.
   doorLight(seconds) { this.music?.light(seconds); }
