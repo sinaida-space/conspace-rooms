@@ -1906,17 +1906,29 @@ export class SoulPath {
     st.scatter = this._buildScatter(st.group, cx, cz);
   }
 
+  // Everything set down along the corridors, built again for a changed world.
+  // A chunk takes a few milliseconds and some thirty are loaded: the one the
+  // visitor stands in goes at once, the rest one a frame, nearest first
+  // (_stepRebuild, from update), so the walk never stops for it.
   _rebuildScatter() {
-    for (const [key, st] of this.chunkStuff) {
-      st.scatter?.dispose();
-      const [cx, cz] = key.split(':').map(Number);
-      st.scatter = this._buildScatter(st.group, cx, cz);
-      st.props?.dispose();
-      st.props = this._buildProps(st.group, cx, cz, st.reserved || new Set());
-      this._snuffNear(cx, cz);
-      st.drown?.dispose();
-      st.drown = this.stage.stage === 2 ? this.drowned.build(st.group, cx, cz, this._drownSpots(cx, cz, st.reserved || new Set())) : null;
-    }
+    const P = this.player.pos, span = CHUNK * CELL;
+    const far = key => { const [cx, cz] = key.split(':').map(Number); return Math.hypot((cx + 0.5) * span - P.x, (cz + 0.5) * span - P.y); };
+    this._rebuildQueue = [...this.chunkStuff.keys()].sort((a, b) => far(a) - far(b));
+    this._stepRebuild();
+  }
+  _stepRebuild() {
+    const key = this._rebuildQueue?.shift();
+    if (key === undefined) return;
+    const st = this.chunkStuff.get(key);
+    if (!st) return;                                     // unloaded meanwhile
+    st.scatter?.dispose();
+    const [cx, cz] = key.split(':').map(Number);
+    st.scatter = this._buildScatter(st.group, cx, cz);
+    st.props?.dispose();
+    st.props = this._buildProps(st.group, cx, cz, st.reserved || new Set());
+    this._snuffNear(cx, cz);
+    st.drown?.dispose();
+    st.drown = this.stage.stage === 2 ? this.drowned.build(st.group, cx, cz, this._drownSpots(cx, cz, st.reserved || new Set())) : null;
   }
 
   // ── the television ─────────────────────────────────────────────────────
@@ -2668,6 +2680,7 @@ export class SoulPath {
   update(dt, time, zone) {
     if (this._titleFor !== this.stage.stage) { this._titleFor = this.stage.stage; this._zoneTitle(this.stage.stage); }
     this._sync();
+    this._stepRebuild();                                // one chunk a frame of a pending rebuild
     this.petals.update(dt, time);
     this._time = time;
     this._tickMarks(time);
