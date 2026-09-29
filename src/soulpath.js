@@ -75,8 +75,8 @@ const DOOR_SWING = 1.15;         // radians the door gives way
 const DOOR_HOLD = 4.2;           // seconds the light pours out before the door slams
 const DOOR_SLAM = 0.22;          // seconds to slam shut
 const PORTAL_SEEN_FEAR = 3;
-const FEAR_FIND_2 = { writings: 3, things: 4 };   // scrawls and boards, things lying about: then the second work
-const FEAR_FIND_3 = 5;           // more of the hospital's things after that: the third
+const FEAR_START = 2;            // works hanging in the first corridor, so nobody is lost at the start
+const FEAR_FIND_3 = { writings: 2, things: 3 };   // scrawls and boards, things lying about: then the third work
 const FEAR_TURNS = 2;            // turns of the corridor after the third, before the door and the portal
 const FIND_NEAR = 3.0;           // metres: passing this close, looking its way, a thing counts as found      // works seen in fear before its portal is summoned
 const PORTAL_SEEN_MEMORY = 5;    // works seen in memory (past the room) before the way into the light
@@ -171,6 +171,7 @@ const centreOf = g => (g + 0.5) * CELL;
 // crossing square of the 2-cell corridor lattice (bands 4-5 and 10-11 of a
 // 16-cell chunk, along both axes).
 const CORNER_FREE = 3.6;
+const PROP_FREE = 2.4;           // things, scrawls and drowned things: three steps; a corridor run between crossings is only 3 m from either
 const BAND_SPANS = [[-6, -4], [4, 6], [10, 12], [20, 22]];
 function bandGap(u) {
   const m = ((u % CHUNK) + CHUNK) % CHUNK;
@@ -460,7 +461,7 @@ export class SoulPath {
       if (!EGG_BAND.has(i) && !EGG_BAND.has(j)) continue;
       const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
       if (solidAtGlobal(gi, gj) || reserved.has(cellKey(gi, gj)) || ward?.has(cellKey(gi, gj))) continue;
-      if (cornerDist(centreOf(gi), centreOf(gj)) < CORNER_FREE) continue;
+      if (cornerDist(centreOf(gi), centreOf(gj)) < PROP_FREE) continue;
       let clear = true;
       for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (solidAtGlobal(gi + di, gj + dj)) clear = false;
       if (clear && !this._keepOut(cx, cz, centreOf(gi), centreOf(gj), 0.5)) out.push({ x: centreOf(gi), z: centreOf(gj) });
@@ -505,7 +506,7 @@ export class SoulPath {
     // ── writings: about half the chunks get one, on a deterministic wall run
     const rw = mulberry32(hash2i(SEED_WRITING, cx, cz));
     if (rw() < 0.55) {
-      const slots = this.world.getWallSlots(cx, cz).filter(s => s.length >= 2 && cornerDist(s.position.x, s.position.z) >= CORNER_FREE);
+      const slots = this.world.getWallSlots(cx, cz).filter(s => s.length >= 2 && cornerDist(s.position.x, s.position.z) >= PROP_FREE);
       if (slots.length) {
         const slot = slots[Math.floor(rw() * slots.length)];
         const along = (rw() - 0.5) * (slot.length - 1.6) * CELL; // slide along the run
@@ -1207,11 +1208,11 @@ export class SoulPath {
   }
 
   // ── fear, paced ────────────────────────────────────────────────────────
-  // Fear shows three works, found one at a time. The first hangs near the
-  // start. The second comes only once the walk has taken in a few scrawls on
-  // the walls and a few of the things left lying about; the third after more
-  // of the hospital's things (beds, chairs, trolleys). Each appears on a wall
-  // somewhere out of sight, never before the visitor's eyes. After the third
+  // Fear shows three works. Two hang in the first corridor, so the walk has
+  // something to hold on to from the start. The third comes only once the
+  // walk has taken in a few scrawls on the walls and a few of the hospital's
+  // things (beds, chairs, trolleys), and appears on a wall somewhere out of
+  // sight, never before the visitor's eyes. After the third
   // is seen, two more turns of the corridor, and only then the metal door and
   // the portal. A thing counts as found when the walk passes close by,
   // looking its way. Works not found yet are hidden, by instance: the same
@@ -1222,7 +1223,7 @@ export class SoulPath {
       if (this._fear?.hiding) { for (const a of act) { a.hidden = false; if (a.sub) a.sub.visible = true; } this._fear.hiding = false; }
       return;
     }
-    const f = this._fear ||= { shown: new Set(), ids: new Set(), found: new Set(), writings: 0, things: 0, unlocked: 1, at2: 0, turns: 0, axis: null, hiding: true };
+    const f = this._fear ||= { shown: new Set(), ids: new Set(), found: new Set(), writings: 0, things: 0, unlocked: FEAR_START, at2: 0, turns: 0, axis: null, hiding: true };
     const keyOf = a => a.art.id + '@' + a.centerWorld.x.toFixed(1) + ',' + a.centerWorld.z.toFixed(1);
     for (const a of act) { const on = f.shown.has(keyOf(a)); a.hidden = !on; if (a.sub) a.sub.visible = on; }
 
@@ -1237,10 +1238,9 @@ export class SoulPath {
 
     // the next work is due
     const shownSeen = [...f.ids].every(id => this.seen.has(id));
-    if (f.unlocked === 1 && shownSeen && f.shown.size && f.writings >= FEAR_FIND_2.writings && f.things >= FEAR_FIND_2.things) { f.unlocked = 2; f.at2 = f.things; }
-    else if (f.unlocked === 2 && shownSeen && f.shown.size >= 2 && f.things - f.at2 >= FEAR_FIND_3) f.unlocked = 3;
+    if (f.unlocked === 2 && shownSeen && f.shown.size >= 2 && f.writings >= FEAR_FIND_3.writings && f.things >= FEAR_FIND_3.things) f.unlocked = 3;
     if (f.shown.size < f.unlocked) {
-      const first = f.shown.size === 0;
+      const first = f.shown.size < FEAR_START;
       let best = null, bd = Infinity;
       for (const a of act) {
         if (f.ids.has(a.art.id) || this.seen.has(a.art.id)) continue;
@@ -1331,7 +1331,7 @@ export class SoulPath {
       const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
       if (solidAtGlobal(gi, gj)) continue;
       if (wardCells?.has(cellKey(gi, gj))) continue;  // the hospital's things own these cells
-      if (cornerDist(centreOf(gi), centreOf(gj)) < CORNER_FREE) continue;   // the holy zone round a corner stays bare
+      if (cornerDist(centreOf(gi), centreOf(gj)) < PROP_FREE) continue;   // the holy zone round a corner stays bare
       const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([di, dj]) => solidAtGlobal(gi + di, gj + dj));
       const r = rnd();
       if (!side) continue;                              // only along walls, so paths stay clear
@@ -1381,7 +1381,7 @@ export class SoulPath {
     if (this.stairwellPlan?.cx === cx && this.stairwellPlan?.cz === cz) avoid.push([cellOf(this.stairwellPlan.x), cellOf(this.stairwellPlan.z), 3]);
     if (st === 1) { const k = kitchenPlan(cx, cz); if (k) avoid.push([cellOf(k.x), cellOf(k.z), 5]); }
     const free = (gi, gj) => !solidAtGlobal(gi, gj) && !reserved.has(cellKey(gi, gj)) && !ward?.has(cellKey(gi, gj))
-      && cornerDist(centreOf(gi), centreOf(gj)) >= CORNER_FREE
+      && cornerDist(centreOf(gi), centreOf(gj)) >= PROP_FREE
       && avoid.every(([ai, aj, r]) => Math.max(Math.abs(gi - ai), Math.abs(gj - aj)) > r);
     const wallSpots = [], airSpots = [];
     for (let j = 1; j < CHUNK - 1; j++) for (let i = 1; i < CHUNK - 1; i++) {
