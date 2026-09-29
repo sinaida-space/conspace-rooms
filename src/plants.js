@@ -439,7 +439,7 @@ export function buildRoundPlanter(atmo) {
 }
 
 // ── the CC0 monstera ────────────────────────────────────────────────────────
-const MONSTERA_POT_TOP = 1.0;   // native units: the model's own pot ends at y = 1.0, foliage stems rise out of it
+const MONSTERA_POT_TOP = 1.0;   // native units: the model's own pot ends at y = 1.0, the blades are all above it
 const LEAF_TEX = 1024;
 
 // The leaf skin, drawn once: u across the blade (0.5 = the midrib), v from
@@ -480,8 +480,8 @@ function monsteraSkin() {
   // the midrib: a raised pale band down the middle, widest at the stalk
   for (let y = 0; y < S; y += 2) {
     const w = 5 + 18 * (y / S);
-    g.fillStyle = 'rgba(150,190,110,0.8)'; g.fillRect(S / 2 - w / 2, y, w, 2);
-    g.fillStyle = 'rgba(210,230,170,0.5)'; g.fillRect(S / 2 - w / 6, y, w / 3, 2);
+    g.fillStyle = 'rgba(130,175,100,0.55)'; g.fillRect(S / 2 - w / 2, y, w, 2);
+    g.fillStyle = 'rgba(190,215,150,0.28)'; g.fillRect(S / 2 - w / 6, y, w / 3, 2);
     h.fillStyle = '#b0b0b0'; h.fillRect(S / 2 - w / 2, y, w, 2);
   }
   // a paler rim at both margins
@@ -507,19 +507,17 @@ function monsteraSkin() {
   return { map: srgbTex(col), normal };
 }
 
-// The model reworked into something closer to a plant. Each crown falls
-// apart into 19 pieces, 9 of them leaves. Each leaf gets its own frame from
-// its vertices (power iteration on the covariance) and is laid onto the leaf
-// skin (longest axis stalk to tip; the stalk end is the one the model's stem
-// touches), pressed to half its thickness and tinted a little apart. The
-// model's stems, fat and running across the blades, are dropped; returns
-// each leaf's base and direction for monsteraStalks.
-function monsteraShape(geo) {
+// The leaves of the model, each on its own: the mesh falls apart into 19
+// pieces, 9 of them blades. A blade gets a frame from its vertices (power
+// iteration on the covariance): z runs from the stalk end (the end the
+// model's stem touches) to the tip, x across, y out of the blade. Returned
+// in that frame, base at the origin, pressed to half its thickness, with
+// its uv on the leaf skin. The model's own stems are left behind.
+function leafTemplates(geo) {
   const p = geo.attributes.position, ix = geo.index, n = p.count;
   const par = new Int32Array(n).map((_, i) => i);
   const find = x => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
-  const weld = new Map();   // one id per position, so pieces split at uv seams stay whole
-  const id = new Int32Array(n);
+  const weld = new Map(), id = new Int32Array(n);   // one id per position, so pieces split at seams stay whole
   for (let i = 0; i < n; i++) {
     const k = `${p.getX(i).toFixed(5)},${p.getY(i).toFixed(5)},${p.getZ(i).toFixed(5)}`;
     if (!weld.has(k)) weld.set(k, i);
@@ -531,29 +529,30 @@ function monsteraShape(geo) {
   }
   const groups = new Map();
   for (let i = 0; i < n; i++) { const r = find(id[i]); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(i); }
-  const uv = new Float32Array(n * 2).fill(0.02), color = new Float32Array(n * 3).fill(1);
-  const stem = new Uint8Array(n), bases = [];
-  const v = new THREE.Vector3(), rnd = plantRng(5150);
+  const stemPts = [];
+  for (const verts of groups.values()) if (verts.length < 200) for (const i of verts) stemPts.push(new THREE.Vector3().fromBufferAttribute(p, i));
+  const nearStem = q => stemPts.reduce((m, sp) => Math.min(m, sp.distanceToSquared(q)), Infinity);
+  const tris = new Map();
+  for (let t = 0; t < ix.count; t += 3) { const r = find(id[ix.getX(t)]); if (!tris.has(r)) tris.set(r, []); tris.get(r).push(ix.getX(t), ix.getX(t + 1), ix.getX(t + 2)); }
+  const v = new THREE.Vector3(), out = [];
   const mul = (M, x) => new THREE.Vector3(M[0] * x.x + M[1] * x.y + M[2] * x.z, M[3] * x.x + M[4] * x.y + M[5] * x.z, M[6] * x.x + M[7] * x.y + M[8] * x.z);
   const axis = M => { let x = new THREE.Vector3(0.3, 0.9, 0.2); for (let k = 0; k < 40; k++) x = mul(M, x).normalize(); return x; };
-  // the model's stems touch each blade at its base: remember where they are
-  const stemPts = [];
-  for (const verts of groups.values()) if (verts.length < 200) for (const i of verts) { stem[i] = 1; stemPts.push(new THREE.Vector3().fromBufferAttribute(p, i)); }
-  const nearStem = q => stemPts.reduce((m, sp) => Math.min(m, sp.distanceToSquared(q)), Infinity);
-  for (const verts of groups.values()) {
-    if (verts.length < 200) continue;                      // the model's stems: dropped, see monsteraStalks
+  for (const [root, verts] of groups) {
+    if (verts.length < 200) continue;
     const c = new THREE.Vector3();
     for (const i of verts) c.add(v.fromBufferAttribute(p, i));
     c.divideScalar(verts.length);
+    if (c.y < MONSTERA_POT_TOP) continue;                  // the model's own pot
     const C = [0, 0, 0, 0, 0, 0, 0, 0, 0];
     for (const i of verts) {
       v.fromBufferAttribute(p, i).sub(c);
       const a = [v.x, v.y, v.z];
       for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) C[r * 3 + q] += a[r] * a[q];
     }
-    const e1 = axis(C), l1 = mul(C, e1).dot(e1), D = C.slice();
+    let e1 = axis(C);
+    const l1 = mul(C, e1).dot(e1), D = C.slice();
     for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) D[r * 3 + q] -= l1 * e1.getComponent(r) * e1.getComponent(q);
-    const e2 = axis(D), e3 = new THREE.Vector3().crossVectors(e1, e2).normalize();
+    const e2 = axis(D);
     let lo = Infinity, hi = -Infinity, wMax = 0;
     const loP = new THREE.Vector3(), hiP = new THREE.Vector3();
     for (const i of verts) {
@@ -562,56 +561,109 @@ function monsteraShape(geo) {
       if (s < lo) { lo = s; loP.copy(v); } if (s > hi) { hi = s; hiP.copy(v); }
       wMax = Math.max(wMax, Math.abs(v.clone().sub(c).dot(e2)));
     }
-    const flip = nearStem(loP) > nearStem(hiP) ? -1 : 1, len = hi - lo;   // the end a stem touches is the stalk end
-    // where the stalk meets the blade, and the way the blade runs from there
-    bases.push({ at: c.clone().addScaledVector(e1, flip > 0 ? lo : hi), dir: e1.clone().multiplyScalar(flip), len });
-    const tint = 0.9 + rnd() * 0.2, warm = (rnd() - 0.5) * 0.08;
+    if (nearStem(loP) > nearStem(hiP)) { e1 = e1.negate(); [lo, hi] = [-hi, -lo]; }
+    const e3 = new THREE.Vector3().crossVectors(e1, e2).normalize();
+    const base = c.clone().addScaledVector(e1, lo), len = hi - lo;
+    // local copy: only this blade's vertices, renumbered
+    const map = new Map(), pos = [], uv = [];
     for (const i of verts) {
-      v.fromBufferAttribute(p, i).sub(c);
-      const s = v.dot(e1), w = v.dot(e2), d = v.dot(e3);
-      uv[i * 2] = 0.5 + w / (2 * wMax) * 0.96;
-      uv[i * 2 + 1] = flip > 0 ? (s - lo) / len : (hi - s) / len;
-      v.copy(c).addScaledVector(e1, s).addScaledVector(e2, w).addScaledVector(e3, d * 0.5);
-      p.setXYZ(i, v.x, v.y, v.z);
-      color[i * 3] = tint + warm; color[i * 3 + 1] = tint; color[i * 3 + 2] = tint - warm;
+      map.set(i, pos.length / 3);
+      v.fromBufferAttribute(p, i).sub(base);
+      const x = v.dot(e2), y = v.dot(e3) * 0.5, z = v.dot(e1);
+      pos.push(x, y, z);
+      uv.push(0.5 + x / (2 * wMax) * 0.96, z / len);
     }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(tris.get(root).map(i => map.get(i)));
+    out.push({ geo: g, len });
   }
-  const keep = [];
-  for (let t = 0; t < ix.count; t += 3) if (!stem[ix.getX(t)]) keep.push(ix.getX(t), ix.getX(t + 1), ix.getX(t + 2));
-  geo.setIndex(keep);
-  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  geo.setAttribute('color', new THREE.BufferAttribute(color, 3));
-  geo.computeVertexNormals();
-  return bases;
+  return out;
 }
 
-// Our own stalks, one per leaf: a slim tube out of the soil near the plant's
-// axis, rising, then bending to enter the blade at its base along the
-// midrib, the way a monstera leaf hangs on its petiole. Thicker at the soil.
-function monsteraStalks(bases, soilY) {
-  const parts = [], rnd = plantRng(7331);
-  for (const b of bases) {
-    const a = Math.atan2(b.at.z, b.at.x), r0 = 0.03 + rnd() * 0.05;
-    const p0 = new THREE.Vector3(Math.cos(a) * r0, soilY - 0.02, Math.sin(a) * r0);
-    const rise = b.at.y - p0.y;
-    const p1 = p0.clone().add(new THREE.Vector3(Math.cos(a) * rise * 0.12, rise * 0.55, Math.sin(a) * rise * 0.12));
-    const p2 = b.at.clone().addScaledVector(b.dir, -b.len * 0.35);
-    p2.y = Math.min(p2.y, b.at.y + 0.04);   // a drooping blade: the stalk may arch a little, never hook over the top of it
-    const curve = new THREE.CubicBezierCurve3(p0, p1, p2, b.at.clone().addScaledVector(b.dir, b.len * 0.04));
-    const tube = new THREE.TubeGeometry(curve, 24, 1, 6, false);
-    // taper: 11 mm at the soil to 6 mm at the blade
-    const q = tube.attributes.position, pts = curve.getSpacedPoints(24);
-    for (let i = 0; i < q.count; i++) {
-      const ring = Math.floor(i / 7), t = ring / 24, ctr = pts[Math.min(ring, 24)];
-      const rad = 0.011 - 0.005 * t;
-      q.setXYZ(i, ctr.x + (q.getX(i) - ctr.x) * rad, ctr.y + (q.getY(i) - ctr.y) * rad, ctr.z + (q.getZ(i) - ctr.z) * rad);
-    }
-    tube.computeVertexNormals();
-    tube.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(q.count * 2).fill(0.02), 2));
-    tube.setAttribute('color', new THREE.BufferAttribute(new Float32Array(q.count * 3).fill(1), 3));
-    parts.push(tube);
+// points spread over a geometry's triangles (corners and centres), for the
+// clearance checks between leaves and stalks
+function cloudOf(geo) {
+  const p = geo.attributes.position, ix = geo.index, pts = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let t = 0; t < ix.count; t += 3) {
+    a.fromBufferAttribute(p, ix.getX(t)); b.fromBufferAttribute(p, ix.getX(t + 1)); c.fromBufferAttribute(p, ix.getX(t + 2));
+    pts.push(a.clone(), a.clone().add(b).add(c).divideScalar(3), a.clone().lerp(b, 0.5), b.clone().lerp(c, 0.5), c.clone().lerp(a, 0.5));
   }
+  return pts;
+}
+const tooClose = (A, B, d) => { const d2 = d * d; for (const x of A) for (const y of B) if (x.distanceToSquared(y) < d2) return true; return false; };
+
+// The plant itself, arranged rather than copied: leaves one after another
+// round a spiral (the golden angle), the low ones reaching out and bowing,
+// the high ones younger and more upright. Each blade hangs at the end of its
+// own stalk, the stalk arriving along the blade's midrib so it never shows
+// through; a leaf (or its stalk) that would touch one already placed is
+// tried again elsewhere, and dropped after 40 tries. Returns the pieces.
+function arrangeMonstera(templates, soilY, count) {
+  const rnd = plantRng(2718), up = new THREE.Vector3(0, 1, 0);
+  const placed = [];   // { cloud, stalk }
+  const parts = [];
+  let placedCount = 0;
+  for (let k = 0; k < count; k++) {
+    const f = k / (count - 1);                     // 0: the lowest, oldest leaf; 1: the newest, on top
+    for (let tryN = 0; tryN < 40; tryN++) {
+      const tpl = templates[(k * 5 + tryN) % templates.length];
+      const az = k * 2.39996 + (rnd() - 0.5) * 0.5 + tryN * 0.37;
+      const h = soilY + 0.75 + f * 0.85 + (rnd() - 0.5) * 0.12;
+      const reach = 0.36 - f * 0.22 + rnd() * 0.08;
+      // the blade's pitch: mature ones hang from the arch of the stalk, face turned out;
+      // the newest, on top, still stands up
+      const theta = k === count - 1 ? 0.9 : -0.95 + f * 0.45 + (rnd() - 0.5) * 0.2;
+      const size = (0.78 - f * 0.18) * (0.92 + rnd() * 0.16);
+      const out = new THREE.Vector3(Math.cos(az), 0, Math.sin(az));
+      const B = new THREE.Vector3(out.x * reach, h, out.z * reach);
+      const T = out.clone().multiplyScalar(Math.cos(theta)).addScaledVector(up, Math.sin(theta)).normalize();
+      // the blade: its z along T, its x level, its y (the face) up, a little roll
+      const X = new THREE.Vector3().crossVectors(up, T).normalize(), Y = new THREE.Vector3().crossVectors(T, X);
+      const m = new THREE.Matrix4().makeBasis(X, Y, T)
+        .multiply(new THREE.Matrix4().makeRotationZ((rnd() - 0.5) * 0.35))
+        .scale(new THREE.Vector3(1, 1, 1).multiplyScalar(size / tpl.len));
+      m.setPosition(B);
+      const blade = tpl.geo.clone().applyMatrix4(m);
+      // the stalk: out of the soil beside the axis, up, then along T into the base
+      const p0 = new THREE.Vector3(out.x * 0.07, soilY - 0.02, out.z * 0.07);
+      const p1 = p0.clone().addScaledVector(up, (h - soilY) * 0.7).addScaledVector(out, reach * 0.35);
+      const p2 = B.clone().addScaledVector(T, -0.28 * (h - soilY));
+      const curve = new THREE.CubicBezierCurve3(p0, p1, p2, B.clone().addScaledVector(T, 0.01));
+      const stalkPts = curve.getSpacedPoints(30).slice(3, 27);     // the ends meet the soil and the blade by design
+      const cloud = cloudOf(blade);
+      const clash = placed.some(o => tooClose(cloud, o.cloud, 0.045) || tooClose(stalkPts, o.cloud, 0.03) || tooClose(o.stalk, cloud, 0.03))
+        || tooClose(stalkPts.slice(0, 20), cloud, 0.03);
+      if (clash) continue;
+      placed.push({ cloud, stalk: stalkPts });
+      const tint = 0.9 + rnd() * 0.2, warm = (rnd() - 0.5) * 0.08, col = [];
+      for (let i = 0; i < blade.attributes.position.count; i++) col.push(tint + warm, tint, tint - warm);
+      blade.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      blade.computeVertexNormals();
+      parts.push(blade, stalkTube(curve));
+      placedCount++;
+      break;
+    }
+  }
+  parts.leaves = placedCount;
   return parts;
+}
+
+// a stalk: 12 mm at the soil tapering to 7 mm at the blade, stalk green
+function stalkTube(curve) {
+  const tube = new THREE.TubeGeometry(curve, 24, 1, 6, false);
+  const q = tube.attributes.position, pts = curve.getSpacedPoints(24);
+  for (let i = 0; i < q.count; i++) {
+    const ring = Math.floor(i / 7), ctr = pts[Math.min(ring, 24)], rad = 0.012 - 0.005 * ring / 24;
+    q.setXYZ(i, ctr.x + (q.getX(i) - ctr.x) * rad, ctr.y + (q.getY(i) - ctr.y) * rad, ctr.z + (q.getZ(i) - ctr.z) * rad);
+  }
+  tube.computeVertexNormals();
+  tube.deleteAttribute('uv');
+  tube.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(q.count * 2).fill(0.02), 2));
+  tube.setAttribute('color', new THREE.BufferAttribute(new Float32Array(q.count * 3).fill(1), 3));
+  return tube;
 }
 
 // The plant's shadow on the floor: its own triangles flattened along the
@@ -658,48 +710,27 @@ function leafEnvironment(renderer) {
   return leafEnv;
 }
 
-// Monstera Plant (Poly Pizza), Isa Lousberg, CC0. `soilY`: our planter's soil,
-// `scale`: 0.84 makes the whole plant about 2.7 m with the planter under it.
-// Only its shape is kept: the leaves get our skin and a waxy physical material.
-export async function loadMonstera(atmo, { soilY = 0.475, scale = 0.84, renderer = null } = {}) {
+// Monstera Plant (Poly Pizza), Isa Lousberg, CC0: only the shapes of its
+// blades are kept. They are arranged anew (arrangeMonstera), `count` leaves
+// on our own stalks, about 2.2 m with the planter; our skin, a waxy physical
+// material. `soilY`: our planter's soil.
+export async function loadMonstera(atmo, { soilY = 0.475, count = 9, renderer = null } = {}) {
   const gltf = await new GLTFLoader().loadAsync('assets/models/monstera.glb');
   gltf.scene.updateMatrixWorld(true);
   let src = null;
   gltf.scene.traverse(o => { if (!src && o.isMesh) src = o; });
   const geo = src.geometry.clone().applyMatrix4(src.matrixWorld);
-  for (const n of Object.keys(geo.attributes)) if (!['position', 'normal'].includes(n)) geo.deleteAttribute(n);
-  // keep only what stands above the pot's rim: drop triangles that lie below it
-  const p = geo.attributes.position, ix = geo.index, keep = [];
-  const cut = MONSTERA_POT_TOP + 0.02;
-  for (let t = 0; t < ix.count; t += 3) {
-    const a = ix.getX(t), b = ix.getX(t + 1), c = ix.getX(t + 2);
-    if ((p.getY(a) + p.getY(b) + p.getY(c)) / 3 >= cut) keep.push(a, b, c);
-  }
-  geo.setIndex(keep);
-  // seat the stems at the soil, scaled; centred on the pot's own axis
-  geo.translate(0, -MONSTERA_POT_TOP, 0);
-  geo.scale(scale, scale, scale);
-  geo.translate(0, soilY, 0);
-  // a showpiece, not a pot plant: two more crowns of the same leaves, turned
-  // and sized apart, grow from the same soil (27 leaves instead of 9)
-  const crowns = [geo];
-  for (const [turn, k, lean] of [[1.9, 0.86, 0.28], [4.1, 0.97, -0.24]]) {
-    const g = geo.clone();
-    g.translate(0, -soilY, 0);
-    g.rotateX(lean); g.rotateY(turn); g.scale(k, k, k);
-    g.translate(0, soilY, 0);
-    crowns.push(g);
-  }
-  let all = mergeGeometries(crowns);
-  const bases = monsteraShape(all);
-  all = mergeGeometries([all, ...monsteraStalks(bases, soilY)]);
+  for (const n of Object.keys(geo.attributes)) if (n !== 'position') geo.deleteAttribute(n);
+  const parts = arrangeMonstera(leafTemplates(geo), soilY, count), all = mergeGeometries(parts);
   const skin = monsteraSkin();
   const mat = new THREE.MeshPhysicalMaterial({
     map: skin.map, normalMap: skin.normal, normalScale: new THREE.Vector2(0.8, 0.8),
     roughness: 0.42, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.18,
     envMap: leafEnvironment(renderer), envMapIntensity: 1.2, side: THREE.DoubleSide, vertexColors: true,
   });
-  return new THREE.Mesh(all, mat);
+  const mesh = new THREE.Mesh(all, mat);
+  mesh.userData.leaves = parts.leaves;
+  return mesh;
 }
 
 // ── the draft hook ──────────────────────────────────────────────────────────
