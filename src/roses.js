@@ -176,6 +176,19 @@ export function createRoseCounter(total = 18) {
     el.classList.toggle('full', n >= total);
     if (grew) { el.classList.remove('grew'); void el.offsetWidth; el.classList.add('grew'); }
   };
+  // a tap on the rose says how many works have been seen, for five seconds
+  let tag = null, tagT = 0;
+  el.style.cursor = 'pointer';
+  el.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!el.title) return;
+    tag ??= Object.assign(document.createElement('div'), { className: 'roses-tag' });
+    tag.textContent = el.title;
+    document.body.appendChild(tag);
+    requestAnimationFrame(() => tag.classList.add('visible'));
+    clearTimeout(tagT);
+    tagT = setTimeout(() => tag.classList.remove('visible'), 5000);
+  });
   const api = {
     el,
     set(n, label) {
