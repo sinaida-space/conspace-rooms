@@ -666,6 +666,55 @@ function stalkTube(curve) {
   return tube;
 }
 
+// Damp air round a plant: soft pale puffs drifting slowly in a column about
+// it and among its leaves, thinning out above them. One draw call; the drift is
+// in the vertex shader, time from the clock on every frame it is drawn.
+export function plantMist({ radius = 0.9, height = 2.3, count = 46, seed = 606 } = {}) {
+  const rnd = plantRng(seed), pos = [], seedA = [];
+  for (let i = 0; i < count; i++) {
+    const a = rnd() * Math.PI * 2, r = radius * Math.sqrt(rnd()), y = height * Math.pow(rnd(), 1.1);
+    pos.push(Math.cos(a) * r, 0.1 + y, Math.sin(a) * r);
+    seedA.push(rnd() * 100, 0.5 + rnd() * 0.8);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.Float32BufferAttribute(seedA, 2));
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, fog: false,
+    uniforms: { uTime: { value: 0 }, uHeight: { value: height }, uScale: { value: 1 } },
+    vertexShader: /* glsl */`
+      attribute vec2 aSeed;          // phase, size
+      uniform float uTime, uHeight, uScale;
+      varying float vA;
+      void main(){
+        vec3 p = position;
+        float t = uTime * 0.05 + aSeed.x;
+        p.x += sin(t * 1.3) * 0.12; p.z += cos(t * 1.1) * 0.12;     // a slow wander
+        p.y += sin(t * 0.7) * 0.06;
+        vA = (1.0 - smoothstep(0.55, 1.0, p.y / uHeight)) * (0.6 + 0.4 * sin(t * 2.0));   // thinner higher up, breathing
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_PointSize = aSeed.y * uScale / -mv.z;                     // about 0.5 to 1.3 m across
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */`
+      varying float vA;
+      void main(){
+        float d = length(gl_PointCoord - 0.5) * 2.0;
+        float a = exp(-d * d * 3.0) * (1.0 - d) * vA * 0.42;           // a soft round puff, faint
+        if (a < 0.002) discard;
+        gl_FragColor = vec4(0.97, 0.99, 0.98, a);
+      }`,
+  });
+  const pts = new THREE.Points(g, mat);
+  pts.frustumCulled = false;
+  pts.renderOrder = 2;
+  pts.onBeforeRender = (renderer) => {
+    mat.uniforms.uTime.value = performance.now() / 1000;
+    mat.uniforms.uScale.value = renderer.domElement.height * 0.9;   // world size to pixels at the current resolution
+  };
+  return pts;
+}
+
 // The plant's shadow on the floor: its own triangles flattened along the
 // light onto y = 0, dark and see-through, so the slits and holes of the
 // leaves show in it. Five pale copies from slightly different directions
@@ -796,6 +845,7 @@ export async function placePlantDraft(kind, { scene, player, atmo, renderer }) {
     // its shadow falls away from the sun; the group turns, so the direction goes into the group's frame
     const toSun = new THREE.Vector3(-3, 5, 2).applyAxisAngle(new THREE.Vector3(0, 1, 0), -group.rotation.y);
     group.add(plantShadow(monstera.geometry, toSun));
+    group.add(plantMist());
     scene.add(contactShadows([{ x: best.x, z: best.z, w: 0.46, d: 0.46, rot: 0, h: 0, k: 0.55 }]));   // world frame: it looks for the nearest fixture
     // a sun through a high window, so the wax on the leaves has something to catch
     const sun = new THREE.DirectionalLight(0xfff4e4, 3);
