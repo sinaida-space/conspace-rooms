@@ -538,12 +538,18 @@ export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
   mesh.visible = false;
   scene.add(mesh);
 
-  // a falling drop: a thin sprite from the ceiling to the surface
-  const drop = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xf4ebe6, transparent: true, opacity: 0.75, depthWrite: false, fog: true }));
-  drop.scale.set(0.012, 0.09, 1);
-  drop.visible = false;
-  scene.add(drop);
-  let dropT = -1, dropX = 0, dropZ = 0, nextDrip = 3 + Math.random() * 3;
+  // falling drops: thin sprites from the ceiling to the surface, a few in the
+  // air at once, so the light stage keeps raining softly all round
+  const DROPS = 6;
+  const dropMat = new THREE.SpriteMaterial({ color: 0xf4ebe6, transparent: true, opacity: 0.75, depthWrite: false, fog: true });
+  const drops = Array.from({ length: DROPS }, () => {
+    const s = new THREE.Sprite(dropMat);
+    s.scale.set(0.012, 0.09, 1);
+    s.visible = false;
+    scene.add(s);
+    return { s, t: -1, x: 0, z: 0 };
+  });
+  let nextDrip = 1 + Math.random();
 
   // mirror (tier 2 only)
   let rt = null;
@@ -640,31 +646,33 @@ export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
       audio?.setWater?.({ level: api.level, tide: api.tide, calm: api.calm });
 
       mesh.visible = accept >= 0.001;
-      if (!mesh.visible) { drop.visible = false; dropT = -1; if (rt) dropMirror(); return; }
+      if (!mesh.visible) { for (const d of drops) { d.s.visible = false; d.t = -1; } if (rt) dropMirror(); return; }
       mesh.position.set(Math.round(camera.position.x), api.level, Math.round(camera.position.z));
       const f = soul?.finale?.spot;
       if (f) uniforms.uFinale.value.set(f.x, f.z, 1); else uniforms.uFinale.value.z = 0;
 
       // drips: only in the stage itself, only once there is water to land in
-      if (dropT >= 0) {
-        dropT += dt / 0.6;
-        const y = CEIL_H - 0.05 - (CEIL_H - api.level) * dropT * dropT;   // falling, accelerating
-        drop.position.set(dropX, y, dropZ);
-        if (dropT >= 1) {
-          drop.visible = false; dropT = -1;
-          api.addRipple(dropX, dropZ, 0.6);
-          const dx = dropX - camera.position.x, dz = dropZ - camera.position.z, dist = Math.hypot(dx, dz);
+      for (const d of drops) {
+        if (d.t < 0) continue;
+        d.t += dt / 0.6;
+        d.s.position.set(d.x, CEIL_H - 0.05 - (CEIL_H - api.level) * d.t * d.t, d.z);   // falling, accelerating
+        if (d.t >= 1) {
+          d.s.visible = false; d.t = -1;
+          api.addRipple(d.x, d.z, 0.6);
+          const dx = d.x - camera.position.x, dz = d.z - camera.position.z, dist = Math.hypot(dx, dz);
           audio?.drip?.(dx / (dist || 1), dz / (dist || 1), dist);
         }
-      } else if (stage.stage === 2 && api.level > 0.01 && (nextDrip -= dt) <= 0) {
-        nextDrip = 2.5 + Math.random() * 3.5;
-        for (let k = 0; k < 6; k++) {
-          const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 7;
+      }
+      if (stage.stage === 2 && api.level > 0.01 && (nextDrip -= dt) <= 0) {
+        nextDrip = 0.5 + Math.random() * 1.1;
+        const d = drops.find(q => q.t < 0);
+        for (let k = 0; d && k < 6; k++) {
+          const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * 8;
           const x = camera.position.x + Math.cos(a) * r, z = camera.position.z + Math.sin(a) * r;
           if (solidAtGlobal(Math.floor(x / CELL), Math.floor(z / CELL)) || api.heightAt(x, z) === null) continue;
-          dropX = x; dropZ = z; dropT = 0;
-          drop.position.set(x, CEIL_H - 0.05, z);
-          drop.visible = true;
+          d.x = x; d.z = z; d.t = 0;
+          d.s.position.set(x, CEIL_H - 0.05, z);
+          d.s.visible = true;
           break;
         }
       }
@@ -723,8 +731,8 @@ export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
 
     dispose() {
       dropMirror(); dropSplit();
-      scene.remove(mesh, drop);
-      geo.dispose(); mat.dispose(); matReal.dispose(); drop.material.dispose();
+      scene.remove(mesh);
+      geo.dispose(); mat.dispose(); matReal.dispose(); dropMat.dispose(); for (const d of drops) scene.remove(d.s);
       waveTex?.dispose();
     },
   };

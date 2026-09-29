@@ -349,6 +349,13 @@ export class SoulPath {
       m.visible = false;
       m.userData = { key: null, goal: null, fadeAt: 0 };
       scene.add(m);
+      // in the light the same mark is a firefly instead: a warm point hanging
+      // off the wall that drifts the way to go, fades, and starts again
+      const fly = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffd79a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true }));
+      fly.scale.set(0.16, 0.16, 1);
+      fly.visible = false;
+      scene.add(fly);
+      m.userData.fly = fly;
       return m;
     });
     this._repathT = 0;
@@ -2136,8 +2143,21 @@ export class SoulPath {
 
   // marks of a finished goal fade slowly; marks far behind return to the pool
   _tickMarks(time) {
-    const p = this.player.pos;
+    const p = this.player.pos, light = this.stage.stage === 2;
     for (const m of this.marks) {
+      const fly = m.userData.fly;
+      m.material.visible = !light;                       // no red in the light: fireflies lead there
+      fly.visible = light && m.visible;
+      if (fly.visible) {
+        const nx = Math.sin(m.rotation.y), nz = Math.cos(m.rotation.y);   // off the wall, into the corridor
+        const ax = nz * m.scale.x, az = -nx * m.scale.x;                    // the way the scratch points
+        const seed = (m.position.x * 7.1 + m.position.z * 3.7) % 1;
+        const u = (time * 0.35 + seed) % 1;                                  // drifting on, then again
+        fly.position.set(m.position.x + nx * 0.4 + ax * (u - 0.5) * 1.2,
+          1.05 + Math.sin(time * 1.3 + seed * 6.28) * 0.12,
+          m.position.z + nz * 0.4 + az * (u - 0.5) * 1.2);
+        fly.material.opacity = m.material.opacity * Math.sin(u * Math.PI) * (0.75 + 0.25 * Math.sin(time * 9 + seed * 40));
+      }
       if (!m.visible) continue;
       if (m.userData.fadeAt) {
         const k = (time - m.userData.fadeAt) / MARK_FADE;
