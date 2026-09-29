@@ -4,6 +4,7 @@ import { GLTFLoader } from '../vendor/addons/GLTFLoader.js';
 import { shape, ficusBuild, plantLook, plantRng } from './props.js';
 import { CELL, solidAtGlobal } from './world.js';
 import { contactShadows } from './shadows.js';
+import { TROPICS, buildTropic, planterScale } from './tropics.js';
 
 // ── conspace-rooms · plants.js ──────────────────────────────────────────────
 // DRAFTS of the plants each zone will get, behind ?plantdraft=fear|room|accept
@@ -755,7 +756,7 @@ export function plantShadow(geo, dir, { opacity = 0.26, planes = FLOOR } = {}) {
 // A soft room of light for the leaves to mirror: a pale sky above, a lilac
 // horizon, a dark floor and one bright window, prefiltered once.
 let leafEnv = null;
-function leafEnvironment(renderer) {
+export function leafEnvironment(renderer) {
   if (leafEnv || !renderer) return leafEnv;
   const env = new THREE.Scene();
   const sky = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({
@@ -800,8 +801,9 @@ export async function loadMonstera(atmo, { soilY = 0.475, count = 9, sector = Ma
 // corner of a hall, or its middle, never within reach of the way through).
 // One prototype per kind, built once and cloned, so every plant shares its
 // geometry and materials; the monstera arrives asynchronously and fills its
-// spots when it is ready. kind: 'fear' | 'accept-corner' (leaves toward the
-// room only) | 'accept-middle'. spots: [{ x, z, rot }], rot turns local +z
+// spots when it is ready. kind: 'fear' | 'accept-corner:<species>' (leaves
+// toward the room only) | 'accept-middle:<species>', species the monstera or
+// one of TROPICS (tropics.js). spots: [{ x, z, rot }], rot turns local +z
 // toward the room.
 // Returns { boxes, dispose } like props.build.
 const protos = {};
@@ -814,10 +816,17 @@ function protoOf(kind, atmo) {
     const g = new THREE.Group(), cube = buildConcreteCube(atmo);
     g.add(cube, palePlant(atmo, cube.userData.soilY));
     protos[kind] = Promise.resolve({ group: keepAll(g), w: 0.5 });
+  } else if (TROPICS.includes(kind.split(':')[1])) {
+    const name = kind.split(':')[1], corner = kind.startsWith('accept-corner'), k = planterScale(name);
+    const g = new THREE.Group(), planter = buildRoundPlanter(atmo);
+    planter.scale.setScalar(k);
+    const plant = buildTropic(name, { soilY: planter.userData.soilY * k, sector: corner ? 1.1 : Math.PI, renderer: window.__app?.renderer });
+    g.add(planter, plant);
+    protos[kind] = Promise.resolve({ group: keepAll(g), w: 0.62 * k, mist: true, leaves: plant.geometry });
   } else {
     protos[kind] = (async () => {
       const g = new THREE.Group(), planter = buildRoundPlanter(atmo);
-      const corner = kind === 'accept-corner';
+      const corner = kind.startsWith('accept-corner');
       const monstera = await loadMonstera(atmo, { soilY: planter.userData.soilY, count: corner ? 7 : 9, sector: corner ? 1.05 : Math.PI, renderer: window.__app?.renderer });
       g.add(planter, monstera);
       return { group: keepAll(g), w: 0.62, mist: true, leaves: monstera.geometry };
@@ -831,7 +840,7 @@ function footBox(x, z, w) {
   return { x, z, r: w * 0.71, segs: [seg(P[0], P[1]), seg(P[1], P[2]), seg(P[2], P[3]), seg(P[3], P[0])] };
 }
 export function buildHallPlants(group, kind, spots, atmo) {
-  const w = kind === 'fear' ? 0.5 : 0.62;
+  const w = kind === 'fear' ? 0.5 : 0.62 * planterScale(kind.split(':')[1]);
   const boxes = spots.map(s => footBox(s.x, s.z, w));
   if (!spots.length) return { boxes, dispose() {} };
   const made = [];
@@ -849,7 +858,7 @@ export function buildHallPlants(group, kind, spots, atmo) {
       // falls away from the sun onto the floor; in a corner the light comes
       // from the room, so the leaves are thrown onto both walls behind as well
       // (walls 0.55 m off, their normals at 135 degrees either side of +z)
-      if (proto.leaves && kind === 'accept-corner') {
+      if (proto.leaves && kind.startsWith('accept-corner')) {
         const W = 0.55, r = Math.SQRT1_2;
         g.add(plantShadow(proto.leaves, new THREE.Vector3(0.25, 0.6, 1), { opacity: 0.42, planes: [
           FLOOR[0], { m: new THREE.Vector3(r, 0, -r), d: W }, { m: new THREE.Vector3(-r, 0, -r), d: W }] }));
@@ -890,7 +899,7 @@ function lineClear(x0, z0, x1, z1) {
 // visitor, clear of the walls (if the spawn has no room, at the nearest open
 // place, with the visitor moved to face it), and lights it.
 export async function placePlantDraft(kind, { scene, player, atmo, renderer }) {
-  const R = kind === 'accept' ? 1.2 : 0.7;               // how much clear floor the plant wants around it
+  const R = kind === 'accept' || TROPICS.includes(kind) ? 1.2 : 0.7;               // how much clear floor the plant wants around it
   const sx = player.pos.x, sz = player.pos.y;
   // the nearest spot with room, on a 0.3 m grid; the visitor stands 2.2 m off on a clear line
   let best = null;
@@ -924,9 +933,11 @@ export async function placePlantDraft(kind, { scene, player, atmo, renderer }) {
     lamp.position.set(best.x + dx / l * 0.5 - dz / l * 0.9, 1.75, best.z + dz / l * 0.5 + dx / l * 0.9);
     scene.add(lamp, new THREE.HemisphereLight(0x2d5a3c, 0x240808, 0.55));
   } else {
-    const planter = buildRoundPlanter(atmo);
+    const planter = buildRoundPlanter(atmo), k = planterScale(kind);
+    planter.scale.setScalar(k);
     add(planter);
-    const monstera = await loadMonstera(atmo, { soilY: planter.userData.soilY, renderer });
+    const monstera = TROPICS.includes(kind) ? buildTropic(kind, { soilY: planter.userData.soilY * k, renderer })
+      : await loadMonstera(atmo, { soilY: planter.userData.soilY, renderer });
     add(monstera);
     // its shadow falls away from the sun; the group turns, so the direction goes into the group's frame
     const toSun = new THREE.Vector3(-3, 5, 2).applyAxisAngle(new THREE.Vector3(0, 1, 0), -group.rotation.y);

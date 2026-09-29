@@ -62,7 +62,7 @@ export function createClip({ source, audio, getCount, total, strings }) {
     const stream = canvas.captureStream(30);
     if (audio?.ctx) {
       tap = audio.ctx.createMediaStreamDestination();
-      audio.master.connect(tap);
+      (audio.out || audio.master).connect(tap);
       tap.stream.getAudioTracks().forEach(tr => stream.addTrack(tr));
     }
     chunks = [];
@@ -88,7 +88,7 @@ export function createClip({ source, audio, getCount, total, strings }) {
 
   function finish(mime, stream) {
     stream.getTracks().forEach(tr => tr.stop());
-    try { tap && audio.master.disconnect(tap); } catch (e) { /* already gone */ }
+    try { tap && (audio.out || audio.master).disconnect(tap); } catch (e) { /* already gone */ }
     tap = null; rec = null;
     const blob = new Blob(chunks, { type: mime.split(';')[0] });
     const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';

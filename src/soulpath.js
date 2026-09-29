@@ -19,6 +19,8 @@ import { createGlowPetals } from './glowPetals.js';
 import { setShadowLight } from './shadows.js';
 import { createPropKit } from './props.js';
 import { buildHallPlants } from './plants.js';
+import { TROPICS } from './tropics.js';
+const LIGHT_PLANTS = ['monstera', ...TROPICS];
 import { AlisaVoices, VOICED } from './alisa.js';
 import { createDrowned } from './drowned.js';
 import { mountOrDrop } from './placement.js';
@@ -1551,12 +1553,14 @@ export class SoulPath {
     // everything on a wall may be a curtained window: remember it, a candle keeps off
     (this._flammable ||= new Map()).set(cx + ':' + cz, walls.map(w => ({ x: w.x, z: w.z })));
     const built = this.props.build(group, st, walls, air);
-    // the zone's plant, in a big hall only: fear its pale ficus, the light its monstera
-    const spots = st === 1 ? [] : this._hallPlantSpots(cx, cz, free, rp, 2);
+    // the zone's plant, in a big hall only: fear its pale ficus; the light, more
+    // often, one of its five (the monstera, tropics.js), a different one from place to place
+    const spots = st === 1 ? [] : this._hallPlantSpots(cx, cz, free, rp, 2, st === 2 ? { p: 0.95, side: 5 } : undefined);
     if (!spots.length) return built;
     this._flammable.get(cx + ':' + cz).push(...spots.map(q => ({ x: q.x, z: q.z })));   // candles keep off
-    const kindOf = q => st === 0 ? 'fear' : q.corner ? 'accept-corner' : 'accept-middle';
-    const sets = ['fear', 'accept-corner', 'accept-middle'].map(k => buildHallPlants(group, k, spots.filter(q => kindOf(q) === k), this.atmo));
+    const species = q => LIGHT_PLANTS[Math.floor(Math.abs(Math.sin(q.x * 12.9898 + q.z * 78.233) * 43758.5453) % 1 * LIGHT_PLANTS.length)];
+    const kindOf = q => st === 0 ? 'fear' : (q.corner ? 'accept-corner:' : 'accept-middle:') + species(q);
+    const sets = ['fear', ...LIGHT_PLANTS.flatMap(n => ['accept-corner:' + n, 'accept-middle:' + n])].map(k => buildHallPlants(group, k, spots.filter(q => kindOf(q) === k), this.atmo));
     return { ...built, boxes: built.boxes.concat(...sets.map(p => p.boxes)), dispose() { built.dispose(); sets.forEach(p => p.dispose()); } };
   }
 
@@ -1565,14 +1569,15 @@ export class SoulPath {
   // within `gap` cells of the corridor lattice that runs through it (the way
   // through stays clear of the leaves too), on cells free of everything else
   // (the whole 3 x 3 round it). With gap 2 about a third of the big halls
-  // have such a place; seven in ten of those get a plant.
-  _hallPlantSpots(cx, cz, free, rp, gap) {
+  // have such a place; seven in ten of those get a plant (opt: { p, side },
+  // the share that gets one and the smallest hall side, for the light zone).
+  _hallPlantSpots(cx, cz, free, rp, gap, { p = 0.7, side = 6 } = {}) {
     const bandDist = i => Math.min(...[...EGG_BAND].map(b => Math.abs(i - b)));
     const ok = (i, j) => bandDist(i) >= gap && bandDist(j) >= gap;
     const clear = (gi, gj) => { for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (!free(gi + di, gj + dj) && !(di || dj ? solidAtGlobal(gi + di, gj + dj) : false)) return false; return free(gi, gj); };
     const out = [];
     for (const rm of chunkRooms(cx, cz)) {
-      if (rm.x1 - rm.x0 + 1 < 6 || rm.y1 - rm.y0 + 1 < 6 || rp() > 0.7) continue;
+      if (rm.x1 - rm.x0 + 1 < side || rm.y1 - rm.y0 + 1 < side || rp() > p) continue;
       const cands = [];
       for (const [i, j, oi, oj] of [[rm.x0, rm.y0, -1, -1], [rm.x1, rm.y0, 1, -1], [rm.x0, rm.y1, -1, 1], [rm.x1, rm.y1, 1, 1]]) {
         const gi = cx * CHUNK + i, gj = cz * CHUNK + j;

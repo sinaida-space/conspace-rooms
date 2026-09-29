@@ -10,8 +10,12 @@ export class AudioEngine {
   start() {
     if (this.ctx) { this.ctx.resume(); return; }
     const ctx = this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : 0.9 * (this._volume ?? 1);
-    this.master.connect(ctx.destination);
+    // out: the overall level and mute; master: everything but Alisa's voice,
+    // which sinks under her (duckWorld, alisa.js) while she goes straight to out
+    this.out = ctx.createGain(); this.out.gain.value = this.muted ? 0 : 0.9 * (this._volume ?? 1);
+    this.out.connect(ctx.destination);
+    this.master = ctx.createGain(); this.master.gain.value = 1;
+    this.master.connect(this.out);
     // everything that is "the corridor" (drone, crackle, whisper, footsteps,
     // turns, the works' notes) goes through bed; a work's own sound world
     // goes straight to master, so standing at a work silences the corridor
@@ -320,6 +324,9 @@ export class AudioEngine {
     this._stopAmbience = startAmbience(this.ctx, this.master, index);
   }
 
+  // Everything else under Alisa's voice (corridor, water, ambience, music): 0..1, eased.
+  duckWorld(level) { if (this.master) this.master.gain.setTargetAtTime(level, this.ctx.currentTime, level < 1 ? 0.5 : 1.5); }
+
   // The music under Alisa's voice: level 0..1, eased.
   duckMusic(level) { if (this.musicDuck) this.musicDuck.gain.setTargetAtTime(level, this.ctx.currentTime, level < 1 ? 0.6 : 1.5); }
 
@@ -489,19 +496,19 @@ export class AudioEngine {
   }
   unsilence() {
     this._silenced = false;
-    if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.9 * (this._volume ?? 1), this.ctx.currentTime, 1.5);
+    if (this.ctx) this.out.gain.setTargetAtTime(this.muted ? 0 : 0.9 * (this._volume ?? 1), this.ctx.currentTime, 1.5);
     this.music?.unresolve();
   }
 
   setMuted(m) {
     this.muted = m;
-    if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.9 * (this._volume ?? 1), this.ctx.currentTime, 0.1);
+    if (this.ctx) this.out.gain.setTargetAtTime(m ? 0 : 0.9 * (this._volume ?? 1), this.ctx.currentTime, 0.1);
   }
 
   // overall level, 0..1 (gallery mode)
   setVolume(v) {
     this._volume = v;
-    if (this.ctx && !this.muted) this.master.gain.setTargetAtTime(0.9 * v, this.ctx.currentTime, 0.1);
+    if (this.ctx && !this.muted) this.out.gain.setTargetAtTime(0.9 * v, this.ctx.currentTime, 0.1);
   }
 }
 
