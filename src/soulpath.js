@@ -2916,12 +2916,12 @@ export class SoulPath {
     for (const st of this.chunkStuff.values()) {
       const k = st.kitchen;
       if (!k) continue;
-      k.group.visible = memoryStage;
+      k.group.visible = memoryStage && this._roomInSight(k, time);
       if (!memoryStage) continue;
       const d = Math.hypot(k.x - P.pos.x, k.z - P.pos.y);
       if (d < rd) { rd = d; room = k.room; nook = k; }
     }
-    this.kitchenRig.update(room, time);
+    this.kitchenRig.update(room, time, !!nook?.group.visible);
     this.atmo?.setNook?.(nook);                         // its walls: smoke where the paper has roses (materials.js)
     // the souls in the room drift, and scatter when walked into
     for (const st of this.chunkStuff.values()) {
@@ -3062,6 +3062,24 @@ export class SoulPath {
       if (Math.abs(lx) <= p.width / 2 && Math.abs(lz) <= p.height / 2) return true;
     }
     return false;
+  }
+
+  // A room is walls all round and a door: it is drawn only while some part of
+  // its floor can be seen from where the visitor stands (checked four times a
+  // second), so the dozen rooms loaded round the walk do not all cost draw calls.
+  _roomInSight(k, time) {
+    if (k._seenAt !== undefined && time - k._seenAt < 0.25) return k._seen;
+    k._seenAt = time;
+    const P = this.player.pos, px = P.x, pz = P.y, m = 0.6;
+    const nx = Math.max(k.minX, Math.min(k.maxX, px)), nz = Math.max(k.minZ, Math.min(k.maxZ, pz));
+    const d = Math.hypot(nx - px, nz - pz);
+    if (d < 1.5) return (k._seen = true);
+    if (d > 45) return (k._seen = false);
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
+      const x = k.minX + m + (k.maxX - k.minX - 2 * m) * i / 3, z = k.minZ + m + (k.maxZ - k.minZ - 2 * m) * j / 3;
+      if (this._lineOfSight(px, pz, x, z)) return (k._seen = true);
+    }
+    return (k._seen = false);
   }
 
   _lineOfSight(x0, z0, x1, z1) {

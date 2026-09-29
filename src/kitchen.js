@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { roundedBox } from './geom.js';
+import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
 import { CEIL_H, CELL, CHUNK, solidAtGlobal, wallSlots } from './world.js';
 import { t, getLang } from './i18n.js';
 import { mountOrDrop } from './placement.js';
@@ -743,12 +744,47 @@ export function buildKitchen(parent, X, Z) {
     sconces++;
   }
 
+  mergeStill(group, new Set([...flames.map(f => f.flame), ...screens]));
+
   return {
     flames, screens,
     // in the world's frame: the light rig and the souls read these
     lamp: (group.updateWorldMatrix(true, false), group.localToWorld(new THREE.Vector3(x, 2.1, z))),
     tv: group.localToWorld(new THREE.Vector3(x + tv.x - 0.08, 0.76, z + tv.z - 0.5)),
   };
+}
+
+// A room is a few hundred small meshes that never move once built. Every
+// opaque one that shares its material (and its shadow flags and draw order)
+// with others is baked into the room's frame and merged with them: one draw
+// call per material instead of one per cup, leg and knob. Left alone: what
+// moves or is redrawn (skip, anything with its own onBeforeRender), what is
+// see-through, shader-drawn, mirrored, or has children of its own.
+const plainHook = THREE.Object3D.prototype.onBeforeRender;
+function mergeStill(group, skip) {
+  group.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(group.matrixWorld).invert(), rel = new THREE.Matrix4();
+  const sets = new Map();
+  group.traverse(o => {
+    if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || skip.has(o) || o.children.length || o.onBeforeRender !== plainHook) return;
+    const m = o.material;
+    if (!m || Array.isArray(m) || m.transparent || m.isShaderMaterial || o.morphTargetInfluences) return;
+    rel.multiplyMatrices(inv, o.matrixWorld);
+    if (rel.determinant() <= 0) return;
+    const g = o.geometry, key = [m.uuid, o.castShadow, o.receiveShadow, o.renderOrder, !!g.index, Object.keys(g.attributes).sort().join()].join('|');
+    if (!sets.has(key)) sets.set(key, []);
+    sets.get(key).push({ o, rel: rel.clone() });
+  });
+  for (const list of sets.values()) {
+    if (list.length < 2) continue;
+    const merged = mergeGeometries(list.map(({ o, rel }) => o.geometry.clone().applyMatrix4(rel)));
+    if (!merged) continue;
+    const { o } = list[0], mesh = new THREE.Mesh(merged, o.material);
+    mesh.castShadow = o.castShadow; mesh.receiveShadow = o.receiveShadow; mesh.renderOrder = o.renderOrder;
+    if (list.some(({ o }) => o.userData.keep || o.userData.keepMaterial)) mesh.userData.keepMaterial = true;
+    for (const { o } of list) o.parent.remove(o);
+    group.add(mesh);
+  }
 }
 
 // ── scattered things along the walls ────────────────────────────────────────
@@ -941,12 +977,13 @@ export function createKitchenRig(scene, renderer, quality) {
   // nothing in a room moves that casts a shadow, and the lamp only breathes in
   // brightness: its six shadow views are drawn once per room, not every frame
   renderer.shadowMap.autoUpdate = false;
-  let lastRoom = null, redrawUntil = 0, redrawAt = 0;
+  let lastRoom = null, lastSeen = false, redrawUntil = 0, redrawAt = 0;
 
   return {
     // room: the nearest built room ({ lamp, tv }) or null
-    update(room, time) {
-      if (room !== lastRoom) { lastRoom = room; redrawUntil = time + 5; redrawAt = 0; }
+    // seen: whether the room is drawn now (a hidden room casts nothing into the map)
+    update(room, time, seen = true) {
+      if (room !== lastRoom || seen !== lastSeen) { lastRoom = room; lastSeen = seen; redrawUntil = time + 5; redrawAt = 0; }
       // a few more times over the first seconds: models loaded late (the plants) join in
       if (shadows && room && time < redrawUntil && time >= redrawAt) { lamp.position.copy(room.lamp); renderer.shadowMap.needsUpdate = true; redrawAt = time + 0.5; }
       if (!room) { lamp.intensity = tv.intensity = fill.intensity = 0; return; }
