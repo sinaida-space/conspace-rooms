@@ -198,6 +198,7 @@ opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 - [three.js](https://threejs.org/) (vendored) for rendering
 - Procedural GLSL materials; the labyrinth geometry uses no texture files
 - Two CC0 models from [Poly Haven](https://polyhaven.com/) in `assets/models/` (Old Bed Frame, Wheelchair 01), simplified with glTF-Transform; every other hospital prop is drawn in `src/ward.js`
+- Rough Linen texture, [Poly Haven](https://polyhaven.com/a/rough_linen), CC0, in `assets/textures/linen_*.webp` (weave in grey, normals; 512 px)
 - Monstera Plant by Isa Lousberg, [Poly Pizza](https://poly.pizza/), CC0, in `assets/models/monstera.glb` (its own pot is cut away in `src/plants.js`)
 - [MediaPipe Tasks Vision](https://developers.google.com/mediapipe) hand landmarker for gesture mode (loaded lazily, opt-in)
 

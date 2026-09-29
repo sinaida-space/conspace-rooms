@@ -358,6 +358,7 @@ export function createDrowned(atmo, quality) {
       }
 
       return {
+        meshes: created,                            // where they lie: the glowing petals keep round them
         dispose() {
           for (const m of created) {
             group.remove(m);

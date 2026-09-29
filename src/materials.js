@@ -883,6 +883,8 @@ varying vec3 vWorldPos;
 varying vec3 vNormal;
 varying vec2 vUv0;
 varying vec4 vCol;
+uniform float uCloth;
+uniform vec4  uWater;         // level, accept, time, calm
 void main(){
   vec4 p = vec4(position, 1.0);
   vec3 n = normal;
@@ -890,6 +892,15 @@ void main(){
     p = instanceMatrix * p; n = mat3(instanceMatrix) * n;
   #endif
   vec4 wp = modelMatrix * p;
+  if (uCloth > 0.5 && uWater.y > 0.001) {
+    // the hem stands in the water: it sways a little with the current,
+    // the lowest edge most, nothing above a hand's width over the surface
+    vec3 wn = normalize(mat3(modelMatrix) * n);
+    float k = smoothstep(uWater.x + 0.22, 0.0, wp.y) * uWater.y;
+    float t = uWater.z;
+    float sway = sin(t * 1.1 + wp.x * 3.1 + wp.z * 2.3) + 0.5 * sin(t * 1.9 - wp.x * 5.0 + wp.z * 4.2);
+    wp.xz += normalize(wn.xz + 1e-4) * sway * 0.022 * k;
+  }
   vWorldPos = wp.xyz;
   vNormal = normalize(mat3(modelMatrix) * n);
   vUv0 = uv;
@@ -917,14 +928,31 @@ uniform vec3  uColor;
 uniform float uGlow;       // light of its own (a lamp lens), trembling
 uniform float uSeed;
 uniform float uRust;       // how much time has eaten it: rust, streaks, scratches, grime
+uniform float uCloth;      // 1: a linen dust sheet (the light's furniture), lit like cloth
+uniform sampler2D uClothMap, uClothNor;   // Poly Haven rough_linen (CC0): the weave, and its normals
 varying vec2 vUv0;
 varying vec4 vCol;
+// The weave projected from three sides and blended by the facing, so the
+// merged, unwrapped furniture needs no uvs. Returns the brightness of the
+// thread; bends n by the weave's normal map (whiteout blend).
+float linen(vec3 p, inout vec3 n){
+  const float S = 2.4;                                  // one tile of the weave: about 40 cm
+  vec3 w = pow(abs(n), vec3(4.0)); w /= dot(w, vec3(1.0));
+  vec2 ux = p.zy * S, uy = p.xz * S, uz = p.xy * S;
+  float g = texture2D(uClothMap, ux).r * w.x + texture2D(uClothMap, uy).r * w.y + texture2D(uClothMap, uz).r * w.z;
+  vec3 tx = texture2D(uClothNor, ux).xyz * 2.0 - 1.0, ty = texture2D(uClothNor, uy).xyz * 2.0 - 1.0, tz = texture2D(uClothNor, uz).xyz * 2.0 - 1.0;
+  vec3 nx = vec3(tx.xy + n.zy, abs(tx.z) * n.x), ny = vec3(ty.xy + n.xz, abs(ty.z) * n.y), nz = vec3(tz.xy + n.xy, abs(tz.z) * n.z);
+  n = normalize(mix(n, normalize(nx.zyx * w.x + ny.xzy * w.y + nz.xyz * w.z), 0.7));
+  return g;
+}
 void main(){
   vec3 z = uZone;
   vec3 L = zoneLight(z);
   vec3 N = normalize(vNormal);
   if (!gl_FrontFacing) N = -N;
   vec3 base = uColor * vCol.rgb;
+  float weave = 0.5;
+  if (uCloth > 0.5) weave = linen(vWorldPos, N);
   float alpha = 1.0;
   if (uHasMap > 0.5) { vec4 tx = texture2D(uMap, vUv0); base *= tx.rgb; alpha = tx.a; }
   if (alpha < 0.5) discard;
@@ -951,6 +979,20 @@ void main(){
   vec3 cl = candleLight(vWorldPos, N) * 0.4;          // a flame beside a thing warms it, it must not make it a beacon
   float ao = mix(0.5, 1.0, smoothstep(0.0, 0.3, vWorldPos.y));    // contact shade on the floor
   vec3 lit = base * (d + 0.05 * L + z.y * FILL_MEM * 1.4 + cl) * ao + s * vCol.a * ao * (1.0 - rusted);   // rust has no shine
+  if (uCloth > 0.5) {
+    // linen in the light: white sky from above, the lilac of the walls and
+    // the water bounced up from below, a soft sheen where it turns away,
+    // the weave read as a slight grain, never grey
+    float up = 0.5 + 0.5 * N.y;
+    vec3 amb = mix(vec3(0.66, 0.62, 0.72), vec3(1.02, 1.0, 0.98), up * up);
+    float wrap = clamp((dot(N, normalize(vec3(0.35, 0.9, 0.25))) + 0.5) / 1.5, 0.0, 1.0);   // a broad soft key from the high windows
+    float sheen = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
+    float lo = mix(0.72, 1.0, smoothstep(0.0, 0.45, vWorldPos.y));                        // the hem sits in the floor's shade
+    vec3 cloth = base * mix(0.9, 1.06, weave);
+    float wet = smoothstep(uWater.x + 0.1, uWater.x - 0.02, vWorldPos.y) * uWater.y;   // the hem soaked, darker, the lilac of the room through it
+    cloth = mix(cloth, cloth * vec3(0.74, 0.72, 0.8), wet);
+    lit = cloth * (amb * (0.55 + 0.45 * wrap) + d * 0.25) * lo + sheen * 0.16 * vec3(1.0, 0.96, 0.97) * lo;
+  }
   if (uGlow > 0.0) {
     float fl = step(0.12, vnoise(vec2(uTime * 7.0, uSeed)));        // now and then it dies for a blink
     lit += base * uGlow * (0.75 + 0.25 * fl);
@@ -1064,10 +1106,11 @@ export function createMaterials(quality) {
 
   // A material for props: { map, color, vertexColors, glow, seed }. Shares the
   // world's uniforms, so fixtures, candles, flicker and stage reach it too.
-  const prop = ({ map = null, color = 0xffffff, vertexColors = false, glow = 0, seed = 0, rust = 0.8 } = {}) => new THREE.ShaderMaterial({
+  const prop = ({ map = null, color = 0xffffff, vertexColors = false, glow = 0, seed = 0, rust = 0.8, cloth = null } = {}) => new THREE.ShaderMaterial({
     uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), shared, {
       uMap: { value: map }, uHasMap: { value: map ? 1 : 0 }, uColor: { value: new THREE.Color(color) },
       uGlow: { value: glow }, uSeed: { value: seed }, uRust: { value: rust },
+      uCloth: { value: cloth ? 1 : 0 }, uClothMap: { value: cloth?.map ?? null }, uClothNor: { value: cloth?.normal ?? null },
     }),
     vertexShader: VERT_PROP,
     fragmentShader: FRAG_PROP,

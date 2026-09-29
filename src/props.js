@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from '../vendor/addons/BufferGeometryUtils.js';
 import { roundedBox } from './geom.js';
 import { contactShadows } from './shadows.js';
 import { wallBehind, record } from './placement.js';
@@ -51,16 +51,34 @@ export function shape(build, crumple = 0) {
     parts.push(g);
   };
   build(put);
-  const geo = mergeGeometries(parts);
+  let geo = mergeGeometries(parts);
   for (const g of parts) g.dispose();
-  if (crumple) {                                   // cloth: soft folds pushed along the normals
-    const p = geo.attributes.position, n = geo.attributes.normal;
+  if (crumple) {
+    // weld first: split vertices would fold apart into black slits, and
+    // flat face normals would show every facet
+    geo.deleteAttribute('normal'); geo.deleteAttribute('uv');
+    const welded = mergeVertices(geo, 1e-4);
+    geo.dispose(); geo = welded;
+    geo.computeVertexNormals();                                   // cloth: soft folds pushed along the normals
+    const p = geo.attributes.position, n = geo.attributes.normal, c = geo.attributes.color;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-      const f = crumple * (Math.sin(x * 23 + y * 7) * Math.sin(z * 19 - y * 11) + 0.5 * Math.sin(y * 31 + x * 13));
+      // a sheet hangs: on the sides long vertical folds that widen and
+      // deepen toward the floor, on top only a slack ripple
+      const side = 1 - Math.min(1, Math.abs(n.getY(i)) * 1.6);
+      const along = x * n.getZ(i) - z * n.getX(i);                    // across the face, horizontally
+      const drop = 0.35 + 0.65 * Math.max(0, Math.min(1, (0.9 - y) / 0.9));
+      const hang = Math.sin(along * 26 + 1.3 * Math.sin(y * 5 + along * 3)) * drop * 1.3;
+      const slack = Math.sin(x * 11 + z * 3) * Math.sin(z * 9 - x * 2) * 0.45;
+      const f = crumple * (side * hang + (1 - side) * slack);
       p.setXYZ(i, x + n.getX(i) * f, y + Math.max(0, n.getY(i)) * f * 0.3, z + n.getZ(i) * f);
+      const fold = 1 - 0.22 * Math.min(1, Math.max(0, -f / (crumple * 1.5)));   // the valleys of a fold hold a little shade
+      c.setXYZ(i, c.getX(i) * fold, c.getY(i) * fold, c.getZ(i) * fold);
     }
     geo.computeVertexNormals();
+    const flat = geo.toNonIndexed();                  // back to the shape of every other part, so they still merge
+    geo.dispose(); geo = flat;
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
   }
   return geo;
 }
@@ -220,22 +238,22 @@ export function memoryDims(name) { return MEMORY[name]; }
 // ── acceptance: under sheets, in the light ─────────────────────────────────
 const LIGHT = {
   chair: { depth: 0.5, w: 0.5, solid: true, crumple: 0.012, build: put => {
-    put(roundedBox(0.46, 0.08, 0.46, 0.03, 4), SHEET, 0.08, M(0, 0.47, 0));
-    put(roundedBox(0.46, 0.45, 0.1, 0.03, 4), SHEET, 0.08, M(0, 0.74, -0.19));
-    put(new THREE.CylinderGeometry(0.33, 0.37, 0.44, 12, 3, true), SHEET, 0.08, M(0, 0.22, 0, 0, Math.PI / 4));
+    put(roundedBox(0.46, 0.08, 0.46, 0.03, 10), SHEET, 0.08, M(0, 0.47, 0));
+    put(roundedBox(0.46, 0.45, 0.1, 0.03, 10), SHEET, 0.08, M(0, 0.74, -0.19));
+    put(new THREE.CylinderGeometry(0.33, 0.37, 0.44, 32, 10, true), SHEET, 0.08, M(0, 0.22, 0, 0, Math.PI / 4));
   } },
   armchair: { depth: 0.75, w: 0.85, solid: true, crumple: 0.018, build: put => {
-    put(roundedBox(0.82, 0.48, 0.7, 0.12, 4), SHEET, 0.08, M(0, 0.24, 0));
-    put(roundedBox(0.82, 0.5, 0.22, 0.08, 4), SHEET, 0.08, M(0, 0.7, -0.24));
-    for (const x of [-0.34, 0.34]) put(roundedBox(0.16, 0.2, 0.7, 0.07, 3), SHEET, 0.08, M(x, 0.56, 0));
+    put(roundedBox(0.82, 0.48, 0.7, 0.12, 10), SHEET, 0.08, M(0, 0.24, 0));
+    put(roundedBox(0.82, 0.5, 0.22, 0.08, 10), SHEET, 0.08, M(0, 0.7, -0.24));
+    for (const x of [-0.34, 0.34]) put(roundedBox(0.16, 0.2, 0.7, 0.07, 8), SHEET, 0.08, M(x, 0.56, 0));
   } },
   mirror: { depth: 0.36, w: 0.72, solid: true, crumple: 0.01, build: put => {
-    put(roundedBox(0.7, 1.7, 0.12, 0.04, 4), SHEET, 0.08, M(0, 0.9, 0, -0.08));
-    put(new THREE.CylinderGeometry(0.38, 0.46, 0.06, 14, 1), SHEET, 0.08, M(0, 0.03, 0.06, 0, 0, 0, 1, 1, 0.55));
+    put(roundedBox(0.7, 1.7, 0.12, 0.04, 10), SHEET, 0.08, M(0, 0.9, 0, -0.08));
+    put(new THREE.CylinderGeometry(0.38, 0.46, 0.06, 32, 2), SHEET, 0.08, M(0, 0.03, 0.06, 0, 0, 0, 1, 1, 0.55));
   } },
   piano: { depth: 0.6, w: 1.3, solid: true, crumple: 0.016, build: put => {
-    put(roundedBox(1.3, 1.1, 0.55, 0.06, 4), SHEET, 0.08, M(0, 0.55, 0));
-    put(new THREE.CylinderGeometry(0.7, 0.76, 0.3, 16, 2, true), SHEET, 0.08, M(0, 0.15, 0, 0, 0, 0, 1, 1, 0.45));
+    put(roundedBox(1.3, 1.1, 0.55, 0.06, 10), SHEET, 0.08, M(0, 0.55, 0));
+    put(new THREE.CylinderGeometry(0.7, 0.76, 0.3, 40, 8, true), SHEET, 0.08, M(0, 0.15, 0, 0, 0, 0, 1, 1, 0.45));
   } },
 };
 
@@ -601,6 +619,13 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
     return geos.get(key);
   };
   const mat = atmo.prop({ vertexColors: true, rust: 0.15 });
+  // the light's dust sheets: rough linen (Poly Haven, CC0), weave and normals
+  const linenTex = (f) => {
+    const t = new THREE.TextureLoader().load(`assets/textures/${f}`);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.NoColorSpace; t.anisotropy = 4;
+    return t;
+  };
+  const sheetMat = atmo.prop({ vertexColors: true, rust: 0, cloth: { map: linenTex('linen_detail.webp'), normal: linenTex('linen_normal.webp') } });
   const uniforms = { uTime: { value: 0 }, uPlayer: { value: new THREE.Vector3() }, uWaterLevel: { value: 0 } };
   const fogU = THREE.UniformsLib.fog;
   // the Neva out the glass, white night, rain: static drops on tier 0
@@ -646,7 +671,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
     // the wall keeps going at least 3 cells, so a window fits) · air:
     // [{ x, z, r }] cell centres for things that float (light only)
     build(group, stage, walls, air) {
-      const parts = [], windows = [], tulles = [], floats = [], boxes = [], feet = [];
+      const parts = [], windows = [], tulles = [], floats = [], boxes = [], feet = [], sheets = [];
       for (const s of walls) {
         const name = pick(stage, s.r, s.run3 !== false);
         const rot = Math.atan2(s.nx, s.nz);
@@ -675,12 +700,15 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
           continue;
         }
         const d = [FEAR, MEMORY, LIGHT][stage][name];
-        const off = 0.02 + d.depth / 2 + (d.toy ? 0.05 + s.r * 0.25 : 0);   // toys lie a little further out, as dropped
-        const x = s.x + s.nx * off, z = s.z + s.nz * off;
         const yaw = rot + (d.toy ? (s.r * 97 % 1 - 0.5) * 1.2 : (s.r * 53 % 1 - 0.5) * 0.25);
+        // turned a little off the wall, a corner swings back toward it: clear
+        // that too, and a sheet's folds and hem stand proud of its shape
+        const swing = d.toy ? 0 : Math.abs(Math.sin(yaw - rot)) * d.w / 2;
+        const off = 0.02 + d.depth / 2 + swing + (stage === 2 ? 0.06 : 0) + (d.toy ? 0.05 + s.r * 0.25 : 0);   // toys lie a little further out, as dropped
+        const x = s.x + s.nx * off, z = s.z + s.nz * off;
         const geo = geoOf(stage, name);
         if (!geo.boundingBox) geo.computeBoundingBox();
-        parts.push(geo.clone().applyMatrix4(M(x, 0, z, 0, yaw)));
+        (stage === 2 ? sheets : parts).push(geo.clone().applyMatrix4(M(x, 0, z, 0, yaw)));   // the light's things are all under sheets
         if (d.solid) boxes.push(box(x, z, d.w, d.depth, yaw));
         feet.push({ x, z, w: d.w, d: d.depth, rot: yaw, k: d.toy ? 0.7 : 1, h: geo.boundingBox.max.y });
       }
@@ -708,7 +736,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
         m.frustumCulled = material !== floatMat;    // floaters move in the shader, away from their bounds
         group.add(m); meshes.push(m);
       };
-      add(parts, mat); add(windows, windowMat); add(tulles, tulleMat); add(floats, floatMat);
+      add(parts, mat); add(sheets, sheetMat); add(windows, windowMat); add(tulles, tulleMat); add(floats, floatMat);
       const shade = contactShadows(feet);
       if (shade) { group.add(shade); meshes.push(shade); }
       return {

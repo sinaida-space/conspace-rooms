@@ -177,7 +177,9 @@ export function createGlowPetals(scene) {
 
   return {
     // marks: the soul path's pool; on: acceptance; player: {x, y} on the floor plan
-    update(dt, time, marks, water, on, player) {
+    // obstacles: [{ x, z, r }] things standing in the water; a petal that
+    // would ride into one is carried round its edge instead
+    update(dt, time, marks, water, on, player, obstacles = []) {
       petalMat.uniforms.uTime.value = time;
       haloMat.uniforms.uTime.value = time;
       petals.visible = halos.visible = on;
@@ -204,8 +206,12 @@ export function createGlowPetals(scene) {
           seed.array[i] = (ms * 13.7 + k * 0.37) % 1;                       // its own, whichever slot it lands in
           const u = (time / RIDE_TIME + ms + k / PER_MARK) % 1;           // riding on, then again
           const off = 0.45 + 0.22 * k + 0.06 * Math.sin(time * 0.4 + k * 2.1 + ms * 6.28);
-          const x = m.position.x + nx * off + ax * (u - 0.2) * RIDE;
-          const z = m.position.z + nz * off + az * (u - 0.2) * RIDE;
+          let x = m.position.x + nx * off + ax * (u - 0.2) * RIDE;
+          let z = m.position.z + nz * off + az * (u - 0.2) * RIDE;
+          for (const o of obstacles) {                                      // round, never through
+            const ex = x - o.x, ez = z - o.z, d = Math.hypot(ex, ez), keep = o.r + PETAL * 0.9;
+            if (d < keep) { const k = keep / (d || 1e-3); x = o.x + (d ? ex : nx) * k; z = o.z + (d ? ez : nz) * k; }
+          }
           const wy = water.heightAt(x, z);
           if (wy == null) continue;                                         // no water under it here
           const f = o * Math.sin(u * Math.PI);

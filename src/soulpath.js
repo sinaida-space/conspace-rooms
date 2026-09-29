@@ -357,6 +357,59 @@ function glowTexture() {
 }
 
 // ── SoulPath ────────────────────────────────────────────────────────────────
+
+// A balloon's skin: pale blue latex. The light comes through it (brighter
+// and paler where the skin faces the eye, deeper and denser toward the rim,
+// where the eye looks through more rubber), a sharp window glint from the
+// high light and a soft second one, the neck gathered into fine creases
+// by the knot.
+const LATEX_VERT = /* glsl */`
+varying vec3 vN, vW, vL;
+#include <fog_pars_vertex>
+void main(){
+  vL = position;
+  vN = normalize(mat3(modelMatrix) * normal);
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  vW = w.xyz;
+  vec4 mvPosition = viewMatrix * w;
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}`;
+const LATEX_FRAG = /* glsl */`
+varying vec3 vN, vW, vL;
+#include <fog_pars_fragment>
+void main(){
+  vec3 N = normalize(vN), V = normalize(cameraPosition - vW);
+  float neck = smoothstep(-0.12, -0.2, vL.y);                               // toward the knot
+  float crease = neck * (0.5 + 0.5 * sin(atan(vL.x, vL.z) * 22.0)) * 0.35;   // the rubber gathered at the neck
+  N = normalize(N + vec3(vL.z, 0.0, -vL.x) * crease * 2.0);
+  float facing = clamp(dot(N, V), 0.0, 1.0);
+  vec3 core = vec3(0.86, 0.93, 1.0);                                        // light through thin latex
+  vec3 rim  = vec3(0.52, 0.68, 0.86);                                       // more rubber along the eye's path
+  vec3 col = mix(rim, core, pow(facing, 0.7));
+  col *= 0.82 + 0.28 * (0.5 + 0.5 * N.y);                                   // the sky above, the room below
+  col = mix(col, rim * 0.85, neck * 0.5);
+  // the key light sits up and to the left of the eye, so the glint is always there to see
+  vec3 side = normalize(cross(vec3(0.0, 1.0, 0.0), V));
+  vec3 K = normalize(V + vec3(0.0, 1.1, 0.0) - side * 0.7);
+  vec3 H = normalize(V + K);
+  float nh = max(dot(N, H), 0.0);
+  float glint = smoothstep(0.985, 0.992, nh) * 1.4;                        // a small bright window, hard-edged like a real reflection
+  float soft = pow(nh, 18.0) * 0.22;
+  vec3 K2 = normalize(V - vec3(0.0, 0.6, 0.0) + side * 0.9);               // a faint second glint, low on the other side
+  float glint2 = smoothstep(0.992, 0.996, max(dot(N, normalize(V + K2)), 0.0)) * 0.5;
+  float fres = pow(1.0 - facing, 4.0) * 0.25;                               // the skin shines where it turns away
+  col += vec3(1.0) * (glint + glint2 + soft) + vec3(0.95, 0.97, 1.0) * fres;
+  gl_FragColor = vec4(col, 1.0);
+  #include <fog_fragment>
+}`;
+function latexMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
+    vertexShader: LATEX_VERT, fragmentShader: LATEX_FRAG, fog: true,
+  });
+}
+
 export class SoulPath {
   constructor({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo }) {
     Object.assign(this, { scene, world, player, camera, artworks, audio, post, quality, stage, atmo });
@@ -1741,15 +1794,8 @@ export class SoulPath {
     if (!this.balloons) {
       this.balloons = Array.from({ length: 2 }, () => {   // just a couple, far apart
         const g = new THREE.Group();
-        // lit by the sky, not the lamps: a pale gradient with a sheen, so it never reads grey
-        const skin = document.createElement('canvas'); skin.width = 64; skin.height = 64;
-        const sg = skin.getContext('2d'), grad = sg.createLinearGradient(0, 0, 0, 64);
-        grad.addColorStop(0, '#fbfdff'); grad.addColorStop(0.55, '#e3eef7'); grad.addColorStop(1, '#b8cad9');
-        sg.fillStyle = grad; sg.fillRect(0, 0, 64, 64);
-        const hl = sg.createRadialGradient(20, 20, 0, 20, 20, 14); hl.addColorStop(0, 'rgba(255,255,255,0.9)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
-        sg.fillStyle = hl; sg.fillRect(0, 0, 64, 64);
-        const skinTex = new THREE.CanvasTexture(skin); skinTex.colorSpace = THREE.SRGBColorSpace;
-        const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 28, 18), new THREE.MeshBasicMaterial({ map: skinTex, fog: true }));
+        // latex in the light: see latexMaterial()
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 40, 28), this._latex ??= latexMaterial());
         body.scale.set(1, 1.18, 1);
         const knot = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.04, 10), this.atmo.prop({ color: 0xdfe9f0, rust: 0 }));
         knot.position.y = -0.245; knot.rotation.x = Math.PI;
@@ -1798,7 +1844,7 @@ export class SoulPath {
     for (let tries = 0; tries < 40; tries++) {
       const a = Math.random() * 6.28, d = 8 + Math.random() * 12;
       const x = P.pos.x + Math.cos(a) * d, z = P.pos.y + Math.sin(a) * d;
-      if (!this._airClear(x, z, 0.9)) continue;
+      if (!this._airClear(x, z, 0.9) || this._nearThings(x, z, 0.5)) continue;   // the string hangs clear of the furniture
       if ((this.balloons || []).some(o => o !== b && !o.gone && Math.hypot(o.pos.x - x, o.pos.z - z) < 8)) continue;   // never two together
       b.pos.set(x, 1.7 + Math.random() * 0.5, z);
       b.gone = false; b.rise = 0; b.g.position.copy(b.pos);
@@ -1812,7 +1858,7 @@ export class SoulPath {
     if (this.stage.stage !== 2) return;
     if (!this.surfaceBalloon) {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 16), this.atmo.prop({ color: 0xe8f1f8, rust: 0 }));
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 40, 28), this._latex ??= latexMaterial());
       body.scale.set(1, 1.18, 1);
       g.add(body);
       this.scene.add(g);
@@ -1832,7 +1878,7 @@ export class SoulPath {
     for (let tries = 0; tries < 40; tries++) {
       const a = Math.random() * 6.28, d = 6 + Math.random() * 14;
       const x = P.pos.x + Math.cos(a) * d, z = P.pos.y + Math.sin(a) * d;
-      if (!this._airClear(x, z, 0.9)) continue;
+      if (!this._airClear(x, z, 0.9) || this._nearThings(x, z, 0.4)) continue;
       this.surfaceBalloon.pos.set(x, 0, z);
       return;
     }
@@ -2252,6 +2298,27 @@ export class SoulPath {
     }
   }
 
+  // anything of _petalObstacles() within pad of (x, z)?
+  _nearThings(x, z, pad) {
+    return this._petalObstacles(true).some(o => Math.hypot(o.x - x, o.z - z) < o.r + pad);
+  }
+  // Everything standing in the water near the visitor, as circles
+  // { x, z, r }: the petals flow round them, never through.
+  _petalObstacles(fresh = false) {
+    const out = fresh ? [] : (this._obst ??= []);
+    out.length = 0;
+    if (this.stage.stage !== 2) return out;
+    const P = this.player.pos, cx = Math.floor(P.x / (CHUNK * CELL)), cz = Math.floor(P.y / (CHUNK * CELL));
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const st = this.chunkStuff.get((cx + dx) + ':' + (cz + dz));
+      if (!st) continue;
+      for (const b of st.props?.boxes || []) out.push(b);
+      for (const it of st.scatter?.items || []) if (!it.spent) out.push({ x: it.x, z: it.z, r: 0.4 });    // candles, and the 25 cm they drift
+      for (const m of st.drown?.meshes || []) out.push({ x: m.position.x, z: m.position.z, r: 0.22 });
+    }
+    return out;
+  }
+
   // marks of a finished goal fade slowly; marks far behind return to the pool
   _tickMarks(time) {
     const p = this.player.pos, home = this.stage.stage === 1;
@@ -2294,7 +2361,7 @@ export class SoulPath {
     this.petals.update(dt, time);
     this._time = time;
     this._tickMarks(time);
-    this.glowPetals.update(dt, time, this.marks, this._water(), this.stage.stage === 2 && !this.finale, this.player.pos);
+    this.glowPetals.update(dt, time, this.marks, this._water(), this.stage.stage === 2 && !this.finale, this.player.pos, this._petalObstacles());
     this._shadowLight = (this._shadowLight ?? 0) + ((this.stage.stage === 2 ? 1 : 0) - (this._shadowLight ?? 0)) * Math.min(1, dt);
     setShadowLight(this._shadowLight);
     this._tickCandles(time);
