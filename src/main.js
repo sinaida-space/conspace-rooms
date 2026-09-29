@@ -343,7 +343,7 @@ async function boot() {
     window.__app.spots = createSpots(scene, quality);
     const { SoulPath } = await import('./soulpath.js');
     window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo });
-    if (new URLSearchParams(location.search).has('clouds')) stage.set(2);   // a ceiling sketch: straight into the light to judge it
+    if (['clouds', 'fogtop'].some(k => new URLSearchParams(location.search).has(k))) stage.set(2);   // a ceiling sketch: straight into the light to judge it
     if (new URLSearchParams(location.search).has('dbg')) import('./debug.js').then(m => m.openDebug({ renderer, quality, post, atmo }));   // phone debugging
   }
 }

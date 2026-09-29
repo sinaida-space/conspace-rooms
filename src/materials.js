@@ -58,6 +58,7 @@ uniform sampler2D uWallpaper; // grandmother's wallpaper, one repeat (wallpaper.
 uniform vec4  uHaze[6];       // the fixtures in sight of the visitor: xyz centre of the glow, w = strength (flicker included)
 uniform vec4  uWater;         // level, accept, time, calm (water.js); accept 0 outside the light stage
 uniform float uProgress;      // works seen, 0..1 eased (water.js): the light stage whitens with it
+uniform int   uFogTop;        // acceptance: the walls rise into fog instead of meeting a ceiling, ?fogtop=1|2|3
 uniform int   uClouds;        // acceptance ceiling sketches, ?clouds=1|2|3 (0: the plaster with frosted panels)
 uniform float uVanish;
 uniform vec2  uDbg;           // ?dbg: x 1 turns the walls' damp streaks off (debug.js)        // the finale: 0 whole, 1 the walls, ceiling and things are gone into the haze
@@ -94,6 +95,26 @@ float vnoise(vec2 p){
   float a = hash21(i), b = hash21(i + vec2(1.0, 0.0));
   float c = hash21(i + vec2(0.0, 1.0)), d = hash21(i + vec2(1.0, 1.0));
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+// ACCEPTANCE, the walls stand twice as high and lose themselves in fog
+// instead of meeting a ceiling (sketches, ?fogtop=1|2|3):
+// 1 a plain soft fade into the fog colour
+// 2 the fade line breathes: slow drifting wisps eat into the top of the wall
+// 3 the fog above is lit from within, warm and brighter toward the top
+float topFogK(vec3 P){
+  if (uFogTop == 1) return smoothstep(2.4, 5.4, P.y);
+  if (uFogTop == 2) {
+    vec2 w = P.xz * 0.35 + vec2(uTime * 0.03, -uTime * 0.02) + P.y * 0.25;
+    float n = vnoise(w) * 0.6 + vnoise(w * 2.3 + 5.0) * 0.4;
+    return smoothstep(1.4, 4.4, P.y + (n - 0.5) * 3.4);   // tongues of fog reach far down the wall
+  }
+  return smoothstep(2.0, 5.6, P.y);
+}
+vec3 topFogCol(vec3 P){
+  vec3 c = fogColor;
+  if (uFogTop == 2) c *= 0.86 + 0.28 * vnoise(P.xz * 0.5 + P.y * 0.6 + vec2(uTime * 0.03, 0.0));   // billows, lighter and darker
+  if (uFogTop == 3) c = mix(fogColor, vec3(1.0, 0.95, 0.86) * 1.12, smoothstep(2.6, 6.2, P.y));
+  return c;
 }
 float vanishK(vec3 P){
   float n = vnoise(P.xz * 0.9 + vec2(P.y * 0.7, -P.y * 0.4)) * 0.65 + vnoise(P.xz * 3.1 - P.y) * 0.35;
@@ -508,6 +529,7 @@ void main(){
       lit += LIGHT_ACC * c * k * k * wet * uWater.y;
     }
   }
+  if (uFogTop > 0 && z.z > 0.001) lit = mix(lit, topFogCol(vWorldPos), topFogK(vWorldPos) * z.z);
   if (vanished(vWorldPos)) discard;
   gl_FragColor = vec4(lit, 1.0);
   #include <fog_fragment>
@@ -520,6 +542,7 @@ void main(){
 const VERT_WALL = /* glsl */`
 #include <common>
 #include <fog_pars_vertex>
+uniform vec3 uZone;
 attribute float aU;
 attribute vec2 aCorner;
 varying vec3 vWorldPos;
@@ -529,6 +552,7 @@ varying vec2 vCorner;
 void main(){
   vU = aU; vCorner = aCorner;
   vec4 wp = modelMatrix * vec4(position, 1.0);
+  wp.y *= 1.0 + uZone.z;                              // the light stage: walls twice as high, the ceiling lifted with them
   vWorldPos = wp.xyz;
   vNormal = normalize(mat3(modelMatrix) * normal);
   vec4 mvPosition = viewMatrix * wp;
@@ -683,6 +707,7 @@ void main(){
 const VERT_CEIL = /* glsl */`
 #include <common>
 #include <fog_pars_vertex>
+uniform vec3 uZone;
 attribute float aLamp;
 attribute float aAO;
 varying vec3 vWorldPos;
@@ -693,6 +718,7 @@ void main(){
   vLamp = aLamp;
   vAO = aAO;
   vec4 wp = modelMatrix * vec4(position, 1.0);
+  wp.y *= 1.0 + uZone.z;                              // the light stage: walls twice as high, the ceiling lifted with them
   vWorldPos = wp.xyz;
   vNormal = normalize(mat3(modelMatrix) * normal);
   vec4 mvPosition = viewMatrix * wp;
@@ -806,11 +832,11 @@ void main(){
 
   vec4 fx = vec4(0.0);
   if (on > 0.5) {
-    if (z.x > 0.001) fx += z.x * troffer(m);
+    if (z.x > 0.02) fx += z.x * troffer(m);          // a trace of fear left in the light must not draw a dark housing
     // MEMORY: no disc painted here; a real chandelier hangs below (chandeliers.js)
-    if (z.z > 0.001 && uClouds == 0) fx += z.z * frosted(m);
+    if (z.z > 0.001 && uClouds == 0 && uFogTop == 0) fx += z.z * frosted(m);
   }
-  if (uClouds > 0 && z.z > 0.001) {
+  if (uClouds > 0 && z.z > 0.001 && uFogTop == 0) {
     // the weather replaces the plaster; where a lamp was, a warm glow inside it
     vec3 sky = cloudCeiling(p, uTime, uClouds) * mix(0.92, 1.08, uProgress);
     float glow = exp(-dot(dl, dl) * 0.9) * (uClouds == 3 ? 0.12 : 0.35);   // measured to the nearest lamp: round, never a cell's square
@@ -822,6 +848,7 @@ void main(){
   col += hazeGlow(vWorldPos, L) + crystalFlecks(vWorldPos, vec3(0.0, -1.0, 0.0));
   if (uWater.y > 0.001 && uTier > 0)                    // far fainter and wider, from the water below
     col += LIGHT_ACC * min(waveCaustic(p * 0.3, uWater.z * 0.7) * 0.035, 0.07) * waterDamp(p, uWater) * uWater.y;
+  if (uFogTop > 0 && z.z > 0.001) col = mix(col, topFogCol(vWorldPos), z.z);   // no ceiling to see: only fog
   if (vanished(vWorldPos)) discard;
   gl_FragColor = vec4(col, 1.0);
   #include <fog_fragment>
@@ -990,6 +1017,7 @@ export function createMaterials(quality) {
     uWater: { value: new THREE.Vector4(0, 0, 0, 0) },
     uProgress: { value: 0 },
     uVanish: { value: 0 },
+    uFogTop: { value: +(new URLSearchParams(location.search).get('fogtop') || 0) },   // sketches: ?fogtop=1|2|3
     uClouds: { value: +(new URLSearchParams(location.search).get('clouds') || 0) },   // sketches: ?clouds=1|2|3
     uDbg: { value: new THREE.Vector2() },
     uWaveTex: { value: blankWaves },   // water.js bakes the real ripples on tiers 1-2
