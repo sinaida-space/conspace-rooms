@@ -1260,7 +1260,7 @@ export class SoulPath {
     // the next work is due
     const shownSeen = [...f.ids].every(id => this.seen.has(id));
     if (f.unlocked === 2 && shownSeen && f.shown.size >= 2 && f.writings >= FEAR_FIND_3.writings && f.things >= FEAR_FIND_3.things) f.unlocked = 3;
-    if (f.shown.size < f.unlocked) {
+    if (f.shown.size < f.unlocked && (f.shown.size >= FEAR_START || this._walked > 0.3)) {   // the first two from the first step: the chunks ahead have loaded by then
       const first = f.shown.size < FEAR_START;
       let best = null, bd = Infinity;
       for (const a of act) {
@@ -1269,13 +1269,12 @@ export class SoulPath {
         if (first ? d > 30 : (d < 6 || d > 22)) continue;
         const inSight = this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3);
         if (!first && (fx * dx + fz * dz) / (d || 1) > 0.2 && inSight) continue;   // never appears in plain view
-        // the first two hang where the visitor can see them from where they
-        // stand, ahead rather than behind; a work behind a wall in the next
+        // the first two hang where the visitor can see them, ahead of the
+        // walk, never behind or to the side; a work behind a wall in the next
         // corridor would leave the walk with nothing, and the third waits on
-        // both being seen. Only after 15 m with none in sight, the nearest.
-        if (first && !inSight && this._walked < 15) continue;
-        const cost = first && inSight && (fx * dx + fz * dz) / (d || 1) < 0.5 ? d + 60 : d;   // any in sight ahead before one to the side
-        if (cost < bd) { bd = cost; best = a; }
+        // both being seen. With none ahead in sight yet, it waits for one.
+        if (first && (!inSight || (fx * dx + fz * dz) / (d || 1) < 0.35)) continue;
+        if (d < bd) { bd = d; best = a; }
       }
       if (best) {
         f.shown.add(keyOf(best)); f.ids.add(best.art.id); best.hidden = false; if (best.sub) best.sub.visible = true;
