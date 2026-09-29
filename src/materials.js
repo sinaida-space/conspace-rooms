@@ -58,7 +58,8 @@ uniform sampler2D uWallpaper; // grandmother's wallpaper, one repeat (wallpaper.
 uniform vec4  uHaze[6];       // the fixtures in sight of the visitor: xyz centre of the glow, w = strength (flicker included)
 uniform vec4  uWater;         // level, accept, time, calm (water.js); accept 0 outside the light stage
 uniform float uProgress;      // works seen, 0..1 eased (water.js): the light stage whitens with it
-uniform float uVanish;        // the finale: 0 whole, 1 the walls, ceiling and things are gone into the haze
+uniform float uVanish;
+uniform vec2  uDbg;           // ?dbg: x 1 turns the walls' damp streaks off (debug.js)        // the finale: 0 whole, 1 the walls, ceiling and things are gone into the haze
 
 varying vec3 vWorldPos;
 varying vec3 vNormal;
@@ -475,7 +476,7 @@ void main(){
   // junction never reads as a ruler-straight line
   float rag = (vnoise(vec2(h * 2.2, 3.0)) - 0.5) * 0.35 + (vnoise(vec2(h * 14.0, 1.0)) - 0.5) * 0.06;
   float topGrime = smoothstep(PANEL_Y - 0.55 + rag, PANEL_Y - 0.02, y);
-  float streak = smoothstep(0.62, 0.8, vnoise(vec2(h * 5.0, 0.0))) * smoothstep(PANEL_Y - 1.4 + rag * 2.0, PANEL_Y, y);
+  float streak = smoothstep(0.62, 0.8, vnoise(vec2(h * 5.0, 0.0))) * smoothstep(PANEL_Y - 1.4 + rag * 2.0, PANEL_Y, y) * (1.0 - uDbg.x);
   float footRag = (vnoise(vec2(h * 2.6, 7.0)) - 0.5) * 0.18;
   float ao = mix(0.5, 1.0, smoothstep(0.0, 0.45 + footRag, y)) * (1.0 - 0.45 * topGrime) * (1.0 - 0.25 * streak);
   ao *= cornerShade(vU * ${CELL.toFixed(2)}, vCorner.x) * cornerShade((1.0 - vU) * ${CELL.toFixed(2)}, vCorner.y);
@@ -955,6 +956,7 @@ export function createMaterials(quality) {
     uWater: { value: new THREE.Vector4(0, 0, 0, 0) },
     uProgress: { value: 0 },
     uVanish: { value: 0 },
+    uDbg: { value: new THREE.Vector2() },
     uWaveTex: { value: blankWaves },   // water.js bakes the real ripples on tiers 1-2
   };
   const hazeSeen = new Map();   // lamp cell key -> smoothed visibility, so a glow fades in as a corner opens
@@ -1003,7 +1005,8 @@ export function createMaterials(quality) {
     // water.js, every frame: level (m), accept weight, caustic time, calm, progress
     setWater(level, accept, time, calm, progress = 0) { shared.uWater.value.set(level, accept, time, calm); shared.uProgress.value = progress; },
     setWaveTex(tex) { shared.uWaveTex.value = tex; },
-    setVanish(v) { shared.uVanish.value = v; },   // the finale (soulpath.js)
+    setVanish(v) { shared.uVanish.value = v; },
+    dbg: shared.uDbg.value,   // debug.js   // the finale (soulpath.js)
     // camPos: viewer position; zone: zoneWeights() at the viewer
     update(dt, t, camPos, zone) {
       shared.uTime.value = t;

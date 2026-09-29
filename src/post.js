@@ -136,6 +136,7 @@ export function createPost(renderer, quality) {
     document.body.appendChild(tag);
   }
   let glitch = 0, blackT = 0;
+  const dbg = {};   // ?dbg: the phone debug panel switches parts off (debug.js)
 
   function resize() {
     if (rt) rt.dispose();
@@ -150,6 +151,7 @@ export function createPost(renderer, quality) {
 
   return {
     get enabled() { return quality.p.post; },
+    dbg,
     resize,
     burst(strength = 1) { glitch = Math.min(1.5, glitch + strength); },
     black(seconds = 0.3) { blackT = seconds; },
@@ -170,6 +172,9 @@ export function createPost(renderer, quality) {
       uniforms.uCrt.value = crt;
       uniforms.uGlitch.value = glitch * crt;
       uniforms.uShift.value = (Math.min(0.0018, Math.abs(speed) * 0.0003) + glitch * 0.002) * crt; // no resting RGB split: small lights stay whole
+      if (dbg.noCrt) { uniforms.uCrt.value = 0; uniforms.uGlitch.value = 0; }
+      if (dbg.noShift) uniforms.uShift.value = 0;
+      if (dbg.noEdge !== undefined) uniforms.uEdge.value = dbg.noEdge ? 0 : 2;
       const water = window.__app?.water;
       if (water?.refracting) {                           // the frame without the water, then the water over it
         uniforms.tWater.value = water.renderSplit(mainScene, mainCam, rt);

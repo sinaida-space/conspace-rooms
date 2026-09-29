@@ -343,6 +343,7 @@ async function boot() {
     window.__app.spots = createSpots(scene, quality);
     const { SoulPath } = await import('./soulpath.js');
     window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo });
+    if (new URLSearchParams(location.search).has('dbg')) import('./debug.js').then(m => m.openDebug({ renderer, quality, post, atmo }));   // phone debugging
   }
 }
 
