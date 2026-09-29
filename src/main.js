@@ -168,6 +168,7 @@ async function boot() {
 
   const { mode, cameraStream, training } = GALLERY ? await gallery.waitForVisitor()
     : DIRECT ? { mode: 'hands', cameraStream: null, training: false } : await ui.waitForEnter();
+  document.body.classList.add('walking');   // from here a long press on a phone never selects anything (style.css)
   ui.hideWelcome();
   ui.showLoading();
 
