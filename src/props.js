@@ -608,7 +608,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
   const KINDS = [
     [['chair', 3], ['bucket', 2], ['bottles', 3], ['box', 2], ['oxygen', 1]],
     [['nevalyashka', 3], ['pyramid', 3], ['yula', 2], ['matryoshki', 3], ['ball', 2], ['slippers', 2], ['stool', 1.5], ['jars', 1.5], ['newspapers', 1]],
-    [['armchair', 2], ['mirror', 1.5], ['piano', 1], ['ficus', 1.5], ['monstera', 1.5], ['window', 3]],   // no sheeted chair: it read as anything but
+    [['armchair', 2], ['mirror', 1.5], ['piano', 1], ['window', 3]],   // no sheeted chair: it read as anything but; plants wait for the drafts (#39)
   ];
   const pick = (stage, r, allowWindow = true) => {
     const list = allowWindow ? KINDS[stage] : KINDS[stage].filter(([name]) => name !== 'window');
