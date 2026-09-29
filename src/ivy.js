@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { plantRng } from './props.js';
+import { buildConcreteCube } from './plants.js';
+import { buildPorcelainPot } from './kitchen.js';
 
 // ── conspace-rooms · ivy.js ─────────────────────────────────────────────────
 // Common ivy (Hedera helix) climbing the corridor walls of fear and of
@@ -125,8 +127,27 @@ function leafGeometries() {
   });
 }
 
+// Every patch grows out of a pot against the wall, never out of the skirting:
+// in fear the pale concrete cube of its ficus, in grandmother's zone a pot
+// thrown like her teapot. POT_OFF: the pot's middle off the wall face.
+const POT_OFF = 0.3;
+function potFor(stage, atmo) {
+  if (stage === 0) {
+    const cube = buildConcreteCube(atmo);
+    cube.scale.setScalar(0.8);
+    cube.userData.soilY *= 0.8;
+    cube.userData.keep = true;                            // shared geometry; its own material goes in dispose()
+    cube.userData.ownMaterial = true;
+    return cube;
+  }
+  const pot = buildPorcelainPot();
+  pot.traverse(o => { o.userData.keep = true; });        // shared geometry and materials
+  return pot;
+}
+
 // patches: [{ x, z, nx, nz }] a point on the wall face and the wall's
-// outward normal. Returns { meshes, dispose } or null when there is nothing.
+// outward normal. Returns { meshes, pots, dispose } or null when there is nothing;
+// pots: [{ x, z }] where each pot stands, for footprints.
 export function buildIvy(group, stage, patches, seed, atmo) {
   if (!patches.length || stage === 2) return null;          // the light has no ivy
   const geos = leafGeometries();
@@ -137,14 +158,29 @@ export function buildIvy(group, stage, patches, seed, atmo) {
   const up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3(), a = new THREE.Vector3();
   // older looks low on the vine, dust in fear, young leaves at the tips
   const lookAt = (k, dusty) => dusty && rnd() < 0.55 ? 2 : k < 0.35 ? (rnd() < 0.25 ? 3 : 1) : k > 0.8 ? 0 : (rnd() < 0.5 ? 0 : 1);
+  const pots = [], potMeshes = [];
   for (const w of patches) {
     const tx = -w.nz, tz = w.nx;                           // along the wall
     const at = (u, y, off) => new THREE.Vector3(w.x + tx * u + w.nx * off, y, w.z + tz * u + w.nz * off);
+    const pot = potFor(stage, atmo), soil = pot.userData.soilY;
+    const pp = at(0, 0, POT_OFF);
+    pot.position.copy(pp); pot.rotation.y = Math.atan2(w.nx, w.nz) + (rnd() - 0.5) * 0.3;
+    group.add(pot); potMeshes.push(pot); pots.push({ x: pp.x, z: pp.z });
     const vines = 5 + Math.floor(rnd() * 4);
     for (let v = 0; v < vines; v++) {
-      let u = (rnd() - 0.5) * 1.6, y = 0.03, du = (rnd() - 0.5) * 0.8;
-      const top = 1.1 + rnd() * 1.7;                       // how high this vine got
-      let prev = at(u, y, 0.008), step = 0;
+      // from the soil, bowing over the rim to the wall, then up it and out sideways
+      let u = (rnd() - 0.5) * 0.24, y = soil + 0.28 + rnd() * 0.1, du = (rnd() - 0.5) * 1.2;
+      const top = 1.2 + rnd() * 1.6;                       // how high this vine got
+      let prev = at(u * 0.5, soil - 0.02, POT_OFF - 0.05 + (rnd() - 0.5) * 0.12), step = 0;
+      // over the rim toward the wall: two short segments in a bow, not one straight rod
+      for (const [k, lift] of [[0.45, 0.14], [0.8, 0.22]]) {
+        const node = at(u * k, soil + lift, (POT_OFF - 0.05) * (1 - k) + 0.02);
+        dir.subVectors(node, prev);
+        const l = dir.length();
+        q.setFromUnitVectors(up, dir.normalize());
+        stems.push(m.compose(prev, q, s.set(1.6, l, 1.6)).clone());
+        prev = node;
+      }
       while (y < top) {
         du += (rnd() - 0.5) * 0.6; du *= 0.9;
         if (Math.abs(u) > 1.3) du -= Math.sign(u) * 0.3;
@@ -186,8 +222,11 @@ export function buildIvy(group, stage, patches, seed, atmo) {
   geos.forEach((geo, k) => inst(geo, leafMaterial(stage, atmo), leaves[k], true));
   inst(stemGeo, stemMaterial(stage, atmo), stems, false);
   return {
-    meshes: made,
-    dispose() { for (const mesh of made) { group.remove(mesh); mesh.dispose(); } },
+    meshes: made, pots,
+    dispose() {
+      for (const mesh of made) { group.remove(mesh); mesh.dispose(); }
+      for (const pot of potMeshes) { group.remove(pot); if (pot.userData.ownMaterial) pot.material.dispose(); }
+    },
   };
 }
 

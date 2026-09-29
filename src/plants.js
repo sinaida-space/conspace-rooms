@@ -858,7 +858,7 @@ export function roomPlant(name) {
   return { group: g, leaves: L.geo };
 }
 
-function footBox(x, z, w) {
+export function footBox(x, z, w) {
   const h = w / 2, P = [[-h, -h], [h, -h], [h, h], [-h, h]].map(([u, v]) => ({ x: x + u, z: z + v }));
   const seg = (a, b) => { const mx = (a.x + b.x) / 2 - x, mz = (a.z + b.z) / 2 - z, l = Math.hypot(mx, mz) || 1; return { a, b, nx: mx / l, nz: mz / l }; };
   return { x, z, r: w * 0.71, segs: [seg(P[0], P[1]), seg(P[1], P[2]), seg(P[2], P[3]), seg(P[3], P[0])] };

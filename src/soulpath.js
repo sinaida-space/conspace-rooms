@@ -18,7 +18,7 @@ import { createPetals } from './petals.js';
 import { createGlowPetals } from './glowPetals.js';
 import { setShadowLight } from './shadows.js';
 import { createPropKit } from './props.js';
-import { buildHallPlants, ROOM_PLANTS } from './plants.js';
+import { buildHallPlants, ROOM_PLANTS, footBox } from './plants.js';
 import { buildIvy } from './ivy.js';
 import { TROPICS } from './tropics.js';
 const LIGHT_PLANTS = ['monstera', ...TROPICS];
@@ -1557,9 +1557,13 @@ export class SoulPath {
     const built = this.props.build(group, st, walls, air);
     // ivy up the corridor walls of fear and memory (#43; none in the light): a
     // few patches a chunk, on wall spots the props left, two cells clear of them
-    const ivySpots = choose(wallSpots.filter(w => walls.every(o => Math.hypot(o.x - (centreOf(w.gi) + w.di * CELL / 2), o.z - (centreOf(w.gj) + w.dj * CELL / 2)) > 2 * CELL)), Math.round(2.5 * Math.max(0.6, dens)), 3)
+    const ivySpots = choose(wallSpots.filter(w => !solidAtGlobal(w.gi - w.di, w.gj - w.dj) && free(w.gi - w.di, w.gj - w.dj) && walls.every(o => Math.hypot(o.x - (centreOf(w.gi) + w.di * CELL / 2), o.z - (centreOf(w.gj) + w.dj * CELL / 2)) > 2 * CELL)), Math.round(2.5 * Math.max(0.6, dens)), 3)
       .map(w => ({ x: centreOf(w.gi) + w.di * CELL / 2, z: centreOf(w.gj) + w.dj * CELL / 2, nx: -w.di, nz: -w.dj })).filter(clearOf);
     const ivy = buildIvy(group, st, ivySpots, hash2i(SEED_PROPS ^ 0x1717, cx, cz), this.atmo);
+    if (ivy) {                                           // the pots stand in the way like any other thing; candles keep off
+      built.boxes = built.boxes.concat(ivy.pots.map(q => footBox(q.x, q.z, 0.45)));
+      this._flammable.get(cx + ':' + cz).push(...ivy.pots);
+    }
     // the zone's plants (#39, #43): in halls from 4 x 4 cells, in a corner or the
     // middle, and in the dead ends of corridors, where nobody has to pass. Fear
     // its pale ficus; grandmother's zone the light's tropics in her porcelain;
