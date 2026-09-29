@@ -609,6 +609,7 @@ export class SoulPath {
   }
 
   _buildChunk(cx, cz) {
+    this._preplaceStairwell(cx, cz);
     const group = new THREE.Group();
     group.name = 'soul_' + cx + '_' + cz;
     this.scene.add(group);
@@ -841,6 +842,9 @@ export class SoulPath {
         return w;
       });
     }
+    // whatever the walls took on where the metal door stands comes down before anyone sees it
+    const sp = this.stairwellPlan;
+    if (sp && sp.cx === cx && sp.cz === cz) this._clearAround(sp.x, sp.z, 2.4);
     return stuff;
   }
 
@@ -1277,7 +1281,7 @@ export class SoulPath {
 
   // The metal door on the first turn after the first work is seen: along the
   // corridor the visitor has just turned into, 4 to 14 m ahead, on a side wall.
-  _summonStairwellAhead() {
+  _summonStairwellAhead(quiet = false) {
     if (this.stairwellPlan) return;
     const P = this.player, fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
     const ax = Math.abs(fx) > Math.abs(fz) ? Math.sign(fx) : 0, az = ax ? 0 : Math.sign(fz);
@@ -1287,7 +1291,29 @@ export class SoulPath {
       if (!this.world.isWalkable(x, z)) break;
       if (d >= 4) zone.push({ gi: cellOf(x), gj: cellOf(z) });
     }
-    this._placeStairwell(zone, { x: P.pos.x, z: P.pos.y });
+    this._placeStairwell(zone, { x: P.pos.x, z: P.pos.y }, quiet);
+  }
+
+  // The metal door is always set down before the chunk it stands in is built,
+  // so nothing is ever redrawn round it: the first as the labyrinth is first
+  // built, down the corridor the visitor faces; the second, once the first has
+  // left, in the first new chunk built after the second work is seen, well
+  // inside it, beyond sight.
+  _preplaceStairwell(cx, cz) {
+    if (this.stage.stage !== 0 || this.stairwellPlan) return;
+    const n = this._stairCount || 0;
+    if (n === 0 && !this.chunkStuff.size) this._summonStairwellAhead(true);
+    else if (n === 1 && this.stageSeen[0] === 2) {
+      // only a chunk ahead of the visitor, where the walk is going
+      const P = this.player, mx = (cx + 0.5) * CHUNK * CELL - P.pos.x, mz = (cz + 0.5) * CHUNK * CELL - P.pos.y;
+      if ((-Math.sin(P.yaw) * mx - Math.cos(P.yaw) * mz) / (Math.hypot(mx, mz) || 1) < 0.5) return;
+      const zone = [];
+      for (let j = 3; j < CHUNK - 3; j++) for (let i = 3; i < CHUNK - 3; i++) {
+        const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+        if (!solidAtGlobal(gi, gj)) zone.push({ gi, gj });
+      }
+      this._placeStairwell(zone, { x: this.player.pos.x, z: this.player.pos.y }, true);
+    }
   }
 
   // The first metal door, done with or never met, leaves once it is well out
@@ -1297,14 +1323,15 @@ export class SoulPath {
     if (!plan) return;
     const stuff = this.chunkStuff.get(plan.cx + ':' + plan.cz), sw = stuff?.stairwell;
     if (sw && !['wait', 'cool'].includes(sw.phase)) return;          // mid-dream: let it finish
-    if (Math.hypot(plan.x - this.player.pos.x, plan.z - this.player.pos.y) < 14) return;
+    const P = this.player;
+    if (Math.hypot(plan.x - P.pos.x, plan.z - P.pos.y) < 14 || this._lineOfSight(P.pos.x, P.pos.y, plan.x + Math.sin(plan.rotY) * 0.3, plan.z + Math.cos(plan.rotY) * 0.3)) return;   // never vanishes in view
     if (sw) { sw.group.parent?.remove(sw.group); sw.dispose?.(); stuff.stairwell = null; }
     this.stairwellPlan = null;
   }
 
   // Find a wall run beside one of the zone's cells for the metal door, clear
   // of corners, of works and of `away` (a portal, or the visitor), and set it there.
-  _placeStairwell(zone, away) {
+  _placeStairwell(zone, away, quiet = false) {
     const portal = away;
     for (const clear of [CORNER_FREE, 1.8]) {          // the holy zone first; only if no slot at all, a smaller one
       for (const w of zone) {
@@ -1325,6 +1352,7 @@ export class SoulPath {
         if (!slot) continue;
         this.stairwellPlan = { x: at.x, z: at.z, rotY: Math.atan2(slot.normal.x, slot.normal.z), cx, cz };
         this._stairCount = (this._stairCount || 0) + 1;
+        if (quiet) return;                               // its chunk is not built yet: it will be built round the door
         this._clearAround(at.x, at.z, 2.4);
         const stuff = this.chunkStuff.get(cx + ':' + cz);
         if (stuff) {
@@ -1405,20 +1433,16 @@ export class SoulPath {
       }
     }
 
-    // The metal door onto the stairwell (#43) comes twice: at the very start
-    // of fear, as soon as the visitor walks, down the corridor ahead; and again
-    // between the second work and the third, on a turn of the corridor, once
-    // the first is out of sight. After the third work turns count toward the portal.
-    const stairs = this._stairCount || 0;
-    const now = performance.now();
-    if (speed > 0.5 && !stairs && !this.stairwellPlan && now - (this._stairAheadT || 0) > 700) { this._stairAheadT = now; this._summonStairwellAhead(); }   // a try a beat, not every frame
-    if (stairs === 1 && this.stageSeen[0] === 2) this._retireStairwell();
+    // The metal door onto the stairwell (#43, _preplaceStairwell) stands down
+    // the corridor ahead from the start and again, once the first is out of
+    // sight, between the second work and the third. After the third work turns
+    // count toward the portal.
+    if ((this._stairCount || 0) === 1 && this.stageSeen[0] === 2) this._retireStairwell();
     if (speed > 0.5) {
       const axis = ((Math.round(P.yaw / (Math.PI / 2)) % 4) + 4) % 4;
       if (f.axis === null) f.axis = axis;
       else if (axis !== f.axis) {
         f.axis = axis;
-        if (!this.stairwellPlan && (stairs === 0 || (stairs === 1 && this.stageSeen[0] === 2))) this._summonStairwellAhead();
         if (this.stageSeen[0] >= PORTAL_SEEN_FEAR) f.turns++;
       }
     }

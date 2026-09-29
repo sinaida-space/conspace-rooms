@@ -51,7 +51,9 @@ export class Quality {
 
   // called each frame with delta time; steps tier down under sustained low FPS
   govern(dt) {
-    if (this.tier === 0) return;
+    // a desktop never drops to tier 0: that tier has no lamp shadows and a
+    // denser fog, and the whole corridor would change its light mid-walk (#43)
+    if (this.tier === (this.isMobile ? 0 : 1)) return;
     this._cooldown -= dt;
     this._samples.push(dt);
     if (this._samples.length < 120) return;

@@ -193,7 +193,7 @@ float lampVis(vec3 P, vec3 N, vec2 lamp){
   // penumbra: crisp in the hospital, wide and soft in the light, where a hard
   // edge across an open hall reads as a painted stripe
   float soft = mix(3.0, 0.9, zoneWeights(P.xz).z);
-  int steps = uTier > 1 ? 10 : 6;
+  int steps = 8;                     // the same on both upper tiers: when the governor steps down, the light must not change (#43)
   for (int i = 0; i < 10; i++) {
     if (i >= steps || t > len - 0.3) break;
     float h = wallDist(o + d * t);
@@ -1023,7 +1023,7 @@ function clearLine(x0, z0, x1, z1) {
 
 const TRAIL_N = 4;
 const TRAIL_EVERY = 2.4;   // metres walked between trail samples
-const TRAIL_FADE = 0.12;   // strength lost per second
+const TRAIL_FADE = 0;      // strength lost per second: none, so the light is even from the first step and does not sink while standing (#43)
 
 // The wall-distance field: for each cell around the visitor, the distance
 // from its centre to the nearest wall face (negative inside a wall), packed
@@ -1143,6 +1143,7 @@ export function createMaterials(quality) {
       if (zone) shared.uZone.value.set(zone.fear, zone.memory, zone.accept);
 
       // footsteps light the lamps above them, then fade
+      if (lastPos.x > 1e4) for (const s of shared.uTrail.value) s.set(camPos.x, camPos.z, 1);   // lit where the visitor starts, before a step
       const moved = lastPos.x > 1e4 ? 0 : Math.hypot(camPos.x - lastPos.x, camPos.z - lastPos.y);
       lastPos.set(camPos.x, camPos.z);
       sinceSample += moved;
