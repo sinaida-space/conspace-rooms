@@ -412,6 +412,8 @@ export class Artworks {
       normal: new THREE.Vector3(slot.normal.x, 0, slot.normal.z),
       width, height,
       chunkKey,
+      sub,            // the work's own group: fear hides the ones not found yet (soulpath.js)
+      hidden: false,
     });
   }
 
@@ -522,7 +524,7 @@ export class Artworks {
     const fx = -Math.sin(this.player.yaw), fz = -Math.cos(this.player.yaw);
     let best = null, bestD = Infinity;
     for (const a of this.active) {
-      if (this._autoShown.has(autoKey(a)) || a === this.inspecting) continue;
+      if (a.hidden || this._autoShown.has(autoKey(a)) || a === this.inspecting) continue;
       const dx = a.centerWorld.x - px, dz = a.centerWorld.z - pz;
       const d = Math.hypot(dx, dz);
       if (d > AUTO_DIST || d < 1e-4) continue;
@@ -546,6 +548,7 @@ export class Artworks {
     const fx = -Math.sin(this.player.yaw), fz = -Math.cos(this.player.yaw);
     let best = null, bestD = Infinity;
     for (const a of this.active) {
+      if (a.hidden) continue;
       const dx = a.centerWorld.x - px, dz = a.centerWorld.z - pz;
       const d = Math.hypot(dx, dz);
       if (d > INSPECT_DIST || d < 1e-4) continue;

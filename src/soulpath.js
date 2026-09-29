@@ -72,7 +72,11 @@ const DOOR_EVERY = 0.0625;       // chance per chunk edge: about one door in eig
 const DOOR_SWING = 1.15;         // radians the door gives way
 const DOOR_HOLD = 4.2;           // seconds the light pours out before the door slams
 const DOOR_SLAM = 0.22;          // seconds to slam shut
-const PORTAL_SEEN_FEAR = 3;      // works seen in fear before its portal is summoned
+const PORTAL_SEEN_FEAR = 3;
+const FEAR_FIND_2 = { writings: 3, things: 4 };   // scrawls and boards, things lying about: then the second work
+const FEAR_FIND_3 = 5;           // more of the hospital's things after that: the third
+const FEAR_TURNS = 2;            // turns of the corridor after the third, before the door and the portal
+const FIND_NEAR = 3.0;           // metres: passing this close, looking its way, a thing counts as found      // works seen in fear before its portal is summoned
 const PORTAL_SEEN_MEMORY = 5;    // works seen in memory (past the room) before the way into the light
 const PORTAL_NEAR = 8;           // metres: a summoned portal never lands closer than this
 const PORTAL_FAR = 24;           // metres: nor further than this
@@ -1164,10 +1168,72 @@ export class SoulPath {
     return Math.atan2(-(centreOf(ti) - P.pos.x), -(centreOf(tj) - P.pos.y));
   }
 
+  // ── fear, paced ────────────────────────────────────────────────────────
+  // Fear shows three works, found one at a time. The first hangs near the
+  // start. The second comes only once the walk has taken in a few scrawls on
+  // the walls and a few of the things left lying about; the third after more
+  // of the hospital's things (beds, chairs, trolleys). Each appears on a wall
+  // somewhere out of sight, never before the visitor's eyes. After the third
+  // is seen, two more turns of the corridor, and only then the metal door and
+  // the portal. A thing counts as found when the walk passes close by,
+  // looking its way. Works not found yet are hidden, by instance: the same
+  // picture may hang in several chunks.
+  _fearPacing(speed) {
+    const act = this.artworks.active, P = this.player;
+    if (this.stage.stage !== 0) {
+      if (this._fear?.hiding) { for (const a of act) { a.hidden = false; if (a.sub) a.sub.visible = true; } this._fear.hiding = false; }
+      return;
+    }
+    const f = this._fear ||= { shown: new Set(), ids: new Set(), found: new Set(), writings: 0, things: 0, unlocked: 1, at2: 0, turns: 0, axis: null, hiding: true };
+    const keyOf = a => a.art.id + '@' + a.centerWorld.x.toFixed(1) + ',' + a.centerWorld.z.toFixed(1);
+    for (const a of act) { const on = f.shown.has(keyOf(a)); a.hidden = !on; if (a.sub) a.sub.visible = on; }
+
+    // what the walk has taken in
+    const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+    const look = (key, x, z, kind) => {
+      if (f.found.has(key)) return;
+      const dx = x - P.pos.x, dz = z - P.pos.y, d = Math.hypot(dx, dz);
+      if (d < FIND_NEAR && (fx * dx + fz * dz) / (d || 1) > 0.3) { f.found.add(key); f[kind]++; }
+    };
+    for (const [ck, st] of this.chunkStuff) {
+      st.writings.forEach((w, i) => look('w' + ck + ':' + i, w.mesh.position.x, w.mesh.position.z, 'writings'));
+      (st.posters || []).forEach((p, i) => look('b' + ck + ':' + i, p.mesh.position.x, p.mesh.position.z, 'writings'));
+      (st.props?.walls || []).concat(st.props?.air || []).forEach((p, i) => look('p' + ck + ':' + i, p.x, p.z, 'things'));
+      (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || []).forEach((b, i) => look('m' + ck + ':' + i, b.x, b.z, 'things'));
+    }
+
+    // the next work is due
+    const shownSeen = [...f.ids].every(id => this.seen.has(id));
+    if (f.unlocked === 1 && shownSeen && f.shown.size && f.writings >= FEAR_FIND_2.writings && f.things >= FEAR_FIND_2.things) { f.unlocked = 2; f.at2 = f.things; }
+    else if (f.unlocked === 2 && shownSeen && f.shown.size >= 2 && f.things - f.at2 >= FEAR_FIND_3) f.unlocked = 3;
+    if (f.shown.size < f.unlocked) {
+      const first = f.shown.size === 0;
+      let best = null, bd = Infinity;
+      for (const a of act) {
+        if (f.ids.has(a.art.id) || this.seen.has(a.art.id)) continue;
+        const dx = a.centerWorld.x - P.pos.x, dz = a.centerWorld.z - P.pos.y, d = Math.hypot(dx, dz);
+        if (first ? d > 30 : (d < 6 || d > 22)) continue;
+        if (!first && ((fx * dx + fz * dz) / (d || 1) > 0.2 && this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3))) continue;   // never appears in plain view
+        if (d < bd) { bd = d; best = a; }
+      }
+      if (best) {
+        f.shown.add(keyOf(best)); f.ids.add(best.art.id); best.hidden = false; if (best.sub) best.sub.visible = true;
+        if (!first) this._rebuildScatter();              // the candles re-light toward it
+      }
+    }
+
+    // turns of the corridor after the third work, walking
+    if (this.stageSeen[0] >= PORTAL_SEEN_FEAR && speed > 0.5) {
+      const axis = ((Math.round(P.yaw / (Math.PI / 2)) % 4) + 4) % 4;
+      if (f.axis === null) f.axis = axis;
+      else if (axis !== f.axis) { f.axis = axis; f.turns++; }
+    }
+  }
+
   // Threshold check, run every frame: cheap when nothing is due.
   _maybeSummonPortal(time) {
     const st = this.stage.stage;
-    if (st === 0 && !this.summonedPortals[1] && this.stageSeen[0] >= PORTAL_SEEN_FEAR) this._summonPortal(1, time);
+    if (st === 0 && !this.summonedPortals[1] && this.stageSeen[0] >= PORTAL_SEEN_FEAR && (this._fear?.turns ?? FEAR_TURNS) >= FEAR_TURNS) this._summonPortal(1, time);
     else if (st === 0 && this.summonedPortals[1] && !this.stairwellPlan && time - (this._stairTry || 0) > 1) {
       // no wall for the metal door on the first try: look again from wherever the walk is now
       this._stairTry = time;
@@ -1189,7 +1255,7 @@ export class SoulPath {
     if (st === 1) for (let dz = -5; dz <= 5; dz++) for (let dx = -5; dx <= 5; dx++) { const k = kitchenPlan(cx + dx, cz + dz); if (k) kitchens.push(k); }
     const seekRoom = st === 1 && !this.visitedRoom;   // red rooms: first the room, then the way on
     const near = (list, x, z) => { let d = Infinity; for (const p of list) d = Math.min(d, Math.hypot(p.x - x, p.z - z)); return d; };
-    const arts = this.artworks.active.map(a => ({ x: a.centerWorld.x, z: a.centerWorld.z, seen: this.seen.has(a.art.id) }));
+    const arts = this.artworks.active.filter(a => !a.hidden).map(a => ({ x: a.centerWorld.x, z: a.centerWorld.z, seen: this.seen.has(a.art.id) }));
     const unseen = arts.filter(a => !a.seen);
     const prox = d => { const k = Math.max(0, Math.min(1, 1 - d / 45)); return k * k * (3 - 2 * k); };
     const YELLOW = new THREE.Color(0xffd27a), RED = new THREE.Color(0xff2a14), PALE_WAX = new THREE.Color(0xe6dac0), RED_WAX = new THREE.Color(0x8e1216);
@@ -1833,7 +1899,7 @@ export class SoulPath {
     if (!target || this.seen.has(target.art.id) || !this.artworks.active.includes(target)) {
       target = null; let td = Infinity;
       for (const a of this.artworks.active) {
-        if (this.seen.has(a.art.id)) continue;
+        if (a.hidden || this.seen.has(a.art.id)) continue;
         const d = Math.hypot(a.centerWorld.x - p.x, a.centerWorld.z - p.y);
         if (d < td) { td = d; target = a; }
       }
@@ -1901,7 +1967,7 @@ export class SoulPath {
   // A work just seen: the candles around it, with nothing unseen left near,
   // flicker and die down to embers (_tickCandles). Lights share the colour.
   _gutterCandles(time) {
-    const arts = this.artworks.active.map(a => ({ x: a.centerWorld.x, z: a.centerWorld.z, seen: this.seen.has(a.art.id) }));
+    const arts = this.artworks.active.filter(a => !a.hidden).map(a => ({ x: a.centerWorld.x, z: a.centerWorld.z, seen: this.seen.has(a.art.id) }));
     this._dying ??= [];
     for (const st of this.chunkStuff.values()) {
       const sc = st.scatter;
@@ -2018,8 +2084,11 @@ export class SoulPath {
     this._lastPos = { x: P.pos.x, y: P.pos.y };
     const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
 
+    this._fearPacing(speed);
+
     // seen: close enough and roughly in front
     for (const a of this.artworks.active) {
+      if (a.hidden) continue;
       const dx = a.centerWorld.x - P.pos.x, dz = a.centerWorld.z - P.pos.y;
       const d = Math.hypot(dx, dz);
       if (d < SEEN_DIST && (fx * dx + fz * dz) / (d || 1) > 0.5) this.seen.add(a.art.id);
@@ -2341,6 +2410,7 @@ export class SoulPath {
     if (!this.audio?.setArtVoices) return;
     const P = this.player;
     const near = this.artworks.active
+      .filter(a => !a.hidden)
       .map(a => ({ a, d: Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y) }))
       .filter(o => o.d < 30)
       .sort((u, v) => u.d - v.d)
@@ -2358,6 +2428,7 @@ export class SoulPath {
     if (!at) {
       let bd = 3.5;
       for (const a of this.artworks.active) {
+        if (a.hidden) continue;
         const d = Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y);
         if (d < bd && this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3)) { bd = d; at = a; }
       }
