@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>
+  // Served for any missing path, however deep, so every link below resolves from the site root.
+  // On the GitHub Pages mirror the root is /conspace-rooms/.
+  var mirror = /[?&]mirror\b/.test(location.search);
+  try { if (mirror) localStorage.setItem('mirror', '1'); mirror = mirror || localStorage.getItem('mirror') === '1'; } catch (e) {}
+  var gh = location.hostname.endsWith('github.io');
+  if (gh && !mirror) {
+    location.replace('https://conspace-rooms.vercel.app' +
+      location.pathname.replace(/^\/conspace-rooms/, '') + location.search + location.hash);
+  }
+  // written from here, after <base>, so the preload scanner never fetches them from the wrong folder
+  document.write('<base href="' + (gh ? '/conspace-rooms/' : '/') + '">' +
+    '<link rel="icon" href="assets/icons/favicon.ico" sizes="any">' +
+    '<link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">' +
+    '<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">' +
+    '<link rel="preload" href="assets/fonts/DepartureMono-Regular.woff2" as="font" type="font/woff2" crossorigin>' +
+    '<link rel="stylesheet" href="css/style.css">' +
+    '<link rel="stylesheet" href="css/page.css">');
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>404 · CONSPACE ROOMS</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#010805">
+<style>
+  /* the number hums like a corridor tube that cannot decide whether to stay on */
+  .lost-code { display: block; background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; text-shadow: inherit;
+    font-size: clamp(4.5rem, 22vw, 9rem); line-height: 1; letter-spacing: 0.08em; color: var(--accent);
+    margin-bottom: 0.25em; animation: tube 7s steps(1) infinite; }
+  @keyframes tube { 0%, 100% { opacity: 1; } 61% { opacity: 0.25; } 62% { opacity: 1; } 64% { opacity: 0.4; } 65% { opacity: 1; } 88% { opacity: 0.7; } 89% { opacity: 1; } }
+  .lost-ways { list-style: none; padding: 0 !important; margin-top: 2em; }
+  .lost-ways li { margin-bottom: 0.6em; }
+  .lost-ways a { text-decoration: none; border-bottom: 1px solid currentColor; }
+  .lost-ways .hint { color: var(--dim); }
+  .lost-code:focus-visible { outline: 1px dashed var(--dim); outline-offset: 6px; }
+  /* snake: flat window over the page, scanlines still run over it */
+  .snake-modal { position: fixed; inset: 0; z-index: 25; display: flex; align-items: center; justify-content: center;
+    padding: 16px; background: rgba(1, 8, 5, 0.88); }
+  .snake-panel { width: 100%; max-width: 344px; border: 1px solid var(--accent); background: var(--bg);
+    box-shadow: 0 0 40px rgba(57, 255, 106, 0.18); }
+  .snake-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px;
+    padding: 6px 12px; border-bottom: 1px solid var(--dim); color: var(--accent); font-size: 0.85em; letter-spacing: 0.08em; }
+  .snake-bar b { font-weight: 400; }
+  .snake-hint { border-bottom: 0; border-top: 1px solid var(--dim); color: var(--dim); }
+  .snake-close, .snake-pad button { font: inherit; color: var(--accent); background: none; cursor: pointer; text-shadow: inherit; }
+  .snake-close { border: 0; padding: 0; }
+  .snake-panel canvas { display: block; width: calc(100% - 24px); height: auto; margin: 12px; outline: none; touch-action: none; }
+  .snake-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 0 12px 12px; }
+  .snake-pad button { border: 1px solid var(--dim); padding: 8px; }
+  @media (hover: hover) and (pointer: fine) { .snake-pad { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .lost-code { animation: none; } }
+</style>
+</head>
+<body class="doc">
+
+<p class="lang-switch"><a href="?lang=ru" lang="ru">RU</a> · <a href="?lang=en" lang="en">EN</a></p>
+
+<section lang="ru">
+  <button class="lost-code" type="button" aria-label="404">404</button>
+  <h1>Этой комнаты нет</h1>
+  <p>Лабиринт строится, пока ты идёшь, и&nbsp;эту дверь он ещё не&nbsp;успел придумать. За&nbsp;ней только вода по&nbsp;щиколотку, тишина и&nbsp;одна лампа, которая никак не&nbsp;решит, гореть ей или гаснуть.</p>
+  <p>Души ждут в&nbsp;коридоре. Возвращайся к&nbsp;ним.</p>
+  <ul class="lost-ways">
+    <li><a href="index.html?lang=ru">← На&nbsp;главную</a></li>
+    <li><a href="https://open.spotify.com/playlist/0145rQE2XluEkz3YWbEQLp?si=6c33fb59e0ad4ff4" target="_blank" rel="noopener">Плейлист, чтобы не&nbsp;бродить в&nbsp;тишине</a></li>
+    <li><a href="https://sinaida.eu/" target="_blank" rel="noopener">sinaida.eu</a> <span class="hint">· Sinaida, пространство и&nbsp;код</span></li>
+    <li><a href="https://uvaliss.ru/" target="_blank" rel="noopener">uvaliss.ru</a> <span class="hint">· UVALISS, работы серии SOULS</span></li>
+  </ul>
+</section>
+
+<section lang="en">
+  <button class="lost-code" type="button" aria-label="404">404</button>
+  <h1>This room does not exist</h1>
+  <p>The labyrinth builds itself as&nbsp;you walk, and it&nbsp;has not dreamt up&nbsp;this door yet. Behind it&nbsp;there is&nbsp;only ankle-deep water, silence and one lamp that cannot decide whether to&nbsp;stay&nbsp;on.</p>
+  <p>The SOULS are waiting in&nbsp;the corridor. Go&nbsp;back to&nbsp;them.</p>
+  <ul class="lost-ways">
+    <li><a href="index.html?lang=en">← To&nbsp;the main page</a></li>
+    <li><a href="https://open.spotify.com/playlist/0145rQE2XluEkz3YWbEQLp?si=6c33fb59e0ad4ff4" target="_blank" rel="noopener">A&nbsp;playlist, so&nbsp;you do&nbsp;not wander in&nbsp;silence</a></li>
+    <li><a href="https://sinaida.eu/" target="_blank" rel="noopener">sinaida.eu</a> <span class="hint">· Sinaida, space and&nbsp;code</span></li>
+    <li><a href="https://uvaliss.ru/" target="_blank" rel="noopener">uvaliss.ru</a> <span class="hint">· UVALISS, the SOULS series</span></li>
+  </ul>
+</section>
+
+<footer id="site-footer"></footer>
+<script>document.write('<script src="src/doc-lang.js"><\/script>');</script>
+<script type="module">
+  import { renderFooter } from './src/footer.js';
+  renderFooter(document.documentElement.lang);
+  // the number is a door after all: behind it, a snake
+  document.querySelectorAll('.lost-code').forEach(b => b.addEventListener('click', () =>
+    import('./src/snake404.js').then(m => m.openSnake())));
+</script>
+</body>
+</html>
+<!-- Je suis le spectre d'une rose que tu portais hier au bal. -->
