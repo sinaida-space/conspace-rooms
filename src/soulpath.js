@@ -20,6 +20,7 @@ import { setShadowLight } from './shadows.js';
 import { createPropKit } from './props.js';
 import { buildHallPlants, ROOM_PLANTS, footBox } from './plants.js';
 import { buildIvy } from './ivy.js';
+import { createWallThings } from './wallthings.js';
 import { TROPICS } from './tropics.js';
 const LIGHT_PLANTS = ['monstera', ...TROPICS];
 import { AlisaVoices, VOICED } from './alisa.js';
@@ -462,6 +463,7 @@ export class SoulPath {
     this.petals = createPetals(scene, camera, quality);
     this.glowPetals = createGlowPetals(scene);   // the light's way-marks: petals on the water
     this.props = createPropKit(atmo, quality);
+    this.wallThings = createWallThings(atmo);
     this.drowned = createDrowned(atmo, quality);   // what the water on the floor uncovers, acceptance stage only
     this.chandeliers = createChandeliers(scene);   // grandmother's ice-glass chandeliers, red rooms only   // what each stage leaves along its corridors
     this.roses.set(0, t('rosesLabel', { n: 0, total: this.total }));
@@ -1659,7 +1661,21 @@ export class SoulPath {
     // its pale ficus; grandmother's zone the light's tropics in her porcelain;
     // the light one of its five (the monstera, tropics.js), place to place
     const spots = this._hallPlantSpots(cx, cz, free, rp, 1, st === 2 ? { p: 0.95, side: 4 } : { p: 0.8, side: 4 }).concat(this._deadEndSpots(cx, cz, free, rp));
-    const plantsDispose = () => ivy?.dispose();
+    // small things on the walls of fear and memory (#43, C4): a clock, a plate, a
+    // portrait, a calendar, one to three a chunk, clear of the props and the ivy;
+    // the event director may take one down (events.js)
+    const rh = mulberry32(hash2i(SEED_PROPS ^ 0x3c1, cx, cz)), hangSpots = [];
+    const far = (x, z, list, d) => list.every(o => Math.hypot(o.x - x, o.z - z) > d);
+    const hangCand = st === 2 ? [] : wallSpots.map(w => ({ x: centreOf(w.gi) + w.di * CELL / 2, z: centreOf(w.gj) + w.dj * CELL / 2, nx: -w.di, nz: -w.dj }))
+      .filter(q => far(q.x, q.z, walls, 1.4) && far(q.x, q.z, ivySpots, 1.6) && clearOf(q));
+    const nHang = hangCand.length ? Math.round((1 + rh() * 2) * Math.min(1.3, Math.max(0.6, dens))) : 0;
+    for (let tries = 0; tries < 40 && hangSpots.length < nHang; tries++) {
+      const q = hangCand[Math.floor(rh() * hangCand.length)];
+      if (far(q.x, q.z, hangSpots, 3 * CELL)) hangSpots.push({ ...q, r: rh() });
+    }
+    const hung = this.wallThings.build(group, st, hangSpots);
+    built.hung = hung.hung;
+    const plantsDispose = () => { ivy?.dispose(); hung.dispose(); };
     if (!spots.length) return { ...built, dispose() { built.dispose(); plantsDispose(); } };
     this._flammable.get(cx + ':' + cz).push(...spots.map(q => ({ x: q.x, z: q.z })));   // candles keep off
     const pickOf = (q, list) => list[Math.floor(Math.abs(Math.sin(q.x * 12.9898 + q.z * 78.233) * 43758.5453) % 1 * list.length)];
