@@ -15,6 +15,7 @@ import { buildClockNook } from './eggs.js';
 import { createRoseCounter, buildRoseArch, findArchSpot, GRAIN_OPEN_MS } from './roses.js';
 import { showCard } from './card.js';
 import { createPetals } from './petals.js';
+import { createGlowPetals } from './glowPetals.js';
 import { createPropKit } from './props.js';
 import { buildHallPlants } from './plants.js';
 import { AlisaVoices, VOICED } from './alisa.js';
@@ -368,6 +369,7 @@ export class SoulPath {
     this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
     this.roses = createRoseCounter(this.total);
     this.petals = createPetals(scene, camera, quality);
+    this.glowPetals = createGlowPetals(scene);   // the light's way-marks: petals on the water
     this.props = createPropKit(atmo, quality);
     this.drowned = createDrowned(atmo, quality);   // what the water on the floor uncovers, acceptance stage only
     this.chandeliers = createChandeliers(scene);   // grandmother's ice-glass chandeliers, red rooms only   // what each stage leaves along its corridors
@@ -400,13 +402,7 @@ export class SoulPath {
       m.visible = false;
       m.userData = { key: null, goal: null, fadeAt: 0 };
       scene.add(m);
-      // in the light the same mark is a firefly instead: a warm point hanging
-      // off the wall that drifts the way to go, fades, and starts again
-      const fly = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffd79a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true }));
-      fly.scale.set(0.16, 0.16, 1);
-      fly.visible = false;
-      scene.add(fly);
-      m.userData.fly = fly;
+      // in the light the same mark sends glowing petals down the water (glowPetals.js)
       // in the grandmother's rooms, dried flowers on the floor by the wall
       const dried = new THREE.Mesh(driedGeo, driedMats[m.id % 2]);
       dried.visible = false; dried.renderOrder = 1;
@@ -2257,11 +2253,10 @@ export class SoulPath {
 
   // marks of a finished goal fade slowly; marks far behind return to the pool
   _tickMarks(time) {
-    const p = this.player.pos, light = this.stage.stage === 2, home = this.stage.stage === 1;
+    const p = this.player.pos, home = this.stage.stage === 1;
     for (const m of this.marks) {
-      const fly = m.userData.fly, dried = m.userData.dried;
-      m.material.visible = this.stage.stage === 0;       // red only in fear: flowers at home, fireflies in the light
-      fly.visible = light && m.visible;
+      const dried = m.userData.dried;
+      m.material.visible = this.stage.stage === 0;       // red only in fear: flowers at home, petals on the water in the light
       dried.visible = home && m.visible;
       if (dried.visible) {
         const nx = Math.sin(m.rotation.y), nz = Math.cos(m.rotation.y);
@@ -2269,16 +2264,6 @@ export class SoulPath {
         dried.position.set(m.position.x + nx * 0.62, 0.012, m.position.z + nz * 0.62);   // clear of the candles by the wall
         dried.rotation.set(-Math.PI / 2, 0, Math.atan2(-az, ax));
         dried.scale.setScalar(m.material.opacity);                          // a fading goal: the flowers shrink away
-      }
-      if (fly.visible) {
-        const nx = Math.sin(m.rotation.y), nz = Math.cos(m.rotation.y);   // off the wall, into the corridor
-        const ax = nz * m.scale.x, az = -nx * m.scale.x;                    // the way the scratch points
-        const seed = (m.position.x * 7.1 + m.position.z * 3.7) % 1;
-        const u = (time * 0.35 + seed) % 1;                                  // drifting on, then again
-        fly.position.set(m.position.x + nx * 0.4 + ax * (u - 0.5) * 1.2,
-          1.05 + Math.sin(time * 1.3 + seed * 6.28) * 0.12,
-          m.position.z + nz * 0.4 + az * (u - 0.5) * 1.2);
-        fly.material.opacity = m.material.opacity * Math.sin(u * Math.PI) * (0.75 + 0.25 * Math.sin(time * 9 + seed * 40));
       }
       if (!m.visible) continue;
       if (m.userData.fadeAt) {
@@ -2308,6 +2293,7 @@ export class SoulPath {
     this.petals.update(dt, time);
     this._time = time;
     this._tickMarks(time);
+    this.glowPetals.update(dt, time, this.marks, this._water(), this.stage.stage === 2 && !this.finale, this.player.pos);
     this._tickCandles(time);
     const water = this._water();
     this._floatCandles(time, water);
