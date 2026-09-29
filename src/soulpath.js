@@ -1555,12 +1555,11 @@ export class SoulPath {
     // everything on a wall may be a curtained window: remember it, a candle keeps off
     (this._flammable ||= new Map()).set(cx + ':' + cz, walls.map(w => ({ x: w.x, z: w.z })));
     const built = this.props.build(group, st, walls, air);
-    // ivy up the corridor walls (#43): a few patches a chunk, on wall spots
-    // the props left, two cells clear of them
+    // ivy up the corridor walls of fear and memory (#43; none in the light): a
+    // few patches a chunk, on wall spots the props left, two cells clear of them
     const ivySpots = choose(wallSpots.filter(w => walls.every(o => Math.hypot(o.x - (centreOf(w.gi) + w.di * CELL / 2), o.z - (centreOf(w.gj) + w.dj * CELL / 2)) > 2 * CELL)), Math.round(2.5 * Math.max(0.6, dens)), 3)
       .map(w => ({ x: centreOf(w.gi) + w.di * CELL / 2, z: centreOf(w.gj) + w.dj * CELL / 2, nx: -w.di, nz: -w.dj })).filter(clearOf);
     const ivy = buildIvy(group, st, ivySpots, hash2i(SEED_PROPS ^ 0x1717, cx, cz), this.atmo);
-    if (ivy) ivy.mesh.userData.keep = true;             // shared leaf and material; ivy.dispose frees the instances
     // the zone's plants (#39, #43): in halls from 4 x 4 cells, in a corner or the
     // middle, and in the dead ends of corridors, where nobody has to pass. Fear
     // its pale ficus; grandmother's zone the light's tropics in her porcelain;
