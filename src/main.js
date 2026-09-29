@@ -344,6 +344,9 @@ async function boot() {
     const { SoulPath } = await import('./soulpath.js');
     window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo });
     if (['clouds', 'fogtop', 'plants'].some(k => new URLSearchParams(location.search).has(k))) stage.set(2);   // a ceiling sketch: straight into the light to judge it
+    const plantDraft = new URLSearchParams(location.search).get('plantdraft');   // fear|room|accept: one draft plant in front of the visitor (#39)
+    if (plantDraft === 'accept') stage.set(2);
+    if (plantDraft) import('./plants.js').then(m => m.placePlantDraft(plantDraft, { scene, player, atmo }));
     if (new URLSearchParams(location.search).has('dbg')) import('./debug.js').then(m => m.openDebug({ renderer, quality, post, atmo }));   // phone debugging
   }
 }

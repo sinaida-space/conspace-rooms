@@ -33,7 +33,7 @@ const sphere = (r, w = 14, h = 10) => new THREE.SphereGeometry(r, w, h);
 
 // one shape: primitives with colour and gloss, merged in local space. Local
 // +z faces the corridor, the back rests toward the wall, y = 0 is the floor.
-function shape(build, crumple = 0) {
+export function shape(build, crumple = 0) {
   const parts = [];
   // paint: optional (x, y, z) => hex in the part's own frame, before m, so
   // a face, a flower or a stripe can be painted on per vertex
@@ -248,14 +248,14 @@ const LIGHT = {
 const PLANT_LOOK = +(new URLSearchParams(location.search).get('plants') || 1);   // 1|2|3
 
 // colours of the current look; `fade` paints leaves by height toward SHEET
-function plantLook() {
-  if (PLANT_LOOK === 2) return { leaf: SHEET, rib: 0xd0d0c6, stem: SHEET, pot: SHEET, soil: 0xd2d2c8, gloss: 0.55, fade: false };
-  if (PLANT_LOOK === 3) return { leaf: 0x2c5a2e, rib: 0x9cb878, stem: 0x5a6a3c, pot: 0xd8d2c4, soil: 0x3a3026, gloss: 0.6, fade: true };
+export function plantLook(look = PLANT_LOOK) {
+  if (look === 2) return { leaf: SHEET, rib: 0xd0d0c6, stem: SHEET, pot: SHEET, soil: 0xd2d2c8, gloss: 0.55, fade: false };
+  if (look === 3) return { leaf: 0x2c5a2e, rib: 0x9cb878, stem: 0x5a6a3c, pot: 0xd8d2c4, soil: 0x3a3026, gloss: 0.6, fade: true };
   return { leaf: 0x244f2a, rib: 0x9ab872, stem: 0x4a5a30, pot: 0xa8552f, soil: 0x2a1e16, gloss: 0.65, fade: false };
 }
 
 // small deterministic random, so a plant is the same every time it is built
-function plantRng(seed) {
+export function plantRng(seed) {
   let a = seed >>> 0;
   return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
@@ -264,7 +264,7 @@ function plantRng(seed) {
 // hw(t): half-width 0..0.5 along the leaf; keep(s, t): drops a triangle (the
 // monstera's slits and holes). Bent: cupped across, drooping at the tip, a
 // slight fold on the midrib. Two-sided (the prop material culls back faces).
-function leafGeo(L, W, hw, { nx = 6, nt = 6, curl = 2, droop = 0.25, heart = 0, keep = null } = {}) {
+export function leafGeo(L, W, hw, { nx = 6, nt = 6, curl = 2, droop = 0.25, heart = 0, keep = null } = {}) {
   const P = [], U = [], S = [];
   for (let j = 0; j <= nt; j++) for (let i = 0; i <= nx; i++) {
     const t = j / nt, u = i / nx - 0.5, s = u * 2;
@@ -303,7 +303,7 @@ function leafGeo(L, W, hw, { nx = 6, nt = 6, curl = 2, droop = 0.25, heart = 0, 
 // A leaf placed on a plant: base point, azimuth psi (0 = toward the corridor),
 // elevation theta above horizontal. Painted midrib; `top` is the plant height
 // the fading look measures against.
-function plantLeaf(put, look, geo, L, x, y, z, psi, theta, top, tint = 0) {
+export function plantLeaf(put, look, geo, L, x, y, z, psi, theta, top, tint = 0) {
   const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z),
     new THREE.Quaternion().setFromEuler(new THREE.Euler(-theta, psi, 0, 'YXZ')), new THREE.Vector3(1, 1, 1));
   const c = new THREE.Color(), v = new THREE.Vector3(), green = new THREE.Color(look.leaf).offsetHSL(0, 0, tint);
@@ -325,27 +325,30 @@ function plantPot(put, look, r, h) {
   put(cyl(r * 0.88, r * 0.88, 0.012, 16), look.soil, 0.05, M(0, h * 0.95, 0));
 }
 
-LIGHT.ficus = { depth: 0.5, w: 0.6, solid: true, build: put => {
-  const look = plantLook(), rnd = plantRng(4711), pot = { r: 0.15, h: 0.27 };
+// The ficus. o: pot (draw the clay pot, default), n leaves, seed, size (leaf
+// scale), spread (leaf tone variation), aside (turn leaves off a wall behind).
+// The defaults are the plant of LIGHT.ficus; plants.js builds others from it.
+export function ficusBuild(put, look, { pot: withPot = true, n = 14, seed = 4711, size = 1, spread = 0.03, aside = true } = {}) {
+  const rnd = plantRng(seed), pot = { r: 0.15, h: 0.27 };
   const stemTop = 1.32;
-  plantPot(put, look, pot.r, pot.h);
+  if (withPot) plantPot(put, look, pot.r, pot.h);
   put(cyl(0.011, 0.02, stemTop - pot.h, 7), look.stem, 0.2, M(0.01, (stemTop + pot.h) / 2, 0.0, 0, 0, -0.015));
   // oval, glossy, pointed leaves, alternating up the stem, higher ones pointing up
-  const n = 14;
   for (let k = 0; k < n; k++) {
     const f = k / (n - 1);
     const y = pot.h + 0.22 + f * (stemTop - pot.h - 0.26);
-    const L = (0.34 - f * 0.1) * (0.9 + rnd() * 0.2), W = L * 0.62;
+    const L = (0.34 - f * 0.1) * (0.9 + rnd() * 0.2) * size, W = L * 0.62;
     let psi = k * 2.4 + rnd() * 0.3;
     // leaves stay off the wall behind: a leaf pointing at it is turned aside
-    if (Math.cos(psi) < -0.55) psi += Math.PI * 0.6;
+    if (aside && Math.cos(psi) < -0.55) psi += Math.PI * 0.6;
     const theta = -0.05 + f * 0.6 + (rnd() - 0.5) * 0.2;
     const geo = leafGeo(L, W, t => 0.5 * Math.pow(Math.sin(Math.PI * Math.pow(t, 0.8)), 0.85), { nx: 4, nt: 5, curl: 2.2, droop: 0.35 - f * 0.15 });
-    plantLeaf(put, look, geo, L, 0.01, y, 0, psi, theta, stemTop + 0.2, (rnd() - 0.5) * 0.03);
+    plantLeaf(put, look, geo, L, 0.01, y, 0, psi, theta, stemTop + 0.2, (rnd() - 0.5) * spread);
   }
   // a last young leaf, unfurled, standing straight up on the crown
   plantLeaf(put, look, leafGeo(0.15, 0.06, t => 0.5 * Math.pow(Math.sin(Math.PI * t), 0.7), { nx: 2, nt: 4, curl: 0, droop: 0 }), 0.15, 0.01, stemTop - 0.02, 0, 0.4, 1.45, stemTop + 0.2);
-} };
+}
+LIGHT.ficus = { depth: 0.5, w: 0.6, solid: true, build: put => ficusBuild(put, plantLook()) };
 
 LIGHT.monstera = { depth: 0.8, w: 1.0, solid: true, build: put => {
   const look = plantLook(), rnd = plantRng(1913), pot = { r: 0.2, h: 0.32 };
