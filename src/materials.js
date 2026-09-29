@@ -58,6 +58,7 @@ uniform sampler2D uWallpaper; // grandmother's wallpaper, one repeat (wallpaper.
 uniform vec4  uHaze[6];       // the fixtures in sight of the visitor: xyz centre of the glow, w = strength (flicker included)
 uniform vec4  uWater;         // level, accept, time, calm (water.js); accept 0 outside the light stage
 uniform float uProgress;      // works seen, 0..1 eased (water.js): the light stage whitens with it
+uniform int   uClouds;        // acceptance ceiling sketches, ?clouds=1|2|3 (0: the plaster with frosted panels)
 uniform float uVanish;
 uniform vec2  uDbg;           // ?dbg: x 1 turns the walls' damp streaks off (debug.js)        // the finale: 0 whole, 1 the walls, ceiling and things are gone into the haze
 
@@ -736,6 +737,33 @@ vec4 troffer(vec2 m){
   return vec4(mix(metal * 0.5, metal, 1.0 - inner), glow);
 }
 
+// ACCEPTANCE, sketches: the ceiling is weather instead of plaster.
+// 1 a low cloud ceiling, thick and soft, drifting; the lamps glow inside it
+// 2 smoke hanging under a ceiling you can barely see, slow curls
+// 3 an open sky of warm-lit cumulus, peach at the edges, lilac in the gaps
+vec3 cloudCeiling(vec2 p, float t, int mode){
+  vec2 q = p * 0.11 + vec2(t * 0.012, t * 0.007);
+  vec2 warp = vec2(fbm(q * 1.3 + 7.0, 3), fbm(q * 1.3 - 3.0, 3)) - 0.5;
+  if (mode == 1) {
+    float d = fbm(q + warp * 0.8, 4);
+    float lit = fbm(q * 2.1 + warp + vec2(t * 0.01, 0.0), 3);
+    vec3 shade = mix(vec3(0.58, 0.54, 0.66), vec3(0.94, 0.88, 0.90), smoothstep(0.3, 0.72, d));   // lilac hollows, milky heads
+    return mix(shade, vec3(1.0, 0.95, 0.9), smoothstep(0.55, 0.85, lit) * 0.7);
+  } else if (mode == 2) {
+    vec2 r = p * 0.35 + vec2(t * 0.03, -t * 0.02);
+    float curl = fbm(r + 2.5 * vec2(fbm(r + vec2(t * 0.02, 0.0), 3), fbm(r - vec2(0.0, t * 0.025), 3)), 4);
+    float wisp = smoothstep(0.42, 0.72, curl);
+    vec3 far = vec3(0.42, 0.39, 0.46);                  // the ceiling itself, dim behind the smoke
+    return mix(far, vec3(0.93, 0.88, 0.88), wisp * 0.9) * (0.9 + 0.2 * curl);
+  }
+  float puff = fbm(q * 0.9 + warp * 1.2, 4);
+  float cover = smoothstep(0.45, 0.62, puff);
+  float rim = smoothstep(0.45, 0.52, puff) - smoothstep(0.52, 0.66, puff);   // the edge catches the low sun
+  vec3 sky = mix(vec3(0.55, 0.60, 0.80), vec3(0.86, 0.68, 0.66), 0.35 + 0.35 * sin(p.x * 0.03 + p.y * 0.02));
+  vec3 cloud = mix(vec3(0.72, 0.66, 0.74), vec3(0.95, 0.9, 0.86), smoothstep(0.55, 0.8, puff));
+  return (mix(sky, cloud, cover) + vec3(1.0, 0.72, 0.45) * rim * 0.3) * 0.9;
+}
+
 // ACCEPTANCE: a square frosted panel flush with the ceiling, soft edges.
 vec4 frosted(vec2 m){
   vec2 a = abs(m);
@@ -780,7 +808,13 @@ void main(){
   if (on > 0.5) {
     if (z.x > 0.001) fx += z.x * troffer(m);
     // MEMORY: no disc painted here; a real chandelier hangs below (chandeliers.js)
-    if (z.z > 0.001) fx += z.z * frosted(m);
+    if (z.z > 0.001 && uClouds == 0) fx += z.z * frosted(m);
+  }
+  if (uClouds > 0 && z.z > 0.001) {
+    // the weather replaces the plaster; where a lamp was, a warm glow inside it
+    vec3 sky = cloudCeiling(p, uTime, uClouds) * mix(0.92, 1.08, uProgress);
+    float glow = exp(-dot(dl, dl) * 0.9) * (uClouds == 3 ? 0.12 : 0.35);   // measured to the nearest lamp: round, never a cell's square
+    lit = mix(lit, sky + vec3(1.0, 0.86, 0.66) * glow, z.z);
   }
   float body = step(0.001, fx.r + fx.g + fx.b + fx.a);
   vec3 col = mix(lit, fx.rgb * (0.3 + 0.7 * L), body * 0.9);  // housing / shade
@@ -956,6 +990,7 @@ export function createMaterials(quality) {
     uWater: { value: new THREE.Vector4(0, 0, 0, 0) },
     uProgress: { value: 0 },
     uVanish: { value: 0 },
+    uClouds: { value: +(new URLSearchParams(location.search).get('clouds') || 0) },   // sketches: ?clouds=1|2|3
     uDbg: { value: new THREE.Vector2() },
     uWaveTex: { value: blankWaves },   // water.js bakes the real ripples on tiers 1-2
   };
