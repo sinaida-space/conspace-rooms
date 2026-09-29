@@ -28,6 +28,7 @@ void main(){
 }`;
 
 const FRAG = /* glsl */`
+uniform float fogDensity;
 varying vec2 vLocal;
 varying vec3 vHalf;
 varying float vDist;
@@ -43,6 +44,8 @@ void main(){
     k = -vHalf.z * wide * mix(0.72, 0.1, along);
   }
   k *= 1.0 - smoothstep(12.0, 24.0, vDist);
+  float fogged = 1.0 - exp(-fogDensity * fogDensity * vDist * vDist);   // the scene's exp2 fog: a shadow goes where its thing goes,
+  k *= 1.0 - fogged;                                               // never a dark patch left in the white haze of the light
   gl_FragColor = vec4(vec3(1.0 - k), 1.0);                       // multiplied into the floor
 }`;
 
@@ -50,6 +53,7 @@ let material = null;
 function shadowMaterial() {
   return material ??= new THREE.ShaderMaterial({
     vertexShader: VERT, fragmentShader: FRAG,
+    uniforms: THREE.UniformsUtils.clone(THREE.UniformsLib.fog), fog: true,   // three keeps fogDensity current
     transparent: true, depthWrite: false,
     blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
     blendSrc: THREE.DstColorFactor, blendDst: THREE.ZeroFactor,

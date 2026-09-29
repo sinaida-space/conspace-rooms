@@ -570,6 +570,8 @@ export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
   const dropSplit = () => { if (rtW) { rtW.dispose(); rtW = null; } };
 
   let head = 0, phase = 0, stillFor = 0, prog = 0;
+  let walked = 0, lastX = null, lastZ = 0;   // metres walked in the light: the puddles join up under the feet within ~10 steps
+  const COVER_WALK = 7;
   const api = {
     level: 0, tide: 0, calm: 0, progress: 0,
     // post.js asks each frame whether to draw the frame in two passes
@@ -619,7 +621,15 @@ export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
       api.tide = Math.sin(elapsed * Math.PI * 2 / TIDE_PERIOD);
       const target = soul && soul.total ? soul.seen.size / soul.total : 0;
       prog += (target - prog) * Math.min(1, dt * 0.5);          // a newly seen work raises the water slowly
-      const base = accept < 0.001 ? 0 : (0.03 + 0.12 * smooth(prog)) * accept;
+      if (accept < 0.001 || !player) { walked = 0; lastX = null; }
+      else {
+        if (lastX !== null && accept > 0.5) walked += Math.min(1, Math.hypot(player.pos.x - lastX, player.pos.y - lastZ));
+        lastX = player.pos.x; lastZ = player.pos.y;
+      }
+      // the floor is all water once the visitor has walked a little way into it;
+      // the works seen still bring it higher toward the same full depth
+      const cover = Math.max(prog, Math.min(1, walked / COVER_WALK));
+      const base = accept < 0.001 ? 0 : (0.03 + 0.12 * smooth(cover)) * accept;
       api.level = base + 0.02 * api.tide * accept;
       // the shaders get the level with a tenth of the tide: the whole tide would
       // swallow the entry puddles every other breath; this way the rims only creep
