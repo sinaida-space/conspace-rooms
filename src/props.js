@@ -13,7 +13,7 @@ import { wallBehind, record } from './placement.js';
 //              матрёшки, a two-colour ball), slippers, a
 //              stool, jars of preserves, a tied stack of newspapers
 //   ACCEPTANCE furniture under white sheets, windows with nothing but light
-//              behind a breathing tulle, lace napkins adrift in the air and
+//              behind a breathing tulle, lace napkins adrift on the water and
 //              paper cranes circling under the ceiling, shy of the visitor
 // Every shape is built once from primitives (no downloads) and baked with
 // vertex colours (rgb + gloss in alpha, as in ward.js and eggs.js). A chunk
@@ -419,16 +419,18 @@ attribute vec3 aCenter;
 attribute vec3 aFloat;          // phase, kind (0 lace, 1 crane), wing (1 at the tips)
 uniform float uTime;
 uniform vec3 uPlayer;
+uniform float uWaterLevel;
 varying vec2 vUv;
 varying float vShade;
 vec2 turn(vec2 v, float a){ return vec2(v.x * cos(a) - v.y * sin(a), v.x * sin(a) + v.y * cos(a)); }
 void main(){
   vec3 p = position, c = aCenter;
   float ph = aFloat.x, t = uTime;
-  if (aFloat.y < 0.5) {                     // lace: a slow turn and a breath up and down
-    p.xz = turn(p.xz, t * 0.15 + ph);
-    c.y += sin(t * 0.6 + ph) * 0.08;
-    vShade = 1.0;
+  if (aFloat.y < 0.5) {                     // lace: afloat on the water, turning slowly as the current takes it
+    p.xz = turn(p.xz, t * 0.08 + ph);
+    c.xz += vec2(sin(t * 0.07 + ph), cos(t * 0.05 + ph * 1.3)) * 0.4;
+    c.y = uWaterLevel + 0.006 + sin(t * 0.9 + ph) * 0.002;
+    vShade = 0.92;
   } else {                                  // crane: circling, wings beating slowly
     float a = t * 0.35 + ph;
     p.y += aFloat.z * sin(t * 5.0 + ph * 3.0) * 0.05;
@@ -439,7 +441,7 @@ void main(){
   // shy of the visitor: rise and drift away when they come close
   vec2 d = c.xz - uPlayer.xz;
   float shy = smoothstep(3.2, 1.0, length(d));
-  c.y = min(c.y + shy * 0.45, 3.0);
+  if (aFloat.y > 0.5) c.y = min(c.y + shy * 0.45, 3.0);   // a crane rises; lace only drifts off on the water
   c.xz += normalize(d + 1e-4) * shy * 0.35;
   vUv = uv;
   vec4 mvPosition = modelViewMatrix * vec4(c + p, 1.0);
@@ -609,7 +611,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
   const floatMat = new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([fogU, { uMap: { value: laceTexture() } }]),
     vertexShader: FLOAT_VERT, fragmentShader: FLOAT_FRAG, side: THREE.DoubleSide, fog: true });
-  floatMat.uniforms.uTime = uniforms.uTime; floatMat.uniforms.uPlayer = uniforms.uPlayer;
+  floatMat.uniforms.uTime = uniforms.uTime; floatMat.uniforms.uPlayer = uniforms.uPlayer; floatMat.uniforms.uWaterLevel = uniforms.uWaterLevel;
   const tulleMat = tulleMaterial();
   tulleMat.uniforms.uTime = uniforms.uTime; tulleMat.uniforms.uWaterLevel = uniforms.uWaterLevel;
   const crane = craneGeometry(), lace = new THREE.PlaneGeometry(0.42, 0.42).rotateX(-Math.PI / 2 + 0.25).toNonIndexed();
