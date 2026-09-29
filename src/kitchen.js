@@ -938,11 +938,17 @@ export function createKitchenRig(scene, renderer, quality) {
   const tv = new THREE.PointLight(0xff2418, 0, 4, 2);
   const fill = new THREE.HemisphereLight(0x2d5a3c, 0x240808, 0);   // green half-dark above, red carpet bounce below
   scene.add(lamp, tv, fill);
+  // nothing in a room moves that casts a shadow, and the lamp only breathes in
+  // brightness: its six shadow views are drawn once per room, not every frame
+  renderer.shadowMap.autoUpdate = false;
+  let lastRoom = null, redrawUntil = 0, redrawAt = 0;
 
   return {
     // room: the nearest built room ({ lamp, tv }) or null
     update(room, time) {
-      renderer.shadowMap.autoUpdate = shadows && !!room;   // no shadow passes far from any room
+      if (room !== lastRoom) { lastRoom = room; redrawUntil = time + 5; redrawAt = 0; }
+      // a few more times over the first seconds: models loaded late (the plants) join in
+      if (shadows && room && time < redrawUntil && time >= redrawAt) { lamp.position.copy(room.lamp); renderer.shadowMap.needsUpdate = true; redrawAt = time + 0.5; }
       if (!room) { lamp.intensity = tv.intensity = fill.intensity = 0; return; }
       lamp.position.copy(room.lamp);
       tv.position.copy(room.tv);
