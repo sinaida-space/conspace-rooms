@@ -180,8 +180,8 @@ Example: `/gallery?lang=en&idle=60&card=30&volume=0.7`
 | `F` | toggle full screen (when not in kiosk mode) |
 | any key | enter with keyboard controls, if the camera is not available |
 
-The cheats in [docs/CHEATS.md](docs/CHEATS.md) work here too. As in the ordinary
-gesture mode, the camera image is processed only in the browser: nothing is
+As in the ordinary gesture mode,
+the camera image is processed only in the browser: nothing is
 recorded or sent anywhere.
 
 ## Languages
