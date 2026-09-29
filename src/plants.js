@@ -4,6 +4,7 @@ import { GLTFLoader } from '../vendor/addons/GLTFLoader.js';
 import { shape, ficusBuild, plantLook, plantRng } from './props.js';
 import { CELL, solidAtGlobal } from './world.js';
 import { contactShadows } from './shadows.js';
+import { buildPorcelainPot } from './kitchen.js';
 import { TROPICS, buildTropic, planterScale } from './tropics.js';
 
 // ── conspace-rooms · plants.js ──────────────────────────────────────────────
@@ -730,10 +731,10 @@ export function plantMist({ radius = 0.9, height = 2.3, count = 46, seed = 606 }
 // overlapping leaves (and both faces of a blade) from darkening twice.
 // dir: toward the light, in the plant's frame (need not be normalised).
 const FLOOR = [{ m: new THREE.Vector3(0, -1, 0), d: 0 }];
-export function plantShadow(geo, dir, { opacity = 0.26, planes = FLOOR } = {}) {
+export function plantShadow(geo, dir, { opacity = 0.26, planes = FLOOR, color = 0x2a1c34 } = {}) {
   const out = new THREE.Group();
   const JITTER = [[0, 0], [0.09, 0.03], [-0.09, -0.03], [0.03, -0.09], [-0.03, 0.09]];
-  const mat = new THREE.MeshBasicMaterial({ color: 0x2a1c34, transparent: true, opacity: opacity / JITTER.length * 1.7, depthWrite: true, depthFunc: THREE.LessDepth, side: THREE.DoubleSide });
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: opacity / JITTER.length * 1.7, depthWrite: true, depthFunc: THREE.LessDepth, side: THREE.DoubleSide });
   for (const { m, d } of planes) JITTER.forEach(([jx, jz], k) => {
     const L = new THREE.Vector3(dir.x + jx * dir.y, dir.y, dir.z + jz * dir.y).normalize();
     const lm = L.dot(m);
@@ -812,7 +813,10 @@ const TO_SUN = new THREE.Vector3(-3, 5, 2);   // the monstera's shadow: one dire
 const keepAll = g => { g.traverse(o => { o.userData.keep = true; }); return g; };
 function protoOf(kind, atmo) {
   if (protos[kind]) return protos[kind];
-  if (kind === 'fear') {
+  if (kind.startsWith('room:')) {
+    const rp = roomPlant(kind.slice(5));
+    protos[kind] = Promise.resolve({ group: keepAll(rp.group), w: 0.45, leaves: rp.leaves, shadow: 0x1c120c });
+  } else if (kind === 'fear') {
     const g = new THREE.Group(), cube = buildConcreteCube(atmo);
     g.add(cube, palePlant(atmo, cube.userData.soilY));
     protos[kind] = Promise.resolve({ group: keepAll(g), w: 0.5 });
@@ -834,13 +838,33 @@ function protoOf(kind, atmo) {
   }
   return protos[kind];
 }
+// Grandmother's plants (#43): the light's own tropics, about two thirds their
+// size, in a porcelain pot thrown like her teapot. The leaves are baked into
+// the pot's frame, so their shadow can be cast from the same geometry.
+export const ROOM_PLANTS = TROPICS;
+const ROOM_SCALE = 0.62;
+const roomLeaves = {};
+export function roomPlant(name) {
+  const pot = buildPorcelainPot();
+  let L = roomLeaves[name];
+  if (!L) {
+    const src = buildTropic(name, { soilY: 0, sector: Math.PI, renderer: window.__app?.renderer });
+    L = roomLeaves[name] = { geo: src.geometry.scale(ROOM_SCALE, ROOM_SCALE, ROOM_SCALE).translate(0, pot.userData.soilY, 0), mat: src.material };
+    L.mat.emissive = new THREE.Color(0x16301a);      // far from the lamp: a little light of the room around
+  }
+  const g = new THREE.Group();
+  g.add(pot, new THREE.Mesh(L.geo, L.mat));
+  keepAll(g);                                        // shared by every room: a room going away leaves them be
+  return { group: g, leaves: L.geo };
+}
+
 function footBox(x, z, w) {
   const h = w / 2, P = [[-h, -h], [h, -h], [h, h], [-h, h]].map(([u, v]) => ({ x: x + u, z: z + v }));
   const seg = (a, b) => { const mx = (a.x + b.x) / 2 - x, mz = (a.z + b.z) / 2 - z, l = Math.hypot(mx, mz) || 1; return { a, b, nx: mx / l, nz: mz / l }; };
   return { x, z, r: w * 0.71, segs: [seg(P[0], P[1]), seg(P[1], P[2]), seg(P[2], P[3]), seg(P[3], P[0])] };
 }
 export function buildHallPlants(group, kind, spots, atmo) {
-  const w = kind === 'fear' ? 0.5 : 0.62 * planterScale(kind.split(':')[1]);
+  const w = kind === 'fear' ? 0.5 : kind.startsWith('room:') ? 0.45 : 0.62 * planterScale(kind.split(':')[1]);
   const boxes = spots.map(s => footBox(s.x, s.z, w));
   if (!spots.length) return { boxes, dispose() {} };
   const made = [];
@@ -862,7 +886,7 @@ export function buildHallPlants(group, kind, spots, atmo) {
         const W = 0.55, r = Math.SQRT1_2;
         g.add(plantShadow(proto.leaves, new THREE.Vector3(0.25, 0.6, 1), { opacity: 0.42, planes: [
           FLOOR[0], { m: new THREE.Vector3(r, 0, -r), d: W }, { m: new THREE.Vector3(-r, 0, -r), d: W }] }));
-      } else if (proto.leaves) g.add(plantShadow(proto.leaves, TO_SUN.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -s.rot)));
+      } else if (proto.leaves) g.add(plantShadow(proto.leaves, TO_SUN.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -s.rot), proto.shadow ? { opacity: 0.4, color: proto.shadow } : undefined));
       group.add(g); made.push(g);
     }
   });

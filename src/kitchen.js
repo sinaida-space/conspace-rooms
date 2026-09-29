@@ -3,7 +3,7 @@ import { roundedBox } from './geom.js';
 import { CEIL_H, CELL, CHUNK, solidAtGlobal, wallSlots } from './world.js';
 import { t, getLang } from './i18n.js';
 import { mountOrDrop } from './placement.js';
-import { buildCeramicPot, livingPlant } from './plants.js';
+import { roomPlant, ROOM_PLANTS, plantShadow } from './plants.js';
 import { tulleMaterial } from './props.js';
 import { artworkSlots } from './artworks.js';
 
@@ -228,6 +228,32 @@ const SHADES = [                       // velvet: fold, body, ridge; fringe; lin
 ];
 // The lampshade a room at (X, Z) will have: buildKitchen draws the same
 // three numbers before it picks, so a rug laid first can match it.
+// A flowerpot thrown like her teapot (#43): the same porcelain with its
+// crackle, gold bands and cabbage roses, a bellied body with a rolled lip,
+// standing on a plain white saucer. y = 0 is the floor.
+let PORCELAIN_POT = null;
+export function buildPorcelainPot() {
+  if (!PORCELAIN_POT) {
+    const T = textures();
+    PORCELAIN_POT = {
+      body: lathe([[0.001, 0.02], [0.12, 0.02], [0.13, 0.03], [0.17, 0.08], [0.2, 0.16], [0.203, 0.24], [0.185, 0.31], [0.17, 0.33], [0.178, 0.345], [0.19, 0.355], [0.18, 0.362], [0.162, 0.345], [0.158, 0.32]], 40),
+      saucer: lathe([[0.001, 0], [0.16, 0], [0.2, 0.006], [0.245, 0.022], [0.25, 0.028], [0.24, 0.026], [0.2, 0.014], [0.001, 0.012]], 40),
+      soil: new THREE.CircleGeometry(0.16, 24).rotateX(-Math.PI / 2),
+      glaze: new THREE.MeshStandardMaterial({ map: T.porcelain, roughness: 0.22, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: T.porcelain, emissiveIntensity: 0.22 }),   // far from the lamp: its roses still show
+      white: new THREE.MeshStandardMaterial({ color: 0xefe8d8, roughness: 0.2, emissive: 0x3a362e }),
+      earth: new THREE.MeshStandardMaterial({ color: 0x2b1f16, roughness: 1 }),
+    };
+  }
+  const P = PORCELAIN_POT, g = new THREE.Group();
+  g.add(new THREE.Mesh(P.body, P.glaze), new THREE.Mesh(P.saucer, P.white));
+  const soil = new THREE.Mesh(P.soil, P.earth);
+  soil.position.y = 0.325;
+  g.add(soil);
+  g.userData.soilY = 0.325;
+  g.userData.keep = true;
+  return g;
+}
+
 export function shadeOf(X, Z) {
   const r = roomRand(X, Z); r(); r(); r();
   return SHADES[Math.floor(r() * SHADES.length)];
@@ -668,11 +694,15 @@ export function buildKitchen(parent, X, Z) {
       wg.updateMatrixWorld(true);
       const w = wg.localToWorld(new THREE.Vector3(fx, 0.5, 0.35)), back = wg.localToWorld(new THREE.Vector3(fx, 1.0, -0.06));
       if (solidAt(w) || !solidAt(back) || Math.hypot(w.x - table.x, w.z - table.z) < 1.3 || taken.some(t => Math.hypot(t.x - w.x, t.z - w.z) < t.r + 0.45)) continue;
-      const pot = buildCeramicPot(), plant = livingPlant(pot.userData.soilY);
-      // far from the lamp by the window: a little light of their own, as if from the room around
-      for (const o of [pot, plant]) o.traverse(m => { if (m.material?.emissive) { m.material = m.material.clone(); m.material.emissive.set(o === plant ? 0x2c5a30 : 0x3a342c); } });
-      for (const o of [pot, plant]) { o.position.set(fx, 0, 0.35); o.rotation.y = side * 0.7; o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); wg.add(o); }
-      shade(wg, 0.6, 0.6, fx, 0.35);
+      // one of the light's plants, smaller, in a pot thrown like her teapot (#43)
+      const rp = roomPlant(ROOM_PLANTS[Math.floor(rnd() * ROOM_PLANTS.length)]);
+      rp.group.position.set(fx, 0, 0.35); rp.group.rotation.y = side * 0.7;
+      rp.group.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+      // its leaves thrown onto the floor and the wall behind, away from the lamp over the table
+      rp.group.add(plantShadow(rp.leaves, new THREE.Vector3(side * 0.6, 1.4, 0.9), { opacity: 0.5, color: 0x1c120c, planes: [
+        { m: new THREE.Vector3(0, -1, 0), d: 0 }, { m: new THREE.Vector3(-Math.sin(side * 0.7), 0, -Math.cos(side * 0.7)), d: 0.4 }] }));
+      wg.add(rp.group);
+      shade(wg, 0.7, 0.7, fx, 0.35);
       break;
     }
   }
