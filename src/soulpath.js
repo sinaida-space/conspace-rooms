@@ -770,6 +770,7 @@ export class SoulPath {
     stuff.reserved = taken;
     if (cp) taken.add(cellKey(cellOf(cp.x), cellOf(cp.z)));
     stuff.props = this._buildProps(group, cx, cz, taken);
+    this._snuffNear(cx, cz);
     stuff.scatter = this._buildScatter(group, cx, cz);
     stuff.drown = this.stage.stage === 2 ? this.drowned.build(group, cx, cz, this._drownSpots(cx, cz, taken)) : null;
 
@@ -1477,7 +1478,7 @@ export class SoulPath {
       // unseen works draw candles to them; around works already seen they are embers
       const du = near(unseen, x, z), spent = du > CANDLE_NEAR && near(arts, x, z) < CANDLE_NEAR;
       const pa = du < CANDLE_NEAR ? 1 - du / CANDLE_NEAR : 0;
-      if (r > ((st === 0 ? 0.06 : 0.035) + 0.05 * Math.max(pp, pk) + 0.08 * pa) * Math.max(1, this.quality.p.density)) continue;   // fear is lit more often: the candles are its map
+      if (r > ((st === 0 ? 0.06 : 0.035) + 0.05 * Math.max(pp, pk) + 0.08 * pa) * Math.max(1, this.quality.p.density) * (st === 2 ? 1.7 : 1)) continue;   // the light loses many to its cloth: set out more   // fear is lit more often: the candles are its map
       const flame = st === 0 ? YELLOW.clone().lerp(RED, pp)
         : seekRoom ? YELLOW.clone().lerp(RED, pk)        // before the room: everything reddens toward it
           : st === 1 ? RED.clone().lerp(YELLOW, pp)      // after: the flame yellows toward the way into the light
@@ -1553,7 +1554,7 @@ export class SoulPath {
       && (!sp || Math.hypot(sp.x - q.x, sp.z - q.z) > 3);
     for (const list of [walls, air]) for (let i = list.length - 1; i >= 0; i--) if (!clearOf(list[i])) list.splice(i, 1);
     // everything on a wall may be a curtained window: remember it, a candle keeps off
-    (this._flammable ||= new Map()).set(cx + ':' + cz, walls.map(w => ({ x: w.x, z: w.z })));
+    (this._flammable ||= new Map()).set(cx + ':' + cz, walls.concat(air).map(w => ({ x: w.x, z: w.z })));   // hanging cloth in the air too
     const built = this.props.build(group, st, walls, air);
     // ivy up the corridor walls of fear and memory (#43; none in the light): a
     // few patches a chunk, on wall spots the props left, two cells clear of them
@@ -1646,6 +1647,26 @@ export class SoulPath {
     return false;
   }
 
+  // A chunk's props are built after its neighbours' candles may already
+  // stand: any of those candles now too close to a curtain, a hanging cloth
+  // or a plant of this chunk is taken away (hidden, its light dark, never
+  // floated or guttered again), so no flame burns under the cloth (#43).
+  _snuffNear(cx, cz) {
+    const mine = this._flammable?.get(cx + ':' + cz);
+    if (!mine?.length) return;
+    const dark = new THREE.Color(0), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const sc = this.chunkStuff.get((cx + dx) + ':' + (cz + dz))?.scatter;
+      if (!sc?.items) continue;
+      sc.items.forEach((it, i) => {
+        if (it.gone || !mine.some(f => Math.hypot(f.x - it.x, f.z - it.z) < CANDLE_CURTAIN_GAP)) return;
+        it.gone = true;
+        for (const name in sc.meshes) { sc.meshes[name].setMatrixAt(i, zero); sc.meshes[name].instanceMatrix.needsUpdate = true; }
+        if (sc.lights?.[i]) sc.lights[i].col = dark;
+      });
+    }
+  }
+
   // a candle never stands where it would set a curtain alight
   _nearFlammable(cx, cz, x, z) {
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++)
@@ -1716,6 +1737,7 @@ export class SoulPath {
   _rebuildChunkProps(cx, cz, st) {
     st.props?.dispose();
     st.props = this._buildProps(st.group, cx, cz, st.reserved || new Set());
+    this._snuffNear(cx, cz);
     st.scatter?.dispose();
     st.scatter = this._buildScatter(st.group, cx, cz);
   }
@@ -1727,6 +1749,7 @@ export class SoulPath {
       st.scatter = this._buildScatter(st.group, cx, cz);
       st.props?.dispose();
       st.props = this._buildProps(st.group, cx, cz, st.reserved || new Set());
+      this._snuffNear(cx, cz);
       st.drown?.dispose();
       st.drown = this.stage.stage === 2 ? this.drowned.build(st.group, cx, cz, this._drownSpots(cx, cz, st.reserved || new Set())) : null;
     }
@@ -2346,7 +2369,7 @@ export class SoulPath {
       const sc = st.scatter;
       if (!sc?.items) continue;
       sc.items.forEach((it, i) => {
-        if (it.spent) return;
+        if (it.spent || it.gone) return;
         let dA = Infinity, dU = Infinity;
         for (const a of arts) { const d = Math.hypot(a.x - it.x, a.z - it.z); dA = Math.min(dA, d); if (!a.seen) dU = Math.min(dU, d); }
         if (dA < CANDLE_NEAR && dU > CANDLE_NEAR) {
@@ -2389,7 +2412,7 @@ export class SoulPath {
       if (!sc?.items?.length) continue;
       for (let i = 0; i < sc.items.length; i++) {
         const it = sc.items[i];
-        if (it.spent) continue;
+        if (it.spent || it.gone) continue;
         const sway = 0.5 + 0.5 * Math.sin(time * 0.17 + i * 0.63);      // 0..1, biased on toward the target
         const drift = (sway * 0.7 + 0.3) * CANDLE_DRIFT;
         const x = it.x + it.tgx * drift, z = it.z + it.tgz * drift;
