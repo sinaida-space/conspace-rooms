@@ -581,6 +581,16 @@ function craneGeometry() {
 }
 
 // ── the kit ─────────────────────────────────────────────────────────────────
+// The lace tulle of the light's windows, also hung in grandmother's room
+// (kitchen.js). Its geometry needs an aPhase attribute; uTime drives the
+// sway, uWaterLevel (far below by default) where the hem turns wet.
+export function tulleMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uWaterLevel: { value: -10 } }]),
+    vertexShader: TULLE_VERT, fragmentShader: TULLE_FRAG, side: THREE.DoubleSide, fog: true,
+    transparent: true, depthWrite: false });
+}
+
 export function createPropKit(atmo, quality = { tier: 2 }) {
   const geos = new Map();
   const geoOf = (stage, name) => {
@@ -600,10 +610,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
     uniforms: THREE.UniformsUtils.merge([fogU, { uMap: { value: laceTexture() } }]),
     vertexShader: FLOAT_VERT, fragmentShader: FLOAT_FRAG, side: THREE.DoubleSide, fog: true });
   floatMat.uniforms.uTime = uniforms.uTime; floatMat.uniforms.uPlayer = uniforms.uPlayer;
-  const tulleMat = new THREE.ShaderMaterial({
-    uniforms: THREE.UniformsUtils.merge([fogU, {}]),
-    vertexShader: TULLE_VERT, fragmentShader: TULLE_FRAG, side: THREE.DoubleSide, fog: true,
-    transparent: true, depthWrite: false });
+  const tulleMat = tulleMaterial();
   tulleMat.uniforms.uTime = uniforms.uTime; tulleMat.uniforms.uWaterLevel = uniforms.uWaterLevel;
   const crane = craneGeometry(), lace = new THREE.PlaneGeometry(0.42, 0.42).rotateX(-Math.PI / 2 + 0.25).toNonIndexed();
 

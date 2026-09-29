@@ -3,7 +3,7 @@ import { keyCode } from './input.js';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, mulberry32 } from './world.js';
 import { zoneWeights, ORIGIN } from './zones.js';
 import { t, getLang } from './i18n.js';
-import { boardTexture, carpetTexture, rugTexture } from './boards.js';
+import { boardTexture, carpetTexture, rugTexture, runnerTexture } from './boards.js';
 import { createChandeliers } from './chandeliers.js';
 import { EYE_HEIGHT } from './player.js';
 import { buildKitchen, createKitchenRig, buildScatter, tickCandles, shadeOf } from './kitchen.js';
@@ -583,7 +583,7 @@ export class SoulPath {
     const rr = mulberry32(hash2i(SEED_POSTER ^ 0x7a9, cx, cz));
     const kRoom = kitchenPlan(cx, cz);
     const addRug = (x, z, w, d, rot, pal = null) => {
-      const mat = this.atmo.prop({ map: rugTexture(Math.floor(rr() * 1e6), pal), rust: 0 });
+      const mat = this.atmo.prop({ map: pal?.runner ? runnerTexture(Math.floor(rr() * 1e6)) : rugTexture(Math.floor(rr() * 1e6), pal), rust: 0 });
       mat.polygonOffset = true; mat.polygonOffsetFactor = -1; mat.polygonOffsetUnits = -1;
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), mat);
       mesh.position.set(x, 0.003, z); mesh.rotation.y = rot;
@@ -690,6 +690,25 @@ export class SoulPath {
         const z0 = Math.max(kp.minZ + 0.3, Math.min(kp.z - 1.3, tv.z - m)), z1 = Math.min(kp.maxZ - 0.3, Math.max(kp.z + 1.3, tv.z + m));
         const sh = shadeOf(kp.x, kp.z), hex = n => '#' + n.toString(16).padStart(6, '0');
         if (x1 - x0 > 1.5 && z1 - z0 > 1.5) addRug((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, 0, { field: sh.v[1], dark: sh.v[0], light: hex(sh.fringe) });
+      }
+      // a woven runner up to the table (#38): along the most open way that is
+      // not the television's, starting past the big rug, stopping short of the wall
+      {
+        const big = bigRug ? stuff.rugs[stuff.rugs.length - 1] : null, tv = stuff.kitchen.room.tv;
+        let best = null;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (((tv.x - kp.x) * dx + (tv.z - kp.z) * dz) > 0.5) continue;             // not toward the set
+          let s0 = 0.95;
+          if (big) { const p = big.geometry.parameters; s0 = Math.max(s0, (dx ? Math.abs(big.position.x + dx * p.width / 2 - kp.x) : Math.abs(big.position.z + dz * p.height / 2 - kp.z)) + 0.05); }
+          let s1 = s0;
+          while (s1 < s0 + 4.5 && !solidAtGlobal(cellOf(kp.x + dx * (s1 + 0.3)), cellOf(kp.z + dz * (s1 + 0.3)))
+            && !solidAtGlobal(cellOf(kp.x + dx * s1 - dz * 0.45), cellOf(kp.z + dz * s1 + dx * 0.45)) && !solidAtGlobal(cellOf(kp.x + dx * s1 + dz * 0.45), cellOf(kp.z + dz * s1 - dx * 0.45))) s1 += 0.1;
+          if (s1 - s0 >= 2 && (!best || s1 - s0 > best.len)) best = { dx, dz, s0, len: s1 - s0 };
+        }
+        if (best) {
+          const mid = best.s0 + best.len / 2, len = Math.min(best.len, 4.5);
+          addRug(kp.x + best.dx * mid, kp.z + best.dz * mid, 0.8, len, best.dx ? Math.PI / 2 : 0, { runner: true });
+        }
       }
       stuff.kitchen.wisps = [0, 1, 2, 0, 1, 2].map(cat => {
         const color = SOUL_COLORS[cat];
@@ -2465,16 +2484,17 @@ export class SoulPath {
     }
 
     // grandmother's room: light the nearest one, let candles and picture breathe
-    let room = null, rd = 14;
+    let room = null, nook = null, rd = 14;
     for (const st of this.chunkStuff.values()) {
       const k = st.kitchen;
       if (!k) continue;
       k.group.visible = memoryStage;
       if (!memoryStage) continue;
       const d = Math.hypot(k.x - P.pos.x, k.z - P.pos.y);
-      if (d < rd) { rd = d; room = k.room; }
+      if (d < rd) { rd = d; room = k.room; nook = k; }
     }
     this.kitchenRig.update(room, time);
+    this.atmo?.setNook?.(nook);                         // its walls: smoke where the paper has roses (materials.js)
     // the souls in the room drift, and scatter when walked into
     for (const st of this.chunkStuff.values()) {
       const k = st.kitchen;
@@ -2598,6 +2618,19 @@ export class SoulPath {
     }
     this.audio.nearWork?.(at ? parseInt(at.art.id, 10) - 1 : null);
     this.audio.setZone?.(zone);
+  }
+
+  // Is (x, z) on a rug or a runner of the memory stage? The footsteps ask
+  // (audio.js _surface): a rug muffles them.
+  onRug(x, z) {
+    if (this.stage.stage !== 1) return false;
+    for (const st of this.chunkStuff.values()) for (const m of st.rugs || []) {
+      if (!m.visible) continue;
+      const p = m.geometry.parameters, c = Math.cos(m.rotation.y), s = Math.sin(m.rotation.y);
+      const dx = x - m.position.x, dz = z - m.position.z, lx = dx * c - dz * s, lz = dx * s + dz * c;   // into the rug's own frame
+      if (Math.abs(lx) <= p.width / 2 && Math.abs(lz) <= p.height / 2) return true;
+    }
+    return false;
   }
 
   _lineOfSight(x0, z0, x1, z1) {

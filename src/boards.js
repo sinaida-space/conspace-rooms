@@ -203,6 +203,26 @@ export function carpetTexture(seed) {
 // a rug 1.8 by 3 metres: a deep red field darkening to its border,
 // wavy cream medallions, small motifs between, wool pile, fringe at the ends.
 // pal: { field, dark, light } to take a lampshade's colours (kitchen.js SHADES)
+// A woven runner (дорожка): lengthwise, burgundy with bands of green and
+// beige across, thin light stripes at the edges, a little fringe, the weave
+// in fine lines. Same canvas size as a rug, long side down the canvas.
+export function runnerTexture(seed) {
+  const W = 216, H = 720, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), r = rnd(seed * 911 + 7);
+  g.fillStyle = '#6e1a1f'; g.fillRect(0, 0, W, H);
+  for (const x of [10, W - 16]) { g.fillStyle = '#d8c7a4'; g.fillRect(x, 0, 6, H); g.fillStyle = '#2f5a3a'; g.fillRect(x + (x < W / 2 ? 10 : -10), 0, 5, H); }
+  for (let y = 40; y < H - 40; y += 60 + Math.floor(r() * 30)) {
+    const band = r() < 0.5 ? ['#2f5a3a', '#d8c7a4'] : ['#d8c7a4', '#2f5a3a'];
+    g.fillStyle = band[0]; g.fillRect(24, y, W - 48, 10);
+    g.fillStyle = band[1]; g.fillRect(24, y + 14, W - 48, 4);
+  }
+  g.globalAlpha = 0.12; g.fillStyle = '#000';
+  for (let y = 0; y < H; y += 3) g.fillRect(0, y, W, 1);          // the weft
+  g.globalAlpha = 1; g.fillStyle = '#e2d6bc';
+  for (let x = 4; x < W; x += 6) { g.fillRect(x, 0, 2, 10); g.fillRect(x, H - 10, 2, 10); }   // fringe
+  return tex(c);
+}
+
 export function rugTexture(seed, pal = null) {
   const W = 432, H = 720, c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d'), r = rnd(seed * 7727 + 3);

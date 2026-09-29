@@ -55,6 +55,7 @@ uniform vec3  uCandleCol[8];  // their flame colours
 uniform sampler2D uWallDist; // distance to the nearest wall, one texel per cell around the visitor (see wallField)
 uniform vec2  uWallO;         // cell index of texel 0
 uniform sampler2D uWallpaper; // grandmother's wallpaper, one repeat (wallpaper.js)
+uniform vec4 uNook;           // grandmother's room nearby: minX, minZ, maxX, maxZ (off: far away)
 uniform vec4  uHaze[6];       // the fixtures in sight of the visitor: xyz centre of the glow, w = strength (flicker included)
 uniform vec4  uWater;         // level, accept, time, calm (water.js); accept 0 outside the light stage
 uniform float uProgress;      // works seen, 0..1 eased (water.js): the light stage whitens with it
@@ -473,7 +474,21 @@ void main(){
   vec3 col = vec3(0.0);
   float gloss = 0.0, g;
   if (z.x > 0.001) { col += z.x * fearWall(h, y, oct, g); gloss += z.x * g; }
-  if (z.y > 0.001) { col += z.y * memoryWall(h, y, oct, g); gloss += z.y * g; }
+  if (z.y > 0.001) {
+    vec3 mw = memoryWall(h, y, oct, g);
+    // in grandmother's room the red of the bouquets gives way to smoke: the
+    // print's red goes back to the green, and pale veils drift over the paper
+    vec2 nk = vWorldPos.xz;
+    float inNook = step(uNook.x - 0.2, nk.x) * step(nk.x, uNook.z + 0.2) * step(uNook.y - 0.2, nk.y) * step(nk.y, uNook.w + 0.2);
+    if (inNook > 0.5) {
+      float red = smoothstep(0.05, 0.2, mw.r - max(mw.g, mw.b));
+      mw = mix(mw, vec3(0.05, 0.17, 0.14) * (0.9 + 0.2 * fbm(vec2(h, y) * 3.0, 3)), red);
+      float veil = fbm(vec2(h * 0.9 + uTime * 0.03, y * 1.4 - uTime * 0.05), oct);
+      veil = smoothstep(0.45, 0.85, veil) * smoothstep(0.3, 1.4, y);
+      mw = mix(mw, vec3(0.42, 0.44, 0.43), veil * 0.45);
+    }
+    col += z.y * mw; gloss += z.y * g;
+  }
   if (z.z > 0.001) { col += z.z * acceptWall(h, y, oct, g); gloss += z.z * g; }
 
   // bump: tilt the normal along the height field (embossed print, brush
@@ -1014,6 +1029,7 @@ export function createMaterials(quality) {
     uWallDist: { value: wallTex },
     uWallO: { value: new THREE.Vector2(-1e4, -1e4) },
     uWallpaper: { value: paperTex },
+    uNook: { value: new THREE.Vector4(1e5, 1e5, 1e5, 1e5) },
     uWater: { value: new THREE.Vector4(0, 0, 0, 0) },
     uProgress: { value: 0 },
     uVanish: { value: 0 },
@@ -1141,6 +1157,8 @@ export function createMaterials(quality) {
       }
     },
     // lights: [{ x, y, z, col }] nearest first; each gets its own flicker
+    // grandmother's room nearest the visitor ({ minX, minZ, maxX, maxZ }) or null
+    setNook(r) { shared.uNook.value.set(r ? r.minX : 1e5, r ? r.minZ : 1e5, r ? r.maxX : 1e5, r ? r.maxZ : 1e5); },
     setCandles(lights, t) {
       for (let i = 0; i < 8; i++) {
         const c = lights[i];

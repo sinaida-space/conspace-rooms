@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { roundedBox } from './geom.js';
-import { CEIL_H, CELL, solidAtGlobal } from './world.js';
+import { CEIL_H, CELL, CHUNK, solidAtGlobal, wallSlots } from './world.js';
 import { t, getLang } from './i18n.js';
 import { mountOrDrop } from './placement.js';
+import { buildCeramicPot, livingPlant } from './plants.js';
+import { tulleMaterial } from './props.js';
+import { artworkSlots } from './artworks.js';
 
 // rounded edges: radius a third of the thinnest side, capped at 4 cm
 const box = (w, h, d) => roundedBox(w, h, d, Math.min(0.04, Math.min(w, h, d) * 0.3));
@@ -487,6 +490,219 @@ export function buildKitchen(parent, X, Z) {
   group.add(fringe);
   add(new THREE.SphereGeometry(0.04, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffc27a, fog: false }), 0, 2.2, 0, false);   // the bulb, inside
   add(new THREE.CylinderGeometry(0.005, 0.005, CEIL_H - 2.52, 4), plastic, 0, (CEIL_H + 2.52) / 2, 0, false);
+
+  // ── warmth (#38): a window with a radiator under it and plants on the sill,
+  // two fabric sconces on the side walls, a living ficus in a majolica pot in
+  // the corner by the window. The corridor lattice runs through these rooms,
+  // so their walls have gaps: each thing looks along a wall, stepping 0.4 m
+  // at a time, for a face whole across its width, and is left out if none.
+  // No new lights: the sconces glow on their own and lay a halo on the wall.
+  group.updateMatrixWorld(true);
+  const V = (a, b, c) => group.localToWorld(new THREE.Vector3(a, b, c));
+  const solidAt = p => solidAtGlobal(Math.floor(p.x / CELL), Math.floor(p.z / CELL));
+  // the nearest face out along (dx, dz) from the point u along the wall, whole
+  // for `half` m either side and within reach; { d, u } or null
+  const taken = [{ ...calW, r: 0.25 }, { ...V(tv.x, 0, tv.z), r: 0.6 }, { ...V(0, 0, 0), r: 0.9 }];   // the calendar on the floor, the television, the table
+  const findFace = (dx, dz, half, us, floorKeep = false) => {
+    const px = -dz, pz = dx;
+    for (const u of us) {
+      let d = null;
+      for (let s = 0.5; s < 6; s += 0.02) if (solidAt(V(dx * s + px * u, 1.4, dz * s + pz * u))) { d = s; break; }
+      if (d === null) continue;
+      const whole = [-half, -half / 2, 0, half / 2, half].every(k =>
+        solidAt(V(dx * (d + 0.06) + px * (u + k), 1.4, dz * (d + 0.06) + pz * (u + k)))
+        && !solidAt(V(dx * (d - 0.12) + px * (u + k), 1.4, dz * (d - 0.12) + pz * (u + k))));
+      // and clear of the works' wall runs: nothing hangs over a painting
+      const fp = V(dx * d + px * u, 1.4, dz * d + pz * u);
+      // and, on the floor before it, clear of what already stands or lies there
+      const ff = V(dx * (d - 0.35) + px * u, 0, dz * (d - 0.35) + pz * u);
+      if (whole && works.every(w => Math.hypot(w.x - fp.x, w.z - fp.z) > w.half + 0.9)
+        && (!floorKeep || taken.every(t => Math.hypot(t.x - ff.x, t.z - ff.z) > t.r + 0.8))) return { d, u, dx, dz };
+    }
+    return null;
+  };
+  const works = artworkSlots(Math.floor(X / (CHUNK * CELL)), Math.floor(Z / (CHUNK * CELL)), wallSlots(Math.floor(X / (CHUNK * CELL)), Math.floor(Z / (CHUNK * CELL))))
+    .map(sl => ({ x: sl.position.x, z: sl.position.z, half: sl.length * CELL / 2 }));
+  const along = [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.6, -1.6, 2.0, -2.0, 2.4, -2.4, 2.8, -2.8];
+  // a frame on the wall face: its +z into the room, its x along the wall
+  const mount = f => {
+    const g = new THREE.Group();
+    g.position.set(x + f.dx * f.d - f.dz * f.u, 0, z + f.dz * f.d + f.dx * f.u);
+    g.rotation.y = Math.atan2(-f.dx, -f.dz);
+    group.add(g);
+    return g;
+  };
+  const put = (g, geo, mat, px, py, pz, cast = true) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(px, py, pz); m.castShadow = cast; m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+  const shade = (g, w, d, px, pz, py = 0.012, opacity = 0.75) => {
+    const m = put(g, new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ map: T.blob, transparent: true, depthWrite: false, opacity, fog: true }), px, py, pz, false);
+    m.rotation.x = -Math.PI / 2; m.renderOrder = 1;
+  };
+
+  // surfaces with a body: every new thing gets a drawn texture, cached per kind
+  const skin = (key, w, h, draw) => T[key] || (T[key] = canvasTex(w, h, draw));
+  const speckle = (g, w, h, n, cols, rMax, seed) => { for (let i = 0; i < n; i++) { const k = (i * 7919 + seed) % 9973; g.fillStyle = cols[k % cols.length]; g.beginPath(); g.ellipse((k * 53) % w, (k * 97) % h, 0.5 + (k % 7) / 7 * rMax, 0.5 + (k % 5) / 5 * rMax, k, 0, 6.3); g.fill(); } };
+  const paintTex = skin('paintedWood', 128, 128, (g, w, h) => {      // old enamel paint on wood: brush lines, hairline crazing, grime in the grain
+    g.fillStyle = '#e6decb'; g.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 2) { g.fillStyle = `rgba(120,100,70,${0.04 + ((y * 31) % 7) / 90})`; g.fillRect(0, y, w, 1); }
+    g.strokeStyle = 'rgba(90,70,50,0.35)'; g.lineWidth = 0.6;
+    for (let i = 0; i < 26; i++) { g.beginPath(); let px = (i * 41) % w, py = (i * 67) % h; g.moveTo(px, py); for (let k = 0; k < 4; k++) { px += ((i * k * 13) % 11) - 5; py += ((i + k) * 7) % 9 - 4; g.lineTo(px, py); } g.stroke(); }
+    speckle(g, w, h, 30, ['rgba(70,55,40,0.5)', 'rgba(160,130,95,0.5)'], 1.6, 3);
+  });
+  const clayTex = skin('clay', 128, 128, (g, w, h) => {              // terracotta: grain, a crust of lime from watering
+    g.fillStyle = '#a4522e'; g.fillRect(0, 0, w, h);
+    speckle(g, w, h, 400, ['rgba(70,30,15,0.35)', 'rgba(200,120,80,0.35)', 'rgba(120,55,30,0.4)'], 1.2, 11);
+    const cr = g.createLinearGradient(0, 0, 0, h * 0.35); cr.addColorStop(0, 'rgba(230,225,210,0.55)'); cr.addColorStop(1, 'rgba(230,225,210,0)');
+    g.fillStyle = cr; g.fillRect(0, 0, w, h * 0.35);
+  });
+  const geraniumTex = skin('geraniumLeaf', 128, 128, (g, w, h) => {   // a zonal geranium leaf: green, a brown horseshoe band, veins from the stalk
+    g.fillStyle = '#5a8a40'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(95,55,25,0.55)'; g.lineWidth = 9; g.beginPath(); g.arc(w / 2, h / 2, w * 0.27, 0, 6.3); g.stroke();
+    g.strokeStyle = 'rgba(190,220,150,0.5)'; g.lineWidth = 1.2;
+    for (let i = 0; i < 9; i++) { const a = i / 9 * 6.28; g.beginPath(); g.moveTo(w / 2, h / 2); g.lineTo(w / 2 + Math.cos(a) * w * 0.48, h / 2 + Math.sin(a) * h * 0.48); g.stroke(); }
+    speckle(g, w, h, 120, ['rgba(40,70,25,0.3)', 'rgba(140,190,100,0.25)'], 1, 5);
+  });
+  const aloeTex = skin('aloe', 64, 128, (g, w, h) => {               // aloe: grey-green, pale spots in rows
+    g.fillStyle = '#7f9a86'; g.fillRect(0, 0, w, h);
+    speckle(g, w, h, 90, ['rgba(225,235,220,0.55)', 'rgba(60,80,65,0.3)'], 1.8, 17);
+  });
+  const enamelTex = skin('mugEnamel', 128, 64, (g, w, h) => {        // white enamel, a blue rim, chips down to the black iron
+    g.fillStyle = '#f1ede4'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#1d3f8a'; g.fillRect(0, 0, w, 5);
+    speckle(g, w, h, 14, ['#1a1a1c', '#3a3530'], 2.4, 23);
+  });
+  const fabricTex = skin('sconceFabric', 256, 64, (g, w, h) => {      // pleated silk: light and shade in every fold, a woven band at each edge
+    for (let x = 0; x < w; x++) { const f = 0.5 + 0.5 * Math.sin(x / w * Math.PI * 2 * 24); g.fillStyle = `rgb(${Math.round(200 + 45 * f)},${Math.round(150 + 40 * f)},${Math.round(90 + 30 * f)})`; g.fillRect(x, 0, 1, h); }
+    g.fillStyle = 'rgba(120,70,30,0.8)'; g.fillRect(0, 0, w, 4); g.fillRect(0, h - 4, w, 4);
+  });
+
+  // the window, a starry night in it: on the wall across from the television if it has room, else a side wall
+  const win = findFace(0, -1, 0.62, along, true) || findFace(-1, 0, 0.62, along, true) || findFace(1, 0, 0.62, along, true);
+  if (win) {
+    const wg = mount(win), frameMat = std({ map: paintTex, roughness: 0.5, emissive: 0x1c1e26 });   // a little of the night sky on the paint
+    const sky = T.starSky || (T.starSky = canvasTex(128, 256, (g, w, h) => {
+      const gr = g.createLinearGradient(0, 0, 0, h);         // a starry night: deep blue, a little lighter toward the roofs
+      gr.addColorStop(0, '#060a1c'); gr.addColorStop(0.75, '#16204a'); gr.addColorStop(1, '#27305a');
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 140; i++) {                           // stars, a few bright ones with a soft glow
+        const sx = (i * 73.13) % w, sy = (i * 151.7) % (h * 0.85), big = i % 17 === 0;
+        g.fillStyle = `rgba(255,${240 + (i % 15)},${210 + (i % 40)},${big ? 1 : 0.35 + (i % 5) * 0.12})`;
+        g.fillRect(sx, sy, big ? 2 : 1, big ? 2 : 1);
+        if (big) { const gl = g.createRadialGradient(sx + 1, sy + 1, 0, sx + 1, sy + 1, 5); gl.addColorStop(0, 'rgba(255,245,220,0.35)'); gl.addColorStop(1, 'rgba(255,245,220,0)'); g.fillStyle = gl; g.fillRect(sx - 5, sy - 5, 12, 12); }
+      }
+      g.fillStyle = '#05060c'; for (let i = 0; i < w; i += 9) g.fillRect(i, h - 14 - (i * 37 % 17), 9, 20);   // rooftops
+    }));
+    put(wg, new THREE.PlaneGeometry(0.86, 1.08), new THREE.MeshBasicMaterial({ map: sky, fog: false }), 0, 1.45, 0.012, false).receiveShadow = false;
+    for (const [w, h, px, py] of [[0.98, 0.06, 0, 2.02], [0.98, 0.06, 0, 0.88], [0.06, 1.2, -0.46, 1.45], [0.06, 1.2, 0.46, 1.45], [0.03, 1.08, 0, 1.45], [0.86, 0.03, 0, 1.72]])
+      put(wg, box(w, h, 0.05), frameMat, px, py, 0.03);
+    put(wg, box(1.12, 0.035, 0.26), frameMat, 0, 0.86, 0.13);                                   // the sill
+    // drawn: the lace tulle of the light's windows (props.js), from a brass
+    // rod to just below the sill, the plants behind it, the radiator under it
+    const tulle = put(wg, new THREE.PlaneGeometry(1.3, 1.78, 12, 18).translate(0, 1.72, 0.31), tulleMaterial(), 0, 0, 0, false);
+    tulle.geometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(new Array(tulle.geometry.attributes.position.count).fill(X * 7.3 + Z), 1));
+    tulle.receiveShadow = false; tulle.renderOrder = 2;
+    tulle.onBeforeRender = () => { tulle.material.uniforms.uTime.value = performance.now() / 1000; };
+    put(wg, new THREE.CylinderGeometry(0.012, 0.012, 1.5, 10).rotateZ(Math.PI / 2), brass, 0, 2.63, 0.32);
+    for (const sx of [-0.76, 0.76]) put(wg, new THREE.SphereGeometry(0.026, 10, 8), brass, sx, 2.63, 0.32);
+    for (const sx of [-0.6, 0.6]) put(wg, box(0.018, 0.018, 0.32), brass, sx, 2.63, 0.16);
+    for (let k = 0; k < 11; k++) put(wg, new THREE.TorusGeometry(0.02, 0.004, 4, 10).rotateY(Math.PI / 2), brass, -0.6 + k * 0.12, 2.625, 0.32, false);
+
+    // cast-iron radiator, cream paint gone to chips, on two pipes
+    const iron = std({ map: T.chipped || (T.chipped = canvasTex(128, 128, (g, w, h) => {
+      g.fillStyle = '#e4dccb'; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 60; i++) { g.fillStyle = i % 3 ? 'rgba(60,50,44,0.55)' : 'rgba(150,120,90,0.4)'; g.beginPath(); g.ellipse((i * 53) % w, (i * 97) % h, 1 + (i % 4), 1 + (i % 3), i, 0, 6.3); g.fill(); }
+    })), roughness: 0.6, emissive: 0x1c1814 });
+    const nSec = 8, secW = 0.075;
+    for (let i = 0; i < nSec; i++) {
+      const sx = (i - (nSec - 1) / 2) * secW;
+      put(wg, box(secW * 0.8, 0.5, 0.14), iron, sx, 0.4, 0.14);
+      for (const sy of [0.17, 0.63]) put(wg, new THREE.CylinderGeometry(0.028, 0.028, secW, 10).rotateZ(Math.PI / 2), iron, sx, sy, 0.14);
+    }
+    for (const sx of [-1, 1]) put(wg, new THREE.CylinderGeometry(0.014, 0.014, 0.17, 8), iron, sx * (nSec * secW / 2 + 0.02), 0.085, 0.14);
+    shade(wg, 0.8, 0.35, 0, 0.16);
+
+    // geranium in a clay pot, aloe in an enamel mug, on the sill
+    const sill = 0.878, sz = 0.14;
+    const clay = std({ map: clayTex, roughness: 0.85, emissive: 0x2e160c });
+    put(wg, new THREE.LatheGeometry([[0, 0], [0.05, 0], [0.065, 0.1], [0.07, 0.11], [0.066, 0.115]].map(([r, y]) => new THREE.Vector2(r, y)), 16), clay, -0.3, sill, sz);
+    const leafMat = std({ map: geraniumTex, roughness: 0.6, side: THREE.DoubleSide, emissive: 0x1e3314 }), stemMat = std({ color: 0x4f7a3a, roughness: 0.6, emissive: 0x1e3314 }), bloom = std({ color: 0xc3172a, roughness: 0.5, emissive: 0x4a060c });
+    const scallop = new THREE.Shape();
+    for (let i = 0; i <= 48; i++) { const a = i / 48 * Math.PI * 2, r = 0.045 * (1 + 0.07 * Math.cos(a * 9)); i ? scallop.lineTo(Math.cos(a) * r, Math.sin(a) * r) : scallop.moveTo(r, 0); }
+    const leafGeo = new THREE.ShapeGeometry(scallop);
+    { const q = leafGeo.attributes.position, uv = leafGeo.attributes.uv; for (let i = 0; i < q.count; i++) uv.setXY(i, q.getX(i) / 0.1 + 0.5, q.getY(i) / 0.1 + 0.5); }
+    for (let i = 0; i < 9; i++) {
+      const a = i * 2.4, r = 0.05 + (i % 3) * 0.025;
+      put(wg, leafGeo, leafMat, -0.3 + Math.cos(a) * r, sill + 0.14 + (i % 4) * 0.025, sz + Math.sin(a) * r * 0.7).rotation.set(-Math.PI / 2 + 0.5 * Math.cos(a), a, 0);
+    }
+    for (let c = 0; c < 4; c++) {
+      const a = c * 1.7, cx0 = -0.3 + Math.cos(a) * 0.06, cz0 = sz + Math.sin(a) * 0.04, cy = sill + 0.27 + (c % 2) * 0.04;
+      put(wg, new THREE.CylinderGeometry(0.003, 0.003, cy - sill - 0.1, 5), stemMat, cx0, (cy + sill + 0.1) / 2, cz0);
+      for (let f = 0; f < 9; f++) put(wg, new THREE.SphereGeometry(0.012, 8, 6), bloom, cx0 + Math.cos(f * 2.4) * 0.022 * Math.sqrt(f / 9), cy + Math.sin(f) * 0.008, cz0 + Math.sin(f * 2.4) * 0.022 * Math.sqrt(f / 9), false);
+    }
+    put(wg, new THREE.CylinderGeometry(0.05, 0.045, 0.1, 18, 1, true), std({ map: enamelTex, roughness: 0.25, side: THREE.DoubleSide }), 0.3, sill + 0.05, sz);
+    put(wg, new THREE.CircleGeometry(0.047, 18).rotateX(-Math.PI / 2), std({ color: 0x2a1c14, roughness: 1 }), 0.3, sill + 0.085, sz);   // soil in the mug
+    for (const [bx, bw] of [[-0.3, 0.2], [0.3, 0.16]]) shade(wg, bw, bw, bx, sz, sill + 0.004, 0.6);   // the pots' shadows on the sill
+    put(wg, new THREE.TorusGeometry(0.05, 0.004, 6, 24).rotateX(Math.PI / 2), std({ color: 0x1d3f8a, roughness: 0.3 }), 0.3, sill + 0.1, sz);
+    const aloe = std({ map: aloeTex, roughness: 0.45, emissive: 0x202c26 });
+    for (let i = 0; i < 11; i++) {
+      const a = i * 2.39996, lean = 0.25 + (i % 4) * 0.12, len = 0.16 + (i % 3) * 0.04;
+      put(wg, new THREE.ConeGeometry(0.014, len, 6).scale(1, 1, 0.45).translate(0, len / 2, 0), aloe, 0.3, sill + 0.08, sz).rotation.set(Math.sin(a) * lean, a, Math.cos(a) * lean, 'YXZ');
+    }
+
+    // the living ficus in its majolica pot, on the floor beside the window
+    for (const side of [1, -1]) {
+      const fx = side * 0.95, table = V(0, 0, 0);
+      wg.updateMatrixWorld(true);
+      const w = wg.localToWorld(new THREE.Vector3(fx, 0.5, 0.35)), back = wg.localToWorld(new THREE.Vector3(fx, 1.0, -0.06));
+      if (solidAt(w) || !solidAt(back) || Math.hypot(w.x - table.x, w.z - table.z) < 1.3 || taken.some(t => Math.hypot(t.x - w.x, t.z - w.z) < t.r + 0.45)) continue;
+      const pot = buildCeramicPot(), plant = livingPlant(pot.userData.soilY);
+      // far from the lamp by the window: a little light of their own, as if from the room around
+      for (const o of [pot, plant]) o.traverse(m => { if (m.material?.emissive) { m.material = m.material.clone(); m.material.emissive.set(o === plant ? 0x2c5a30 : 0x3a342c); } });
+      for (const o of [pot, plant]) { o.position.set(fx, 0, 0.35); o.rotation.y = side * 0.7; o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); wg.add(o); }
+      shade(wg, 0.6, 0.6, fx, 0.35);
+      break;
+    }
+  }
+
+  // two sconces with pleated fabric shades, on the walls that are not the window's
+  // the shade: pleated silk lit from within, darker outside, glowing inside
+  const shadeOut = std({ map: fabricTex, roughness: 0.95, emissive: 0xffffff, emissiveMap: fabricTex, emissiveIntensity: 0.35, side: THREE.FrontSide });
+  const shadeIn = new THREE.MeshBasicMaterial({ color: 0xffc27a, side: THREE.BackSide, fog: false });
+  const halo = T.halo || (T.halo = canvasTex(64, 64, (g, w, h) => {
+    const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    gr.addColorStop(0, 'rgba(255,190,110,0.9)'); gr.addColorStop(1, 'rgba(255,170,90,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  }));
+  const pleated = T.pleated || (T.pleated = (() => {
+    const g = new THREE.LatheGeometry([[0.08, 0.2], [0.12, 0.1], [0.16, 0]].map(([r, y]) => new THREE.Vector2(r, y)), 48);
+    const q = g.attributes.position;
+    for (let i = 0; i < q.count; i++) { const a = Math.atan2(q.getZ(i), q.getX(i)), k = 1 + 0.05 * Math.abs(Math.sin(a * 12)); q.setX(i, q.getX(i) * k); q.setZ(i, q.getZ(i) * k); }
+    g.computeVertexNormals();
+    return g;
+  })());
+  const sconceArm = T.sconceArm || (T.sconceArm = new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(
+    new THREE.Vector3(0, 1.5, 0.02), new THREE.Vector3(0, 1.5, 0.22), new THREE.Vector3(0, 1.72, 0.22)), 16, 0.008, 6));
+  let sconces = 0;
+  for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1]]) {
+    if (sconces === 2 || (win && dx === win.dx && dz === win.dz)) continue;
+    const f = findFace(dx, dz, 0.2, along);
+    if (!f) continue;
+    const sg = mount(f);
+    put(sg, new THREE.CylinderGeometry(0.045, 0.05, 0.02, 20).rotateX(Math.PI / 2), brass, 0, 1.5, 0.01);   // the backplate
+    put(sg, sconceArm, brass, 0, 0, 0);                                                                       // an arm curving out and up
+    put(sg, pleated, shadeOut, 0, 1.64, 0.22);                                                                 // the shade on top of it
+    put(sg, pleated, shadeIn, 0, 1.64, 0.22, false);
+    for (const [r, y] of [[0.165, 1.64], [0.085, 1.84]]) put(sg, new THREE.TorusGeometry(r, 0.005, 5, 32).rotateX(Math.PI / 2), brass, 0, y, 0.22);   // trims at both edges
+    put(sg, new THREE.SphereGeometry(0.03, 12, 10), new THREE.MeshBasicMaterial({ color: 0xffe2b0, fog: false }), 0, 1.74, 0.22, false);
+    // on the wall: light up and down out of the shade, and the arm's shadow
+    put(sg, new THREE.PlaneGeometry(0.7, 1.3), new THREE.MeshBasicMaterial({ map: halo, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }), 0, 1.72, 0.006, false).receiveShadow = false;
+    put(sg, new THREE.PlaneGeometry(0.1, 0.35), new THREE.MeshBasicMaterial({ map: T.blob, transparent: true, depthWrite: false, opacity: 0.6, fog: true }), 0.04, 1.47, 0.004, false).receiveShadow = false;
+    sconces++;
+  }
 
   return {
     flames, screens,
