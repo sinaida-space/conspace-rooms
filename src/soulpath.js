@@ -374,60 +374,30 @@ export class SoulPath {
     this._soulIdx = [0, 0, 0];            // next question per soul
     this._soulAt = -1e9; this._walked = SOUL_WALK; this._lastPos = null; // gate between souls
     // guide: five presses of the M key (any layout: physical key) toggles it
-    this.guide = null; this._mTimes = []; this._fiveTimes = [];
+    this.guide = null; this._mTimes = [];
     addEventListener('keydown', e => {
       if (keyCode(e) !== 'KeyM' || e.repeat) return;
       const now = performance.now();
       this._mTimes = this._mTimes.filter(tm => now - tm < 2500).concat(now);
       if (this._mTimes.length >= 5) { this._mTimes = []; this._toggleGuide(); }
     });
+    // five presses of one digit within 3 s: 1 fear, 2 the grandmother's
+    // zone, 3 acceptance, 0 acceptance and straight into the finale. Each
+    // answers with a flash even when the visitor is already there.
+    this._codeKey = null; this._codeTimes = [];
+    const CODES = { Digit1: 0, Digit2: 1, Digit3: 2, Digit0: 'finale' };
     addEventListener('keydown', e => {
-      if ((keyCode(e) !== 'Digit5' && keyCode(e) !== 'Numpad5') || e.repeat) return;
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = keyCode(e).replace('Numpad', 'Digit');
+      if (!(k in CODES)) { this._codeTimes = []; return; }
       const now = performance.now();
-      this._fiveTimes = this._fiveTimes.filter(tm => now - tm < 3000).concat(now);
-      if (this._fiveTimes.length >= 5) { this._fiveTimes = []; this._jumpToRoom(); }
-    });
-    // five presses of 7: stand before the last work, every other one already seen
-    this._sevenTimes = [];
-    addEventListener('keydown', e => {
-      if ((keyCode(e) !== 'Digit7' && keyCode(e) !== 'Numpad7') || e.repeat) return;
-      const now = performance.now();
-      this._sevenTimes = this._sevenTimes.filter(tm => now - tm < 3000).concat(now);
-      if (this._sevenTimes.length >= 5) { this._sevenTimes = []; this._jumpToLastWork(); }
-    });
-
-    // five presses of B: chevrons on the floor to the nearest grandmother's
-    // room (the red rooms, if the visitor is still in the hospital); once it
-    // is found they go out and the souls begin to wander
-    this._bTimes = [];
-    addEventListener('keydown', e => {
-      if (keyCode(e) !== 'KeyB' || e.repeat) return;
-      const now = performance.now();
-      this._bTimes = this._bTimes.filter(tm => now - tm < 3000).concat(now);
-      if (this._bTimes.length < 5) return;
-      this._bTimes = [];
-      if (this.stage.set(1)) this.post?.burst(1.4);
-      if (this.visitedRoom) return;
-      this._guideRoom = true;
-      if (!this.guide) this._toggleGuide();
-    });
-
-    // five presses of 0: straight into the light, the acceptance stage
-    this._zeroTimes = [];
-    addEventListener('keydown', e => {
-      if ((keyCode(e) !== 'Digit0' && keyCode(e) !== 'Numpad0') || e.repeat) return;
-      const now = performance.now();
-      this._zeroTimes = this._zeroTimes.filter(tm => now - tm < 3000).concat(now);
-      if (this._zeroTimes.length >= 5) { this._zeroTimes = []; if (this.stage.set(2)) this.post?.burst(1.4); }
-    });
-
-    // five presses of 1: back into fear, the hospital, from wherever
-    this._oneTimes = [];
-    addEventListener('keydown', e => {
-      if ((keyCode(e) !== 'Digit1' && keyCode(e) !== 'Numpad1') || e.repeat) return;
-      const now = performance.now();
-      this._oneTimes = this._oneTimes.filter(tm => now - tm < 3000).concat(now);
-      if (this._oneTimes.length >= 5) { this._oneTimes = []; if (this.stage.set(0)) this.post?.burst(1.4); }
+      if (k !== this._codeKey) { this._codeKey = k; this._codeTimes = []; }
+      this._codeTimes = this._codeTimes.filter(tm => now - tm < 3000).concat(now);
+      if (this._codeTimes.length < 5) return;
+      this._codeTimes = [];
+      const c = CODES[k];
+      if (c === 'finale') this._cheatFinale();
+      else { this.stage.set(c); this.post?.burst(1.4); }
     });
 
     // doors take part in collision: wrap World's wall query once
@@ -1883,57 +1853,20 @@ export class SoulPath {
     }
   }
 
-  // Straight into the nearest grandmother's room, the world switched to the
-  // red rooms on the way.
-  _jumpToRoom() {
-    const P = this.player;
-    const cx = Math.floor(P.pos.x / (CHUNK * CELL)), cz = Math.floor(P.pos.y / (CHUNK * CELL));
-    let best = null, bd = Infinity;
-    for (let dz = -12; dz <= 12; dz++) for (let dx = -12; dx <= 12; dx++) {
-      const k = kitchenPlan(cx + dx, cz + dz);
-      if (!k) continue;
-      const d = Math.hypot(k.x - P.pos.x, k.z - P.pos.y);
-      if (d < bd) { bd = d; best = k; }
-    }
-    if (!best) return;
-    if (this.artworks.inspecting) this.artworks._closeInspect();
-    this.player.auto = null;
-    this.stage.set(1);
-    // stand a step from the table, looking at it
-    const sx = best.x - 1.4, sz = best.z - 1.4;
-    const ok = !solidAtGlobal(cellOf(sx), cellOf(sz));
-    P.pos.set(ok ? sx : best.x, ok ? sz : best.z - 1.2);
-    P.vel.set(0, 0);
-    P.yaw = Math.atan2(-(best.x - P.pos.x), -(best.z - P.pos.y));
-    P.pitch = -0.25;
-    this._prevPos = { x: P.pos.x, z: P.pos.y };      // not a walk through anything
-    this.world.update(P.pos.x, P.pos.y);
-    this.post?.burst(1.4);
-  }
-
-  // Cheat 77777: the nearest hanging work becomes the last one. Every other
-  // work counts as seen (the rose shows 17), and the visitor stands before it.
-  _jumpToLastWork() {
-    const P = this.player;
+  // Cheat 00000: the finale always happens in acceptance. From anywhere
+  // else the world first turns to the light, then every work counts as
+  // seen and the arch of roses rises.
+  _cheatFinale() {
     if (this.finale) return;
     if (this.artworks.inspecting) this.artworks._closeInspect();
-    P.auto = null;
-    let best = null, bd = Infinity;
-    for (const a of this.artworks.active) {
-      const d = Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y);
-      if (d < bd) { bd = d; best = a; }
-    }
-    if (!best) return;
-    this.seen.clear();
-    for (const a of this.artworks.list) if (a.id !== best.art.id) this.seen.add(a.id);
-    const n = best.normal;
-    P.pos.set(best.centerWorld.x + n.x * 1.7, best.centerWorld.z + n.z * 1.7);   // across the corridor
-    P.vel.set(0, 0);
-    P.yaw = Math.atan2(n.x, n.z);                      // facing the work
-    P.pitch = 0;
-    this._prevPos = { x: P.pos.x, z: P.pos.y };
-    this.world.update(P.pos.x, P.pos.y);
+    this.player.auto = null;
+    const wait = this.stage.set(2) ? 2600 : 0;          // the stage blend takes 2.5 s
     this.post?.burst(1.4);
+    setTimeout(() => {
+      if (this.finale) return;
+      for (const a of this.artworks.list) this.seen.add(a.id);
+      this._beginFinale();
+    }, wait);
   }
 
   // ── guide ──────────────────────────────────────────────────────────────
@@ -1970,7 +1903,6 @@ export class SoulPath {
 
   _updateGuide(dt, time) {
     const g = this.guide;
-    if (this._guideRoom && this.visitedRoom) { this._guideRoom = false; this._toggleGuide(); return; }   // B×5 led here: its work is done
     g.t -= dt;
     g.mesh.material.opacity = 0.6 + 0.35 * Math.sin(time * 4);
     if (g.t > 0) return;
@@ -2282,7 +2214,7 @@ export class SoulPath {
       this._seenShown = this.seen.size;
       // count each newly-seen work into the stage it was seen in, however it
       // got into `seen` — normal viewing, a console poke while testing, or
-      // a cheat like 77777 that adds several at once
+      // a cheat like 00000 that adds several at once
       for (const id of this.seen) if (!this._stageSeenIds.has(id)) { this._stageSeenIds.add(id); this.stageSeen[this.stage.stage]++; }
       this._gutterCandles(time);
       this.roses.set(this.seen.size, t('rosesLabel', { n: this.seen.size, total: this.total }));

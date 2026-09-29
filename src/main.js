@@ -206,6 +206,19 @@ async function boot() {
     muteBtn.classList.toggle('muted', muted);
     muteBtn.querySelector('span').textContent = t(muted ? 'soundOff' : 'soundOn');
   });
+  // one volume for everything, remembered on this device
+  const volBox = document.getElementById('vol'), volRange = document.getElementById('vol-range');
+  let vol = 1;
+  try { const v = parseFloat(localStorage.getItem('conspace-volume')); if (v >= 0 && v <= 1) vol = v; } catch (e) { /* storage blocked */ }
+  volRange.value = String(Math.round(vol * 100));
+  volRange.setAttribute('aria-label', t('volume'));
+  audio.setVolume(vol);
+  if (!GALLERY) volBox.classList.remove('hidden');
+  volRange.addEventListener('input', () => {
+    vol = volRange.value / 100;
+    audio.setVolume(vol);
+    try { localStorage.setItem('conspace-volume', String(vol)); } catch (e) {}
+  });
 
   router.on('dive', delta => { if (player) player.zoom(delta); });
   router.on('drive', v => { if (player) player.setDrive(v); });

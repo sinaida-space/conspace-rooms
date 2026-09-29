@@ -10,7 +10,7 @@ export class AudioEngine {
   start() {
     if (this.ctx) { this.ctx.resume(); return; }
     const ctx = this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    this.master = ctx.createGain(); this.master.gain.value = 0.9;
+    this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : 0.9 * (this._volume ?? 1);
     this.master.connect(ctx.destination);
     // everything that is "the corridor" (drone, crackle, whisper, footsteps,
     // turns, the works' notes) goes through bed; a work's own sound world

@@ -622,6 +622,8 @@ body.gallery #final-card .fc-actions { display: none; }   /* nobody clicks in a 
 #hud-menu .tape:nth-child(2) { --tilt: -0.8deg; }
 #hud-menu .tape:nth-child(3) { --tilt: 2deg; }
 #hud-menu .tape:nth-child(4) { --tilt: -1.8deg; }
+#vol.tape { display: flex; align-items: center; gap: 0.7em; cursor: default; }
+#vol-range { width: 7em; accent-color: #b3121c; cursor: pointer; }
 #btn-mute.tape { position: static; width: auto; height: auto; border-radius: 0; font-size: 0.95rem; }
 #btn-mute.muted { color: #6d6556; }
 
