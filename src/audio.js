@@ -192,6 +192,97 @@ export class AudioEngine {
     this.water.drip(dx, dz, dist, yaw);
   }
 
+  // ── the event director's sounds (#43, C4, events.js) ─────────────────────
+  // Heard from where they happen: dx/dz the direction from the listener
+  // (world), dist in metres; panned and softened with distance, some of it
+  // into the corridor's room so it carries.
+  _at(dx, dz, dist) {
+    const ctx = this.ctx, d = Math.max(0.5, dist), yaw = window.__app?.player?.yaw ?? 0;
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = Math.max(-1, Math.min(1, (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / d));
+    const g = ctx.createGain(); g.gain.value = 1 / (1 + d / 4);
+    pan.connect(g); g.connect(this.bed); g.connect(this.water._room());
+    return pan;
+  }
+
+  // a floorboard or an old hinge somewhere: a slow stick-slip saw through two resonances
+  creak(dx, dz, dist, { low = false } = {}) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime, dur = 0.5 + Math.random() * 0.6, out = this._at(dx, dz, dist);
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    const curve = new Float32Array(24);
+    let f = (low ? 110 : 190) + Math.random() * 50;
+    for (let i = 0; i < curve.length; i++) { f = Math.max(low ? 70 : 130, f + (Math.random() - 0.45) * 26); curve[i] = f; }
+    o.frequency.setValueCurveAtTime(curve, t, dur);
+    const slip = ctx.createOscillator(); slip.type = 'square'; slip.frequency.setValueAtTime(14, t); slip.frequency.linearRampToValueAtTime(30, t + dur);
+    const amp = ctx.createGain(); amp.gain.value = 0.5;
+    const slipG = ctx.createGain(); slipG.gain.value = 0.5;
+    slip.connect(slipG); slipG.connect(amp.gain);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(0.09, t + 0.1);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    for (const [fr, q] of [[low ? 520 : 820, 4], [low ? 1300 : 2100, 6]]) {
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fr; bp.Q.value = q;
+      amp.connect(bp); bp.connect(env);
+    }
+    o.connect(amp); env.connect(out);
+    o.start(t); slip.start(t); o.stop(t + dur + 0.05); slip.stop(t + dur + 0.05);
+  }
+
+  // knocks: metal on a pipe (a ringing partial) or knuckles on a wooden door
+  knock(dx, dz, dist, { metal = false, n = 2 + Math.floor(Math.random() * 2) } = {}) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, out = this._at(dx, dz, dist);
+    for (let k = 0; k < n; k++) {
+      const t = ctx.currentTime + k * (0.28 + Math.random() * 0.12);
+      const o = ctx.createOscillator(); o.type = metal ? 'sine' : 'triangle';
+      o.frequency.setValueAtTime(metal ? 420 + Math.random() * 40 : 120 + Math.random() * 20, t);
+      o.frequency.exponentialRampToValueAtTime(metal ? 400 : 70, t + 0.2);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(metal ? 0.18 : 0.5, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (metal ? 0.9 : 0.16));
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + 1);
+      const nb = ctx.createBufferSource(); nb.buffer = this._noiseBuf();
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = metal ? 2400 : 900; bp.Q.value = 1.4;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.25, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+      nb.connect(bp); bp.connect(ng); ng.connect(out); nb.start(t); nb.stop(t + 0.05);
+    }
+  }
+
+  // a thing off the wall hits the floor (glass: a few bright tinkles after), or the water
+  fall(dx, dz, dist, { glass = false, wet = false } = {}) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime, out = this._at(dx, dz, dist);
+    const burst = (at, type, fr, q, peak, dur) => {
+      const nb = ctx.createBufferSource(); nb.buffer = this._noiseBuf();
+      const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = fr; f.Q.value = q;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(peak, at + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      nb.connect(f); f.connect(g); g.connect(out); nb.start(at); nb.stop(at + dur + 0.02);
+    };
+    if (wet) {                                        // a slap on the water, then it gulps and goes down
+      burst(t, 'lowpass', 1400, 0.7, 0.6, 0.25);
+      burst(t + 0.02, 'bandpass', 500, 1.2, 0.4, 0.4);
+      for (let k = 0; k < 4; k++) {
+        const b = t + 0.3 + k * (0.12 + Math.random() * 0.15), o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.setValueAtTime(300 + Math.random() * 300, b); o.frequency.exponentialRampToValueAtTime(900, b + 0.05);
+        g.gain.setValueAtTime(0.0001, b); g.gain.exponentialRampToValueAtTime(0.06, b + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, b + 0.06);
+        o.connect(g); g.connect(out); o.start(b); o.stop(b + 0.08);
+      }
+      return;
+    }
+    const o = ctx.createOscillator(), g = ctx.createGain();             // the body landing
+    o.type = 'triangle'; o.frequency.setValueAtTime(95, t); o.frequency.exponentialRampToValueAtTime(50, t + 0.18);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.6, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.25);
+    burst(t, 'bandpass', 1600, 0.9, 0.5, 0.09);
+    burst(t + 0.16, 'bandpass', 1900, 1.1, 0.18, 0.06);                 // it bounces once
+    if (glass) for (let k = 0; k < 6; k++) burst(t + 0.04 + Math.random() * 0.35, 'bandpass', 4200 + Math.random() * 3500, 12, 0.12, 0.05);
+  }
+
   // subtle whoosh/tick tied to turn rate (rad/s), same shape as motion()
   turn(yawRate) {
     if (!this.ctx || !this.turnFilter || !Number.isFinite(yawRate)) return;

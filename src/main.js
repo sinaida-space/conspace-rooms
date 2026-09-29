@@ -141,6 +141,7 @@ async function boot() {
         window.__app.spots?.update(elapsed, camera.position, dustLight);
       }
       if (window.__app.soul) window.__app.soul.update(dt, elapsed, zone);
+      window.__app.events?.update(dt);
       window.__app.water?.update(dt, elapsed, player, window.__app.soul, audio);
       if (artworks) { artworks.sync(); artworks.update(dt); }
       speed = player.vel.length();
@@ -356,6 +357,8 @@ async function boot() {
     window.__app.spots = createSpots(scene, quality);
     const { SoulPath } = await import('./soulpath.js');
     window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo });
+    const { EventDirector } = await import('./events.js');
+    window.__app.events = new EventDirector({ scene, world, player, audio, atmo, stage, soul: window.__app.soul });   // one event every 20-40 s (#43)
     if (['clouds', 'fogtop', 'plants'].some(k => new URLSearchParams(location.search).has(k))) stage.set(2);   // a ceiling sketch: straight into the light to judge it
     const plantDraft = new URLSearchParams(location.search).get('plantdraft');   // fear|room|accept|strelitzia|alocasia|fiddle|calathea: one draft plant in front of the visitor (#39)
     if (plantDraft && !['fear', 'room'].includes(plantDraft)) stage.set(2);

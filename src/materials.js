@@ -1095,11 +1095,10 @@ export function createMaterials(quality) {
   materials.wall.vertexShader = VERT_WALL;
   materials.floor.vertexShader = VERT_FLOOR;
 
-  // Flicker: a fixture near the visitor stutters now and then. How often
-  // depends on the zone: constant unease in FEAR, rare in MEMORY, never in
-  // ACCEPTANCE (caller passes the zone weights).
-  let idle = rand(4, 10);
-  let active = 0;
+  // Flicker: a fixture near the visitor stutters, only when the event
+  // director asks (#43, events.js: one event every 20-40 s), never in the
+  // light. shiver: the candles' flames shudder together for a moment.
+  let pending = 0, active = 0, shiver = 0;
   // footstep trail: a ring buffer of the last few places walked through
   let trailHead = 0, sinceSample = 0;
   const lastPos = new THREE.Vector2(1e5, 1e5);
@@ -1128,6 +1127,9 @@ export function createMaterials(quality) {
     setWater(level, accept, time, calm, progress = 0) { shared.uWater.value.set(level, accept, time, calm); shared.uProgress.value = progress; },
     setWaveTex(tex) { shared.uWaveTex.value = tex; },
     setVanish(v) { shared.uVanish.value = v; },
+    // the event director (events.js): a fixture near the visitor stutters (strength ~1), the candles shudder (seconds)
+    flicker(strength = 1) { pending = strength; },
+    shiverCandles(seconds = 1.5) { shiver = seconds; },
     dbg: shared.uDbg.value,   // debug.js   // the finale (soulpath.js)
     // camPos: viewer position; zone: zoneWeights() at the viewer
     update(dt, t, camPos, zone) {
@@ -1163,19 +1165,15 @@ export function createMaterials(quality) {
         if (active <= 0) {
           shared.uFlickerAmt.value = 1;
           shared.uFlickerTile.value.set(1e5, 1e5);
-          idle = fear > 0.5 ? rand(4, 12) : rand(30, 70);
         }
-      } else {
-        idle -= dt;
-        if (idle <= 0 && (zone ? zone.accept < 0.5 : true)) {
-          const tx = lampLineNear(camPos.x / CELL, Math.round(rand(-1.4, 1.4)));
-          const tz = lampLineNear(camPos.z / CELL, Math.round(rand(-1.4, 1.4)));
-          shared.uFlickerTile.value.set(tx, tz);
-          active = rand(0.4, 1.1) * (0.6 + fear);
-        } else if (idle <= 0) {
-          idle = rand(20, 40);
-        }
+      } else if (pending > 0) {
+        const tx = lampLineNear(camPos.x / CELL, Math.round(rand(-1.4, 1.4)));
+        const tz = lampLineNear(camPos.z / CELL, Math.round(rand(-1.4, 1.4)));
+        shared.uFlickerTile.value.set(tx, tz);
+        active = rand(0.6, 1.3) * (0.6 + fear) * pending;
+        pending = 0;
       }
+      shiver = Math.max(0, shiver - dt);
       // the fixtures whose haze the visitor can see
       const cand = [];
       for (let kx = -2; kx <= 2; kx++) for (let kz = -2; kz <= 2; kz++) {
@@ -1207,7 +1205,8 @@ export function createMaterials(quality) {
       for (let i = 0; i < 8; i++) {
         const c = lights[i];
         if (!c) { shared.uCandle.value[i].w = 0; continue; }
-        const fl = 0.8 + 0.12 * Math.sin(t * 11 + i * 1.7) + 0.08 * Math.sin(t * 29 + i * 5.3);
+        let fl = 0.8 + 0.12 * Math.sin(t * 11 + i * 1.7) + 0.08 * Math.sin(t * 29 + i * 5.3);
+        if (shiver > 0) fl *= 1 - Math.min(1, shiver) * (0.45 + 0.35 * Math.sin(t * 37 + i * 2.3));   // a draught through every flame
         shared.uCandle.value[i].set(c.x, c.y, c.z, 3.2 * fl);
         shared.uCandleCol.value[i].copy(c.col);
       }
