@@ -176,6 +176,23 @@ export class EventDirector {
     return { dist: w.d };
   }
 
+  // Where a hung thing would come to rest: out from the wall by `out`, along it
+  // by `slide`, at least CLEAR from every candle and every thing already down
+  // in its chunk and the ones round it. Null when no such spot is left.
+  _landing(h) {
+    const CLEAR = 0.38, m = h.mesh, near = [];
+    for (const s of this.soul.chunkStuff.values()) {
+      for (const it of s.scatter?.items || []) if (!it.gone) near.push(it);
+      for (const o of s.props?.hung || []) if (o.fallen && o !== h) near.push(o.mesh.position);
+    }
+    for (let tries = 0; tries < 8; tries++) {
+      const out = rand(0.18, 0.4), slide = tries ? rand(-0.35, 0.35) : 0;
+      const x = m.position.x + h.nx * out - h.nz * slide, z = m.position.z + h.nz * out + h.nx * slide;
+      if (near.every(q => Math.hypot(q.x - x, q.z - z) > CLEAR)) return { out, slide };
+    }
+    return null;
+  }
+
   // a thing on a wall nearby comes off its nail: a shiver, the drop, the knock
   _fall(st) {
     const p = this._here(), cand = [];
@@ -185,12 +202,20 @@ export class EventDirector {
       if (d > 1.5 && d < 16) cand.push({ h, d });
     }
     if (!cand.length) return null;
-    const { h, d } = cand[Math.floor(Math.random() * cand.length)];
+    // it lands only where the floor is clear: never on a candle, a boat or another fallen thing
+    let h, d, out, slide;
+    for (let n = cand.length; n > 0 && !h; n--) {
+      const i = Math.floor(Math.random() * n), c = cand[i];
+      cand[i] = cand[n - 1];
+      const spot = this._landing(c.h);
+      if (spot) ({ h, d } = c), ({ out, slide } = spot);
+    }
+    if (!h) return null;
     h.fallen = true;
     this.lastFall = h;                               // for checks
     const m = h.mesh, x0 = m.position.x, y0 = m.position.y, z0 = m.position.z, z0rot = m.rotation.z;
     const water = window.__app?.water?.level ?? 0, wet = water > 0.03;
-    const out = rand(0.18, 0.4), spin = rand(-0.6, 0.6), glass = /Clock|notice|photo/.test(h.kind);
+    const spin = rand(-0.6, 0.6), glass = /Clock|notice|photo/.test(h.kind);
     let t = 0, v = 0, y = y0, landed = false, sink = 0;
     const WOBBLE = 0.45;
     this.running.push(dt => {
@@ -202,7 +227,7 @@ export class EventDirector {
         const k = Math.min(1, (y0 - y) / Math.max(0.3, y0 - 0.02));
         m.rotation.x = -Math.PI / 2 * k;                          // tips forward, face up by the floor
         m.rotation.z = z0rot + spin * k;
-        m.position.set(x0 + h.nx * out * k, Math.max(y, wet ? water : 0.004), z0 + h.nz * out * k);
+        m.position.set(x0 + (h.nx * out - h.nz * slide) * k, Math.max(y, wet ? water : 0.004), z0 + (h.nz * out + h.nx * slide) * k);
         if (y <= (wet ? water : 0.004)) {
           landed = true;
           const dx = m.position.x - p.x, dz = m.position.z - p.z;

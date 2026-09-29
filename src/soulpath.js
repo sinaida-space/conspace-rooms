@@ -1749,6 +1749,7 @@ export class SoulPath {
       if (!st) continue;
       if (this.stage.stage === 0) for (const d of st.doors || []) if (Math.hypot(d.x - x, d.z - z) < 1.8 + pad) return true;
       for (const q of (st.props?.walls || []).concat(st.props?.air || [])) if (Math.hypot(q.x - x, q.z - z) < 0.5 + pad) return true;
+      for (const h of st.props?.hung || []) if (h.fallen && Math.hypot(h.mesh.position.x - x, h.mesh.position.z - z) < 0.3 + pad) return true;
       for (const b of (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || [])) if (Math.hypot(b.x - x, b.z - z) < b.r + pad) return true;
       const k = st.kitchen;
       if (k && x > k.minX - pad && x < k.maxX + pad && z > k.minZ - pad && z < k.maxZ + pad) return true;
