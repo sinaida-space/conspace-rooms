@@ -454,7 +454,7 @@ export class SoulPath {
       if (cornerDist(centreOf(gi), centreOf(gj)) < CORNER_FREE) continue;
       let clear = true;
       for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (solidAtGlobal(gi + di, gj + dj)) clear = false;
-      if (clear) out.push({ x: centreOf(gi), z: centreOf(gj) });
+      if (clear && !this._keepOut(cx, cz, centreOf(gi), centreOf(gj), 0.5)) out.push({ x: centreOf(gi), z: centreOf(gj) });
     }
     return out;
   }
@@ -1086,6 +1086,7 @@ export class SoulPath {
     const stuff = this.chunkStuff.get(plan.cx + ':' + plan.cz);
     this._clearAround(plan.x, plan.z, 2.4);
     if (stuff) { stuff.portals.push(this._makePortal(stuff.group, plan.x, plan.z, plan.west, target)); this._rebuildChunkProps(plan.cx, plan.cz, stuff); }
+    this._rebuildScatter();                              // no candle left standing in its way, in any chunk
     this.post?.burst(0.4);
     this.audio?.whisper?.();
     if (target === 1) this._summonStairwell(plan, gi0, gj0);
@@ -1150,6 +1151,7 @@ export class SoulPath {
           this._ensureStairwellFor(cx, cz, stuff.group, stuff);
           this._rebuildChunkProps(cx, cz, stuff);          // whatever already stood there makes way for the door
         }
+        this._rebuildScatter();                          // candles in the chunks around it too
         return;
       }
     }
@@ -1306,7 +1308,7 @@ export class SoulPath {
       for (const p of portals) { const d = Math.hypot(p.x - x, p.z - z); if (d < tgd) { tgd = d; tgx = p.x - x; tgz = p.z - z; } }
       for (const a of unseen) { const d = Math.hypot(a.x - x, a.z - z); if (d < tgd) { tgd = d; tgx = a.x - x; tgz = a.z - z; } }
       if (tgd < Infinity && tgd > 1e-3) { tgx /= tgd; tgz /= tgd; }
-      if (this._nearFlammable(cx, cz, x, z)) continue;
+      if (this._nearFlammable(cx, cz, x, z) || this._keepOut(cx, cz, x, z, 0.25)) continue;
       items.push({ type: 'candle', x, z, rot: rnd() * 6.28, flame, wax, spent, tgx, tgz });
     }
     return buildScatter(group, items);
@@ -1362,9 +1364,32 @@ export class SoulPath {
     const walls = choose(wallSpots, nWall, 3).map(s => ({
       x: centreOf(s.gi) + s.di * CELL / 2, z: centreOf(s.gj) + s.dj * CELL / 2, nx: -s.di, nz: -s.dj, r: rp(), run3: s.run3 }));
     const air = st === 2 ? choose(airSpots, low ? 2 : 4, 4).map(s => ({ x: centreOf(s.gi), z: centreOf(s.gj), r: rp() })) : [];
+    const sp = this.stairwellPlan, clearOf = q => Object.values(this.summonedPortals || {}).every(p => !p || Math.hypot(p.x - q.x, p.z - q.z) > 2.6)
+      && (!sp || Math.hypot(sp.x - q.x, sp.z - q.z) > 3);
+    for (const list of [walls, air]) for (let i = list.length - 1; i >= 0; i--) if (!clearOf(list[i])) list.splice(i, 1);
     // everything on a wall may be a curtained window: remember it, a candle keeps off
     (this._flammable ||= new Map()).set(cx + ':' + cz, walls.map(w => ({ x: w.x, z: w.z })));
     return this.props.build(group, st, walls, air);
+  }
+
+  // Nothing is set down on top of something else: the ways through doors and
+  // portals, the metal door's threshold, the hospital's beds, grandmother's
+  // room and whatever props already stand nearby keep their ground. pad:
+  // the item's own reach. Checks only this chunk and its neighbours.
+  _keepOut(cx, cz, x, z, pad = 0.35) {
+    for (const p of Object.values(this.summonedPortals || {})) if (p && Math.hypot(p.x - x, p.z - z) < 2.4 + pad) return true;
+    const sp = this.stairwellPlan;
+    if (sp && Math.hypot(sp.x - x, sp.z - z) < 2.8 + pad) return true;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const st = this.chunkStuff.get((cx + dx) + ':' + (cz + dz));
+      if (!st) continue;
+      if (this.stage.stage === 0) for (const d of st.doors || []) if (Math.hypot(d.x - x, d.z - z) < 1.8 + pad) return true;
+      for (const q of (st.props?.walls || []).concat(st.props?.air || [])) if (Math.hypot(q.x - x, q.z - z) < 0.5 + pad) return true;
+      for (const b of (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || [])) if (Math.hypot(b.x - x, b.z - z) < b.r + pad) return true;
+      const k = st.kitchen;
+      if (k && x > k.minX - pad && x < k.maxX + pad && z > k.minZ - pad && z < k.maxZ + pad) return true;
+    }
+    return false;
   }
 
   // a candle never stands where it would set a curtain alight

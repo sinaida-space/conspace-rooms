@@ -296,7 +296,7 @@ export function buildStairwell(atmo, imgUrl) {
       uMap: { value: new THREE.DataTexture(new Uint8Array([10, 14, 18, 255]), 1, 1) },
       uEye: { value: new THREE.Vector3(0, 1.5, 3) }, uTint: { value: new THREE.Color(...DEFAULT_TINT) },
       uK: { value: 0 }, uTime: { value: 0 }, uRoomH: { value: 2 * ROOM_HW / 0.75 }, uGain: { value: 1.6 },
-      uDream: { value: +(new URLSearchParams(location.search).get('dream') || 0) },   // sketches: ?dream=1|2|3
+      uDream: { value: +(new URLSearchParams(location.search).get('dream') || 3) },   // smoke; ?dream=0|1|2 the other sketches
     },
     vertexShader: ROOM_VERT, fragmentShader: ROOM_FRAG,
   });
