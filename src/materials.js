@@ -1017,7 +1017,7 @@ export function createMaterials(quality) {
     uWater: { value: new THREE.Vector4(0, 0, 0, 0) },
     uProgress: { value: 0 },
     uVanish: { value: 0 },
-    uFogTop: { value: +(new URLSearchParams(location.search).get('fogtop') || 0) },   // sketches: ?fogtop=1|2|3
+    uFogTop: { value: +(new URLSearchParams(location.search).get('fogtop') ?? 2) },   // tongues of fog; ?fogtop=0|1|3 the other sketches
     uClouds: { value: +(new URLSearchParams(location.search).get('clouds') || 0) },   // sketches: ?clouds=1|2|3
     uDbg: { value: new THREE.Vector2() },
     uWaveTex: { value: blankWaves },   // water.js bakes the real ripples on tiers 1-2
