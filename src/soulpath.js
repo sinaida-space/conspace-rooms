@@ -81,6 +81,7 @@ const PORTAL_SEEN_MEMORY = 5;    // works seen in memory (past the room) before 
 const PORTAL_NEAR = 8;           // metres: a summoned portal never lands closer than this
 const PORTAL_FAR = 24;           // metres: nor further than this
 const FINALE_VANISH = 6;         // seconds the walls take to dissolve before the rose tunnel rises
+const DREAM_PREVIEW = new URLSearchParams(location.search).has('dream');
 const STAIR_NIGHTMARE = true;     // false: the calm version, only the door, fog and light, no zoom, no sound, no blackout
 const STAIR_NEAR = 3.2;          // metres: this close, the metal door gives way, each time the visitor passes
 const STAIR_OPEN = 1.3;          // seconds: it swings open
@@ -1233,6 +1234,20 @@ export class SoulPath {
   // Threshold check, run every frame: cheap when nothing is due.
   _maybeSummonPortal(time) {
     const st = this.stage.stage;
+    // ?dream=1|2|3 (a sketch to judge): the metal door at once, the visitor set before it
+    if (DREAM_PREVIEW && st === 0) {
+      if (!this.summonedPortals[1]) this._summonPortal(1, time);
+      const pl = this.stairwellPlan;
+      if (pl && !this._dreamPlaced) {
+        this._dreamPlaced = true;
+        const nx = Math.sin(pl.rotY), nz = Math.cos(pl.rotY);
+        let d = 0.6;
+        while (d < 4 && this.world.isWalkable(pl.x + nx * (d + 0.2), pl.z + nz * (d + 0.2))) d += 0.2;
+        this.player.pos.set(pl.x + nx * d, pl.z + nz * d);
+        this.player.yaw = pl.rotY;
+      }
+      if (pl) return;
+    }
     if (st === 0 && !this.summonedPortals[1] && this.stageSeen[0] >= PORTAL_SEEN_FEAR && (this._fear?.turns ?? FEAR_TURNS) >= FEAR_TURNS) this._summonPortal(1, time);
     else if (st === 0 && this.summonedPortals[1] && !this.stairwellPlan && time - (this._stairTry || 0) > 1) {
       // no wall for the metal door on the first try: look again from wherever the walk is now
@@ -2241,7 +2256,7 @@ export class SoulPath {
       } else if (sw.phase === 'turn') {
         if (!sw.cam || sw.cam.turnT >= STAIR_TURN) { sw.cam = null; sw.phase = 'cool'; }
       } else if (sw.phase === 'cool') {
-        if (d > STAIR_NEAR + 1.5) {                    // walked away: it will open for the next pass, onto another stairwell
+        if (d > STAIR_NEAR + 1.5 || (DREAM_PREVIEW && sw.t > 3)) {   // walked away (or judging a sketch: a pause): it opens for the next pass, onto another stairwell
           sw.phase = 'wait';
           sw.pic = ((sw.pic + Math.floor(Math.random() * 4)) % 5) + 1;   // any of the other four
           sw.setImage(`assets/stairs/stairs_${sw.pic}.webp`);
