@@ -16,6 +16,7 @@ import { createRoseCounter, buildRoseArch, findArchSpot, GRAIN_OPEN_MS } from '.
 import { showCard } from './card.js';
 import { createPetals } from './petals.js';
 import { createPropKit } from './props.js';
+import { buildHallPlants } from './plants.js';
 import { createDrowned } from './drowned.js';
 import { mountOrDrop } from './placement.js';
 import { buildStairwell } from './stairwell.js';
@@ -1418,7 +1419,43 @@ export class SoulPath {
     for (const list of [walls, air]) for (let i = list.length - 1; i >= 0; i--) if (!clearOf(list[i])) list.splice(i, 1);
     // everything on a wall may be a curtained window: remember it, a candle keeps off
     (this._flammable ||= new Map()).set(cx + ':' + cz, walls.map(w => ({ x: w.x, z: w.z })));
-    return this.props.build(group, st, walls, air);
+    const built = this.props.build(group, st, walls, air);
+    // the zone's plant, in a big hall only: fear its pale ficus, the light its monstera
+    const spots = st === 1 ? [] : this._hallPlantSpots(cx, cz, free, rp, 2);
+    if (!spots.length) return built;
+    this._flammable.get(cx + ':' + cz).push(...spots.map(q => ({ x: q.x, z: q.z })));   // candles keep off
+    const kindOf = q => st === 0 ? 'fear' : q.corner ? 'accept-corner' : 'accept-middle';
+    const sets = ['fear', 'accept-corner', 'accept-middle'].map(k => buildHallPlants(group, k, spots.filter(q => kindOf(q) === k), this.atmo));
+    return { ...built, boxes: built.boxes.concat(...sets.map(p => p.boxes)), dispose() { built.dispose(); sets.forEach(p => p.dispose()); } };
+  }
+
+  // Where a hall takes a plant: a hall of at least 6 x 6 cells, in one of its
+  // true corners (walls on both outer sides) or in its very middle, never
+  // within `gap` cells of the corridor lattice that runs through it (the way
+  // through stays clear of the leaves too), on cells free of everything else
+  // (the whole 3 x 3 round it). With gap 2 about a third of the big halls
+  // have such a place; seven in ten of those get a plant.
+  _hallPlantSpots(cx, cz, free, rp, gap) {
+    const bandDist = i => Math.min(...[...EGG_BAND].map(b => Math.abs(i - b)));
+    const ok = (i, j) => bandDist(i) >= gap && bandDist(j) >= gap;
+    const clear = (gi, gj) => { for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (!free(gi + di, gj + dj) && !(di || dj ? solidAtGlobal(gi + di, gj + dj) : false)) return false; return free(gi, gj); };
+    const out = [];
+    for (const rm of chunkRooms(cx, cz)) {
+      if (rm.x1 - rm.x0 + 1 < 6 || rm.y1 - rm.y0 + 1 < 6 || rp() > 0.7) continue;
+      const cands = [];
+      for (const [i, j, oi, oj] of [[rm.x0, rm.y0, -1, -1], [rm.x1, rm.y0, 1, -1], [rm.x0, rm.y1, -1, 1], [rm.x1, rm.y1, 1, 1]]) {
+        const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+        if (!ok(i, j) || !solidAtGlobal(gi + oi, gj) || !solidAtGlobal(gi, gj + oj) || !clear(gi, gj)) continue;
+        // into the corner, 0.55 m off both walls
+        cands.push({ x: centreOf(gi) + oi * 0.05, z: centreOf(gj) + oj * 0.05, rot: Math.atan2(-oi, -oj), corner: true });
+      }
+      const mi = Math.floor((rm.x0 + rm.x1) / 2), mj = Math.floor((rm.y0 + rm.y1) / 2), gi = cx * CHUNK + mi, gj = cz * CHUNK + mj;
+      if (ok(mi, mj) && clear(gi, gj)) cands.push({ x: centreOf(gi), z: centreOf(gj), rot: rp() * 6.28 });
+      if (!cands.length) continue;
+      const c = cands[Math.floor(rp() * cands.length)];
+      if (out.every(o => Math.hypot(o.x - c.x, o.z - c.z) > 4)) out.push(c);
+    }
+    return out;
   }
 
   // Nothing is set down on top of something else: the ways through doors and

@@ -600,8 +600,10 @@ const tooClose = (A, B, d) => { const d2 = d * d; for (const x of A) for (const 
 // the high ones younger and more upright. Each blade hangs at the end of its
 // own stalk, the stalk arriving along the blade's midrib so it never shows
 // through; a leaf (or its stalk) that would touch one already placed is
-// tried again elsewhere, and dropped after 40 tries. Returns the pieces.
-function arrangeMonstera(templates, soilY, count) {
+// tried again elsewhere, and dropped after 40 tries. `sector` < PI keeps
+// the leaves within that angle of +z (a plant in a corner, walls behind it).
+// Returns the pieces.
+function arrangeMonstera(templates, soilY, count, sector = Math.PI) {
   const rnd = plantRng(2718), up = new THREE.Vector3(0, 1, 0);
   const placed = [];   // { cloud, stalk }
   const parts = [];
@@ -610,7 +612,9 @@ function arrangeMonstera(templates, soilY, count) {
     const f = k / (count - 1);                     // 0: the lowest, oldest leaf; 1: the newest, on top
     for (let tryN = 0; tryN < 40; tryN++) {
       const tpl = templates[(k * 5 + tryN) % templates.length];
-      const az = k * 2.39996 + (rnd() - 0.5) * 0.5 + tryN * 0.37;
+      // round the whole stem, or (in a corner) only within `sector` of +z, the room side
+      const az = sector >= Math.PI ? k * 2.39996 + (rnd() - 0.5) * 0.5 + tryN * 0.37
+        : Math.PI / 2 + sector * (2 * ((k * 0.618034 + tryN * 0.137 + rnd() * 0.05) % 1) - 1);
       const h = soilY + 0.75 + f * 0.85 + (rnd() - 0.5) * 0.12;
       const reach = 0.36 - f * 0.22 + rnd() * 0.08;
       // the blade's pitch: mature ones hang from the arch of the stalk, face turned out;
@@ -715,26 +719,35 @@ export function plantMist({ radius = 0.9, height = 2.3, count = 46, seed = 606 }
   return pts;
 }
 
-// The plant's shadow on the floor: its own triangles flattened along the
-// light onto y = 0, dark and see-through, so the slits and holes of the
-// leaves show in it. Five pale copies from slightly different directions
-// stack into a soft edge; inside each copy depth writes with a strict test
-// keep overlapping leaves (and both faces of a blade) from darkening twice.
-// dir: toward the light (world, need not be normalised).
-export function plantShadow(geo, dir, opacity = 0.26) {
+// The plant's shadow: its own triangles flattened along the light onto a
+// plane, dark and see-through, so the slits and holes of the leaves show in
+// it. Planes: [{ m, d }], the points p with p·m = d, m pointing away from the
+// room (the floor is m = -y, d = 0); by default the floor alone. A wall
+// hides whatever falls past the corner into the other wall. Five pale copies
+// from slightly different directions stack into a soft edge, each a hair
+// closer to the room; inside each copy depth writes with a strict test keep
+// overlapping leaves (and both faces of a blade) from darkening twice.
+// dir: toward the light, in the plant's frame (need not be normalised).
+const FLOOR = [{ m: new THREE.Vector3(0, -1, 0), d: 0 }];
+export function plantShadow(geo, dir, { opacity = 0.26, planes = FLOOR } = {}) {
   const out = new THREE.Group();
   const JITTER = [[0, 0], [0.09, 0.03], [-0.09, -0.03], [0.03, -0.09], [-0.03, 0.09]];
-  JITTER.forEach(([jx, jz], k) => {
-    const L = new THREE.Vector3(dir.x + jx * dir.y, dir.y, dir.z + jz * dir.y).normalize(), y = 0.004 + k * 0.0012;
-    const flat = geo.clone(), q = flat.attributes.position;
+  const mat = new THREE.MeshBasicMaterial({ color: 0x2a1c34, transparent: true, opacity: opacity / JITTER.length * 1.7, depthWrite: true, depthFunc: THREE.LessDepth, side: THREE.DoubleSide });
+  for (const { m, d } of planes) JITTER.forEach(([jx, jz], k) => {
+    const L = new THREE.Vector3(dir.x + jx * dir.y, dir.y, dir.z + jz * dir.y).normalize();
+    const lm = L.dot(m);
+    if (lm > -0.05) return;                        // the light runs along this plane or comes from behind it
+    const dd = d - 0.004 - k * 0.0012, flat = geo.clone(), q = flat.attributes.position, v = new THREE.Vector3();
     for (let i = 0; i < q.count; i++) {
-      const t = q.getY(i) / L.y;
-      q.setXYZ(i, q.getX(i) - L.x * t, y, q.getZ(i) - L.z * t);
+      v.fromBufferAttribute(q, i);
+      const t = (v.dot(m) - dd) / lm;
+      v.addScaledVector(L, -Math.max(t, 0));
+      q.setXYZ(i, v.x, v.y, v.z);
     }
-    for (const k of Object.keys(flat.attributes)) if (k !== 'position') flat.deleteAttribute(k);
-    const m = new THREE.Mesh(flat, new THREE.MeshBasicMaterial({ color: 0x2a1c34, transparent: true, opacity: opacity / JITTER.length * 1.7, depthWrite: true, depthFunc: THREE.LessDepth, side: THREE.DoubleSide }));
-    m.renderOrder = 1;
-    out.add(m);
+    for (const n of Object.keys(flat.attributes)) if (n !== 'position') flat.deleteAttribute(n);
+    const mesh = new THREE.Mesh(flat, mat);
+    mesh.renderOrder = 1;
+    out.add(mesh);
   });
   return out;
 }
@@ -763,14 +776,14 @@ function leafEnvironment(renderer) {
 // blades are kept. They are arranged anew (arrangeMonstera), `count` leaves
 // on our own stalks, about 2.2 m with the planter; our skin, a waxy physical
 // material. `soilY`: our planter's soil.
-export async function loadMonstera(atmo, { soilY = 0.475, count = 9, renderer = null } = {}) {
+export async function loadMonstera(atmo, { soilY = 0.475, count = 9, sector = Math.PI, renderer = null } = {}) {
   const gltf = await new GLTFLoader().loadAsync('assets/models/monstera.glb');
   gltf.scene.updateMatrixWorld(true);
   let src = null;
   gltf.scene.traverse(o => { if (!src && o.isMesh) src = o; });
   const geo = src.geometry.clone().applyMatrix4(src.matrixWorld);
   for (const n of Object.keys(geo.attributes)) if (n !== 'position') geo.deleteAttribute(n);
-  const parts = arrangeMonstera(leafTemplates(geo), soilY, count), all = mergeGeometries(parts);
+  const parts = arrangeMonstera(leafTemplates(geo), soilY, count, sector), all = mergeGeometries(parts);
   const skin = monsteraSkin();
   const mat = new THREE.MeshPhysicalMaterial({
     map: skin.map, normalMap: skin.normal, normalScale: new THREE.Vector2(0.8, 0.8),
@@ -780,6 +793,77 @@ export async function loadMonstera(atmo, { soilY = 0.475, count = 9, renderer = 
   const mesh = new THREE.Mesh(all, mat);
   mesh.userData.leaves = parts.leaves;
   return mesh;
+}
+
+// ── in the halls ────────────────────────────────────────────────────────────
+// The plants of a zone in its big halls (soulpath.js picks the spots: a true
+// corner of a hall, or its middle, never within reach of the way through).
+// One prototype per kind, built once and cloned, so every plant shares its
+// geometry and materials; the monstera arrives asynchronously and fills its
+// spots when it is ready. kind: 'fear' | 'accept-corner' (leaves toward the
+// room only) | 'accept-middle'. spots: [{ x, z, rot }], rot turns local +z
+// toward the room.
+// Returns { boxes, dispose } like props.build.
+const protos = {};
+const TO_SUN = new THREE.Vector3(-3, 5, 2);   // the monstera's shadow: one direction for every hall, the light zone is diffuse
+function protoOf(kind, atmo) {
+  if (protos[kind]) return protos[kind];
+  if (kind === 'fear') {
+    const g = new THREE.Group(), cube = buildConcreteCube(atmo);
+    g.add(cube, palePlant(atmo, cube.userData.soilY));
+    protos[kind] = Promise.resolve({ group: g, w: 0.5 });
+  } else {
+    protos[kind] = (async () => {
+      const g = new THREE.Group(), planter = buildRoundPlanter(atmo);
+      const corner = kind === 'accept-corner';
+      const monstera = await loadMonstera(atmo, { soilY: planter.userData.soilY, count: corner ? 7 : 9, sector: corner ? 1.05 : Math.PI, renderer: window.__app?.renderer });
+      g.add(planter, monstera);
+      return { group: g, w: 0.62, mist: true, leaves: monstera.geometry };
+    })();
+  }
+  return protos[kind];
+}
+function footBox(x, z, w) {
+  const h = w / 2, P = [[-h, -h], [h, -h], [h, h], [-h, h]].map(([u, v]) => ({ x: x + u, z: z + v }));
+  const seg = (a, b) => { const mx = (a.x + b.x) / 2 - x, mz = (a.z + b.z) / 2 - z, l = Math.hypot(mx, mz) || 1; return { a, b, nx: mx / l, nz: mz / l }; };
+  return { x, z, r: w * 0.71, segs: [seg(P[0], P[1]), seg(P[1], P[2]), seg(P[2], P[3]), seg(P[3], P[0])] };
+}
+export function buildHallPlants(group, kind, spots, atmo) {
+  const w = kind === 'fear' ? 0.5 : 0.62;
+  const boxes = spots.map(s => footBox(s.x, s.z, w));
+  if (!spots.length) return { boxes, dispose() {} };
+  const made = [];
+  let gone = false;
+  const shade = contactShadows(spots.map(s => ({ x: s.x, z: s.z, w: w * 0.75, d: w * 0.75, rot: 0, h: 0, k: 0.55 })));
+  if (shade) group.add(shade);
+  protoOf(kind, atmo).then(proto => {
+    if (gone) return;                              // the chunk went away while the model loaded
+    for (const s of spots) {
+      const g = proto.group.clone(true);            // shares geometry and materials
+      g.position.set(s.x, 0, s.z);
+      g.rotation.y = s.rot;
+      if (proto.mist) g.add(plantMist({ seed: Math.round(s.x * 31 + s.z * 17) }));
+      // its own shadow, in the plant's turned frame. In the middle of a hall it
+      // falls away from the sun onto the floor; in a corner the light comes
+      // from the room, so the leaves are thrown onto both walls behind as well
+      // (walls 0.55 m off, their normals at 135 degrees either side of +z)
+      if (proto.leaves && kind === 'accept-corner') {
+        const W = 0.55, r = Math.SQRT1_2;
+        g.add(plantShadow(proto.leaves, new THREE.Vector3(0.25, 0.6, 1), { opacity: 0.42, planes: [
+          FLOOR[0], { m: new THREE.Vector3(r, 0, -r), d: W }, { m: new THREE.Vector3(-r, 0, -r), d: W }] }));
+      } else if (proto.leaves) g.add(plantShadow(proto.leaves, TO_SUN.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -s.rot)));
+      group.add(g); made.push(g);
+    }
+  });
+  return {
+    boxes,
+    dispose() {
+      gone = true;
+      // the mist and the shadow are this plant's own; the rest is the prototype's
+      for (const g of made) { group.remove(g); g.traverse(o => { if (o.isPoints || o.material?.isMeshBasicMaterial) { o.geometry.dispose(); o.material.dispose(); } }); }
+      if (shade) { group.remove(shade); shade.geometry.dispose(); }
+    },
+  };
 }
 
 // ── the draft hook ──────────────────────────────────────────────────────────
