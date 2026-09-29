@@ -293,60 +293,64 @@ export class World {
   // Returns [{ position:{x,y,z}, normal:{x,y,z}, cellKey, length }]. position is
   // the run's mid-point on the wall face at mid-height; normal faces the open
   // space (where a viewer stands).
-  getWallSlots(cx, cz) {
-    const slots = [];
-    const gi0 = cx * CHUNK, gj0 = cz * CHUNK;
-    const y = CEIL_H / 2;
-    // Vertical faces (+X / -X): scan each column, walk down j.
-    for (const [dir, nx] of [['+X', -1], ['-X', 1]]) {
-      for (let i = 0; i < CHUNK; i++) {
-        let run = 0;
-        for (let j = 0; j <= CHUNK; j++) {
-          const gi = gi0 + i, gj = gj0 + j;
-          const open = j < CHUNK && !solidAtGlobal(gi, gj);
-          const faced = open && solidAtGlobal(gi + (nx < 0 ? 1 : -1), gj);
-          if (faced) { run++; continue; }
-          if (run >= 2) {
-            const js = j - run;
-            const wx = (nx < 0 ? (gi0 + i + 1) : (gi0 + i)) * CELL;
-            const cz0 = (gj0 + js) * CELL, cz1 = (gj0 + j) * CELL;
-            slots.push({
-              position: { x: wx, y, z: (cz0 + cz1) / 2 },
-              normal: { x: nx, y: 0, z: 0 },
-              cellKey: cx + ':' + cz + ':' + dir + ':' + i + '_' + js + ':' + run,
-              length: run,
-            });
-          }
-          run = 0;
+  getWallSlots(cx, cz) { return wallSlots(cx, cz); }
+}
+
+// The same, as a pure function of the chunk: the artwork plan reads the
+// neighbours' runs too (artworks.js).
+export function wallSlots(cx, cz) {
+  const slots = [];
+  const gi0 = cx * CHUNK, gj0 = cz * CHUNK;
+  const y = CEIL_H / 2;
+  // Vertical faces (+X / -X): scan each column, walk down j.
+  for (const [dir, nx] of [['+X', -1], ['-X', 1]]) {
+    for (let i = 0; i < CHUNK; i++) {
+      let run = 0;
+      for (let j = 0; j <= CHUNK; j++) {
+        const gi = gi0 + i, gj = gj0 + j;
+        const open = j < CHUNK && !solidAtGlobal(gi, gj);
+        const faced = open && solidAtGlobal(gi + (nx < 0 ? 1 : -1), gj);
+        if (faced) { run++; continue; }
+        if (run >= 2) {
+          const js = j - run;
+          const wx = (nx < 0 ? (gi0 + i + 1) : (gi0 + i)) * CELL;
+          const cz0 = (gj0 + js) * CELL, cz1 = (gj0 + j) * CELL;
+          slots.push({
+            position: { x: wx, y, z: (cz0 + cz1) / 2 },
+            normal: { x: nx, y: 0, z: 0 },
+            cellKey: cx + ':' + cz + ':' + dir + ':' + i + '_' + js + ':' + run,
+            length: run,
+          });
         }
+        run = 0;
       }
     }
-    // Horizontal faces (+Z / -Z): scan each row, walk across i.
-    for (const [dir, nz] of [['+Z', -1], ['-Z', 1]]) {
-      for (let j = 0; j < CHUNK; j++) {
-        let run = 0;
-        for (let i = 0; i <= CHUNK; i++) {
-          const gi = gi0 + i, gj = gj0 + j;
-          const open = i < CHUNK && !solidAtGlobal(gi, gj);
-          const faced = open && solidAtGlobal(gi, gj + (nz < 0 ? 1 : -1));
-          if (faced) { run++; continue; }
-          if (run >= 2) {
-            const is = i - run;
-            const wz = (nz < 0 ? (gj0 + j + 1) : (gj0 + j)) * CELL;
-            const cx0 = (gi0 + is) * CELL, cx1 = (gi0 + i) * CELL;
-            slots.push({
-              position: { x: (cx0 + cx1) / 2, y, z: wz },
-              normal: { x: 0, y: 0, z: nz },
-              cellKey: cx + ':' + cz + ':' + dir + ':' + is + '_' + j + ':' + run,
-              length: run,
-            });
-          }
-          run = 0;
-        }
-      }
-    }
-    return slots;
   }
+  // Horizontal faces (+Z / -Z): scan each row, walk across i.
+  for (const [dir, nz] of [['+Z', -1], ['-Z', 1]]) {
+    for (let j = 0; j < CHUNK; j++) {
+      let run = 0;
+      for (let i = 0; i <= CHUNK; i++) {
+        const gi = gi0 + i, gj = gj0 + j;
+        const open = i < CHUNK && !solidAtGlobal(gi, gj);
+        const faced = open && solidAtGlobal(gi, gj + (nz < 0 ? 1 : -1));
+        if (faced) { run++; continue; }
+        if (run >= 2) {
+          const is = i - run;
+          const wz = (nz < 0 ? (gj0 + j + 1) : (gj0 + j)) * CELL;
+          const cx0 = (gi0 + is) * CELL, cx1 = (gi0 + i) * CELL;
+          slots.push({
+            position: { x: (cx0 + cx1) / 2, y, z: wz },
+            normal: { x: 0, y: 0, z: nz },
+            cellKey: cx + ':' + cz + ':' + dir + ':' + is + '_' + j + ':' + run,
+            length: run,
+          });
+        }
+        run = 0;
+      }
+    }
+  }
+  return slots;
 }
 
 // Je suis le spectre d'une rose que tu portais hier au bal.

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CONSPACE_SEED, solidAtGlobal, CELL, CHUNK } from './world.js';
+import { CONSPACE_SEED, solidAtGlobal, CELL, CHUNK, chunkRooms, wallSlots } from './world.js';
 import { t, getLang } from './i18n.js';
 
 // ── conspace-rooms · artworks.js ────────────────────────────────────────────
@@ -104,20 +104,71 @@ function usableSpan(slot, cx, cz) {
   return { ...slot, position: { x: alongZ ? p.x : mid, y: p.y, z: alongZ ? mid : p.z }, length: (end - start) / CELL };
 }
 
-// Which wall slots (if any) get an artwork in this chunk, and which deck
-// index each one draws. Pure function of (cx, cz) + the chunk's own slots.
-function chunkArtworkPlan(cx, cz, slots, deck) {
+// How the works keep apart (#40). A step is one tap of W, about 0.75 m:
+// between the edges of two works at least five of them; in a corridor all
+// the works of a stretch hang on one wall, never across from each other; a
+// big hall (6 x 6 cells and more) holds one. The rule is settled among the
+// candidate runs of a chunk and its eight neighbours: a run keeps its work
+// when it outranks every run it clashes with (corridors rank first, then a
+// draw of the chunk), so both sides of a chunk border agree without either
+// looking further. The chunk's quota applies after, and only takes away.
+const STEP = 0.75, MIN_GAP = 5 * STEP;
+const BLOCK = 1.35 + FRAME_BORDER * 2 + PLACARD_GAP + PLACARD_W;   // the widest work with its placard
+const APART = MIN_GAP + BLOCK;                                      // centre to centre
+const ONE_SIDE = 12;                                                // m along a corridor: the stretch whose works share a wall
+const BIG_HALL = 6;
+
+// the big hall the cell in front of a run opens into, if any
+function hallOf(slot) {
+  const { position: p, normal: n } = slot;
+  const gi = Math.floor((p.x + n.x * CELL * 0.5) / CELL), gj = Math.floor((p.z + n.z * CELL * 0.5) / CELL);
+  const cx = Math.floor(gi / CHUNK), cz = Math.floor(gj / CHUNK), i = gi - cx * CHUNK, j = gj - cz * CHUNK;
+  const k = chunkRooms(cx, cz).findIndex(r => r.x1 - r.x0 + 1 >= BIG_HALL && r.y1 - r.y0 + 1 >= BIG_HALL && i >= r.x0 && i <= r.x1 && j >= r.y0 && j <= r.y1);
+  return k < 0 ? null : cx + ':' + cz + ':' + k;
+}
+
+// a chunk's runs that could take a work, with their rank; cached
+const candCache = new Map();
+function candidatesOf(cx, cz) {
+  const key = cx + ':' + cz;
+  let c = candCache.get(key);
+  if (c) return c;
   const rand = mulberry32(hash2i(DECK_SEED, cx, cz));
   const target = 3 + Math.floor(rand() * 3);                  // 3–5 works a chunk: the labyrinth is a gallery, works may repeat
-
-  const candidates = [];
-  for (const s of slots) {
+  const list = [];
+  for (const s of wallSlots(cx, cz)) {
     const span = usableSpan(s, cx, cz);
     const clear = span ? frontClear(span) : 0;
-    if (clear) candidates.push({ slot: span, clear, r: rand() });
+    if (clear) list.push({ slot: span, clear, r: rand(), rank: clear * 2 + rand(), x: span.position.x, z: span.position.z, n: span.normal, hall: hallOf(span), key: span.cellKey });
   }
-  candidates.sort((a, b) => b.clear - a.clear || a.r - b.r);  // corridors first, shuffled within
-  const chosen = candidates.slice(0, target);
+  c = { target, list };
+  candCache.set(key, c);
+  if (candCache.size > 400) candCache.delete(candCache.keys().next().value);
+  return c;
+}
+
+function clash(a, b) {
+  if (a.hall && a.hall === b.hall) return true;
+  const dx = b.x - a.x, dz = b.z - a.z;
+  if (Math.hypot(dx, dz) < APART) return true;
+  // across the corridor: facing walls, the other in front of this one, a corridor's width apart
+  if (a.n.x * b.n.x + a.n.z * b.n.z < -0.5) {
+    const ahead = dx * a.n.x + dz * a.n.z, along = Math.abs(dx * a.n.z - dz * a.n.x);
+    if (ahead > 0 && ahead <= 3 * CELL && along < ONE_SIDE) return true;
+  }
+  return false;
+}
+const outranks = (a, b) => a.rank > b.rank || (a.rank === b.rank && a.key > b.key);
+
+// Which wall slots (if any) get an artwork in this chunk, and which deck
+// index each one draws. Pure function of (cx, cz) and the walls round it.
+function chunkArtworkPlan(cx, cz, slots, deck) {
+  const { target, list } = candidatesOf(cx, cz);
+  const around = [];
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) around.push(...candidatesOf(cx + dx, cz + dz).list);
+  const kept = list.filter(c => around.every(o => o === c || !clash(c, o) || outranks(c, o)));
+  kept.sort((a, b) => b.clear - a.clear || a.r - b.r);        // corridors first, shuffled within
+  const chosen = kept.slice(0, target);
   const ord = ringOrdinal(cx, cz);
   return chosen.map(({ slot }, i) => ({ slot, artIndex: deck[(ord * 5 + i) % deck.length] }));
 }
