@@ -55,8 +55,8 @@ void main(){
   float wave = 0.5 + 0.5 * sin(p.y * 9.0 - uTime * 2.2 + vSeed * 12.0);
   float rim = smoothstep(0.55, 1.0, r) + smoothstep(0.3, 0.5, p.y) * 0.6;
   float vein = smoothstep(0.03, 0.0, abs(p.x + sin(p.y * 7.0) * 0.015)) * 0.25;
-  vec3 core = vec3(0.96, 0.46, 0.70);                   // deep rose
-  vec3 lit  = vec3(1.00, 0.80, 0.94);                   // the cold pink light it gives
+  vec3 core = vec3(0.86, 0.14, 0.26);                   // the red of the corner rose and the tunnel
+  vec3 lit  = vec3(1.00, 0.52, 0.58);                   // the light it gives, warmer toward the rim
   vec3 col = mix(core, lit, clamp(rim * 0.8 + wave * 0.35 + vein, 0.0, 1.0));
   col *= 0.9 + 0.8 * breath;                            // over 1 on the edges, so the bloom catches it
   gl_FragColor = vec4(col, body * vFade);
@@ -85,7 +85,7 @@ void main(){
   float d = length(vUv - 0.5) * 2.0;
   float a = pow(max(0.0, 1.0 - d), 1.8) * 0.42 * vFade;
   if (a < 0.004) discard;
-  gl_FragColor = vec4(1.0, 0.58, 0.84, a);
+  gl_FragColor = vec4(1.0, 0.36, 0.44, a);
   #include <fog_fragment>
 }`;
 

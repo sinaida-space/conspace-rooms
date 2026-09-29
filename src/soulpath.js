@@ -16,6 +16,7 @@ import { createRoseCounter, buildRoseArch, findArchSpot, GRAIN_OPEN_MS } from '.
 import { showCard } from './card.js';
 import { createPetals } from './petals.js';
 import { createGlowPetals } from './glowPetals.js';
+import { setShadowLight } from './shadows.js';
 import { createPropKit } from './props.js';
 import { buildHallPlants } from './plants.js';
 import { AlisaVoices, VOICED } from './alisa.js';
@@ -2294,6 +2295,8 @@ export class SoulPath {
     this._time = time;
     this._tickMarks(time);
     this.glowPetals.update(dt, time, this.marks, this._water(), this.stage.stage === 2 && !this.finale, this.player.pos);
+    this._shadowLight = (this._shadowLight ?? 0) + ((this.stage.stage === 2 ? 1 : 0) - (this._shadowLight ?? 0)) * Math.min(1, dt);
+    setShadowLight(this._shadowLight);
     this._tickCandles(time);
     const water = this._water();
     this._floatCandles(time, water);
