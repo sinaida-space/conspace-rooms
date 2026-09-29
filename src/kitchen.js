@@ -794,12 +794,13 @@ function shared() {
   // shadow at the foot (vertex colours, tinted per candle by instance colour)
   const waxGeo = new THREE.CylinderGeometry(0.022, 0.024, 0.16, 12, 4);
   const wc = [], pos = waxGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) { const k = 0.35 + 0.65 * ((pos.getY(i) + 0.08) / 0.16) ** 1.5; wc.push(k, k, k); }
+  for (let i = 0; i < pos.count; i++) { const k = 0.55 + 0.45 * ((pos.getY(i) + 0.08) / 0.16) ** 1.5; wc.push(k, k, k); }   // wax lets light through: the foot is never grey
   waxGeo.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
   const uniforms = { uTime: CANDLE_TIME };
   const poolUniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog]);
   poolUniforms.uTime = CANDLE_TIME;
   SHARED = {
+    boat: [paperBoat(), new THREE.MeshBasicMaterial({ vertexColors: true, fog: true })],
     saucer: [lathe([[0, 0], [0.06, 0.002], [0.065, 0.012], [0, 0.008]], 16), enamel],
     wax: [waxGeo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: true })],
     flame: [new THREE.PlaneGeometry(0.22, 0.32).translate(0, 0.09, 0), new THREE.ShaderMaterial({
@@ -813,10 +814,44 @@ function shared() {
 }
 export function tickCandles(time) { CANDLE_TIME.value = time; }
 
+// A paper boat for the light's candles, folded from the same paper as the
+// cranes: a flat floor, six creased panels flaring up to a rim that rises
+// to a point at bow and stern. Lit in its vertex colours, since the light
+// never changes: the candle warms the inside, the sky whitens the outside,
+// the paper glows through near the rim, and the waterline is damp.
+function paperBoat() {
+  const H = 0.065, TIP = 0.13;
+  const bot = [[-0.085, 0], [-0.05, -0.04], [0.05, -0.04], [0.085, 0], [0.05, 0.04], [-0.05, 0.04]];
+  const top = [[-0.16, 0, TIP], [-0.055, -0.062, H], [0.055, -0.062, H], [0.16, 0, TIP], [0.055, 0.062, H], [-0.055, 0.062, H]];   // bow and stern drawn up to a point
+  const P = [], C = [];
+  const PAPER = [0.97, 0.95, 0.9];
+  const tri = (a, b, c, col) => { P.push(...a, ...b, ...c); for (const v of [a, b, c]) C.push(...col(v)); };
+  const inside = crease => v => { const k = (0.86 + 0.08 * (1 - v[1] / TIP)) * crease; return [PAPER[0] * k * 1.04, PAPER[1] * k * 0.95, PAPER[2] * k * 0.8]; };
+  const outside = crease => v => {
+    const t = v[1] / TIP, damp = v[1] < 0.012 ? 0.8 : 1;
+    const k = (0.66 + 0.16 * t) * crease * damp;
+    return [PAPER[0] * k + 0.06 * t, PAPER[1] * k + 0.035 * t, PAPER[2] * k];   // warm where the flame shows through
+  };
+  for (let i = 0; i < 6; i++) {
+    const j = (i + 1) % 6, crease = i % 2 ? 0.95 : 1.03;             // the folds catch the light by turns
+    const b0 = [bot[i][0], 0, bot[i][1]], b1 = [bot[j][0], 0, bot[j][1]];
+    const t0 = [top[i][0], top[i][2], top[i][1]], t1 = [top[j][0], top[j][2], top[j][1]];
+    tri(b0, t0, b1, outside(crease)); tri(b1, t0, t1, outside(crease));   // facing out
+    tri(b0, b1, t0, inside(crease)); tri(b1, t1, t0, inside(crease));     // facing in
+  }
+  for (let i = 1; i < 5; i++) tri([bot[0][0], 0.001, bot[0][1]], [bot[i + 1][0], 0.001, bot[i + 1][1]], [bot[i][0], 0.001, bot[i][1]], inside(1.06));   // the floor, lit most
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
 export function buildScatter(group, items) {
   const S = shared();
   const parts = {
     candle: [['saucer', 0.01], ['wax', 0.09], ['flame', 0.18], ['pool', 0.016]],
+    boatCandle: [['boat', 0.0], ['wax', 0.09], ['flame', 0.18], ['pool', 0.016]],   // the light's candles ride in paper boats
   };
   const counts = {};
   for (const it of items) for (const [name] of parts[it.type]) counts[name] = (counts[name] || 0) + 1;

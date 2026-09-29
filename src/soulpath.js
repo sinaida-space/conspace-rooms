@@ -387,7 +387,7 @@ void main(){
   vec3 core = vec3(0.86, 0.93, 1.0);                                        // light through thin latex
   vec3 rim  = vec3(0.52, 0.68, 0.86);                                       // more rubber along the eye's path
   vec3 col = mix(rim, core, pow(facing, 0.7));
-  col *= 0.82 + 0.28 * (0.5 + 0.5 * N.y);                                   // the sky above, the room below
+  col *= 0.7 + 0.24 * (0.5 + 0.5 * N.y);                                    // the sky above, the room below: never blown to white
   col = mix(col, rim * 0.85, neck * 0.5);
   // the key light sits up and to the left of the eye, so the glint is always there to see
   vec3 side = normalize(cross(vec3(0.0, 1.0, 0.0), V));
@@ -408,6 +408,39 @@ function latexMaterial() {
     uniforms: THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
     vertexShader: LATEX_VERT, fragmentShader: LATEX_FRAG, fog: true,
   });
+}
+
+
+// A balloon's shadow: a soft lilac blot multiplied into whatever it lies
+// on, the floor's water or a wall. Never black in the light.
+const BLOT_VERT = /* glsl */`
+varying vec2 vUv;
+varying float vDist;
+void main(){
+  vUv = uv;
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  vDist = distance(w.xyz, cameraPosition);
+  gl_Position = projectionMatrix * viewMatrix * w;
+}`;
+const BLOT_FRAG = /* glsl */`
+uniform float uK;
+varying vec2 vUv;
+varying float vDist;
+void main(){
+  float d = length((vUv - 0.5) * vec2(2.0, 2.0));
+  float a = pow(max(0.0, 1.0 - d), 1.7) * uK * (1.0 - smoothstep(10.0, 22.0, vDist));
+  gl_FragColor = vec4(mix(vec3(1.0), vec3(0.56, 0.52, 0.66), a), 1.0);
+}`;
+function blotMesh(scene) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
+    uniforms: { uK: { value: 0 } }, vertexShader: BLOT_VERT, fragmentShader: BLOT_FRAG,
+    transparent: true, depthWrite: false,
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.DstColorFactor, blendDst: THREE.ZeroFactor,
+    polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+  }));
+  m.renderOrder = 6; m.visible = false; m.frustumCulled = false;
+  scene.add(m);
+  return m;
 }
 
 export class SoulPath {
@@ -1457,7 +1490,7 @@ export class SoulPath {
       for (const a of unseen) { const d = Math.hypot(a.x - x, a.z - z); if (d < tgd) { tgd = d; tgx = a.x - x; tgz = a.z - z; } }
       if (tgd < Infinity && tgd > 1e-3) { tgx /= tgd; tgz /= tgd; }
       if (this._nearFlammable(cx, cz, x, z) || this._keepOut(cx, cz, x, z, 0.25)) continue;
-      items.push({ type: 'candle', x, z, rot: rnd() * 6.28, flame, wax, spent, tgx, tgz });
+      items.push({ type: st === 2 ? 'boatCandle' : 'candle', x, z, rot: rnd() * 6.28, flame, wax, spent, tgx, tgz });
     }
     return buildScatter(group, items);
   }
@@ -1803,7 +1836,8 @@ export class SoulPath {
         const string = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xc9d2d6, transparent: true, opacity: 0.7, fog: true }));
         g.add(body, knot, string);
         this.scene.add(g);
-        const b = { g, text: this._nextBalloonText(), pos: new THREE.Vector3(), seed: Math.random() * 10, gone: false, back: 0, rise: 0, readUntil: 0 };
+        const b = { g, text: this._nextBalloonText(), pos: new THREE.Vector3(), seed: Math.random() * 10, gone: false, back: 0, rise: 0, readUntil: 0,
+          floorShade: blotMesh(this.scene), wallShade: blotMesh(this.scene) };
         this._spawnBalloon(b);
         return b;
       });
@@ -1831,6 +1865,48 @@ export class SoulPath {
         this._say(t('balloonLabel'), b.text, SKY);
       }
     }
+    for (const b of this.balloons) this._shadeBalloon(b, b.g.position, 1);
+  }
+  // Light from high above and a little to one side: the blot on the water
+  // lies under the balloon, smaller and darker the lower it hangs; a wall
+  // within reach catches a second, fainter blot, lower than the balloon.
+  _shadeBalloon(b, p, k0) {
+    const water = this._water(), fl = b.floorShade, wl = b.wallShade;
+    const vis = b.g.visible !== false && this.stage.stage === 2;
+    const wy = water.heightAt(p.x, p.z) ?? 0;
+    const h = Math.max(0.05, p.y - wy);
+    fl.visible = vis;
+    if (vis) {
+      fl.position.set(p.x + 0.12 * h, wy + 0.012, p.z + 0.08 * h);
+      fl.rotation.set(-Math.PI / 2, 0, 0);
+      const sz = 0.34 + 0.28 * h;
+      fl.scale.set(sz, sz * 1.15, 1);
+      fl.material.uniforms.uK.value = k0 * Math.min(0.9, 1.1 / (0.6 + h));
+    }
+    // the nearest wall along the four axes, within 2 m
+    wl.visible = false;
+    if (!vis) return;
+    const gi = cellOf(p.x), gj = cellOf(p.z);
+    let best = null;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      for (let n = 0; n <= 1; n++) {
+        if (!solidAtGlobal(gi + di * (n + 1), gj + dj * (n + 1))) continue;
+        const face = di ? (gi + (di > 0 ? n + 1 : -n)) * CELL : (gj + (dj > 0 ? n + 1 : -n)) * CELL;
+        const d = di ? Math.abs(face - p.x) : Math.abs(face - p.z);
+        if (d < 2 && (!best || d < best.d)) best = { d, di, dj, face };
+        break;
+      }
+    }
+    if (!best) return;
+    const off = 0.01;
+    wl.visible = true;
+    // cast down and aside along the light (it comes from high up, from +x +z)
+    const drop = 0.25 + 0.8 * best.d, aside = -(0.3 + 0.45 * best.d);
+    wl.position.set(best.di ? best.face - best.di * off : p.x + aside, Math.max(0.3, p.y - drop), best.dj ? best.face - best.dj * off : p.z + aside);
+    wl.rotation.set(0, best.di ? -best.di * Math.PI / 2 : (best.dj > 0 ? Math.PI : 0), 0);
+    const sz = 0.38 + 0.3 * best.d;
+    wl.scale.set(sz, sz * 1.15, 1);
+    wl.material.uniforms.uK.value = k0 * 0.95 * (1 - best.d / 2.4);
   }
   // The balloons ask the dreams first, then the light's other questions.
   _nextBalloonText() {
@@ -1862,7 +1938,7 @@ export class SoulPath {
       body.scale.set(1, 1.18, 1);
       g.add(body);
       this.scene.add(g);
-      this.surfaceBalloon = { g, pos: new THREE.Vector3(), seed: Math.random() * 10 };
+      this.surfaceBalloon = { g, pos: new THREE.Vector3(), seed: Math.random() * 10, floorShade: blotMesh(this.scene), wallShade: blotMesh(this.scene) };
       this._spawnSurfaceBalloon();
     }
     const b = this.surfaceBalloon, P = this.player;
@@ -1872,6 +1948,7 @@ export class SoulPath {
     const y = (wy ?? 0.1) + 0.2;
     b.g.position.set(b.pos.x + Math.sin(time * 0.15 + b.seed) * 0.04, y, b.pos.z + Math.cos(time * 0.13 + b.seed) * 0.04);
     b.g.rotation.set(Math.sin(time * 0.3 + b.seed) * 0.04, time * 0.09 + b.seed, 0);
+    this._shadeBalloon(b, b.g.position, 1);
   }
   _spawnSurfaceBalloon() {
     const P = this.player;
@@ -2285,7 +2362,7 @@ export class SoulPath {
         const bob = floaty ? Math.sin(time * 1.7 + i * 1.3) * 0.005 : 0;
         q.setFromAxisAngle(up, it.rot);
         if (floaty) { qt.setFromAxisAngle(ax, Math.sin(time * 0.6 + i * 2.1) * 0.09); q.multiply(qt); }
-        for (const [name, off] of [['saucer', 0.01], ['wax', 0.09], ['flame', 0.18], ['pool', 0.016]]) {
+        for (const [name, off] of [['boat', 0.0], ['saucer', 0.01], ['wax', 0.09], ['flame', 0.18], ['pool', 0.016]]) {
           const mesh = sc.meshes[name];
           if (!mesh) continue;
           m.compose(new THREE.Vector3(x, base + off + bob, z), q, one);
@@ -2671,8 +2748,8 @@ export class SoulPath {
       if (this.surfaceBalloon) this.surfaceBalloon.g.visible = true;
       this._updateClouds(dt, time, speed);
     } else if (this.clouds || this.balloons || this.surfaceBalloon) {            // a cheat can lead back out of the light
-      for (const b of this.balloons || []) b.g.visible = false;
-      if (this.surfaceBalloon) this.surfaceBalloon.g.visible = false;
+      for (const b of this.balloons || []) { b.g.visible = false; b.floorShade.visible = b.wallShade.visible = false; }
+      if (this.surfaceBalloon) { this.surfaceBalloon.g.visible = false; this.surfaceBalloon.floorShade.visible = this.surfaceBalloon.wallShade.visible = false; }
       for (const c of this.clouds || []) for (const sp of c.puffs) sp.visible = false;
     }
     if (this.stage.stage !== 1) this._hideRoamers?.();
