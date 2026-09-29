@@ -41,6 +41,7 @@ const ROOM_FRAG = /* glsl */`
 uniform sampler2D uMap;
 uniform vec3 uEye;
 uniform float uK, uTime, uGain, uRoomH;
+uniform int uDream;
 varying vec3 vP;
 const float HW = ${ROOM_HW.toFixed(2)};
 const float RD = ${ROOM_D.toFixed(2)};
@@ -49,6 +50,18 @@ const float DW = ${DOOR_W.toFixed(3)}, DH = ${DOOR_H.toFixed(3)};
 float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }
+// film grain in soft clumps a few pixels across, changing 12 times a
+// second: fine per-pixel grain beat against the scanlines into a moire
+float softGrain(){
+  vec2 g = gl_FragCoord.xy / 3.0 + floor(uTime * 12.0) * vec2(37.0, 17.0);
+  return n2(g) - 0.5;
+}
+vec3 pic(vec2 uv);
+vec3 picBlur(vec2 uv, float r){
+  vec3 a = pic(uv) * 0.2;
+  for (int i = 0; i < 8; i++) { float k = float(i) * 0.785 + 0.3; a += pic(uv + vec2(cos(k), sin(k)) * r) * 0.1; }
+  return a;
+}
 vec3 pic(vec2 uv){                                       // the photograph, mirror-folded past its edges
   uv = 1.0 - abs(1.0 - mod(uv, 2.0));
   return texture2D(uMap, uv).rgb;
@@ -73,37 +86,73 @@ void main(){
   float q = min(min(vP.x / DW + 0.5, 0.5 - vP.x / DW) * 6.0, 1.0);
   col *= mix(0.65, 1.0, q);                              // the reveal's own shadow at the frame
 
-  // ── the nightmare: one bare bulb swinging on its flex (the same one that
-  // lights the door's edges, stairwell.js tick), the picture drained toward
-  // the hospital's sick green and the bulb's tungsten, fog lying low and
-  // thick at the threshold, heavy crawling grain
-  float sw = sin(uTime * 1.7) * 0.35;
-  vec3 bulb = vec3(sw, 2.25 - abs(sw) * 0.15, -0.9);
-  float flick = 0.85 + 0.15 * sin(uTime * 23.0) * sin(uTime * 7.1);
-  vec3 toB = bulb - hit; float db = length(toB);
-  float lb = flick * (0.6 + 5.0 / (1.0 + db * db));    // the room is lit by it and nothing else
-  float grey = dot(col, vec3(0.3, 0.55, 0.15));
-  col = mix(vec3(grey), col, 0.35) * vec3(0.85, 1.0, 0.82) * mix(vec3(1.0), vec3(1.25, 1.0, 0.7), 0.5) * lb;
-  col = smoothstep(0.0, 0.62, col);              // hard contrast: the steps and the windows cut out of the dark
-  // fog: denser the further the ray goes and the lower it runs, drifting
-  float fn = n2(hit.xz * 1.3 + vec2(uTime * 0.12, -uTime * 0.07)) * 0.6 + n2(hit.xy * 2.1 - uTime * 0.05) * 0.4;
-  float low = smoothstep(1.2, -0.8, hit.y);
-  float fog = 1.0 - exp(-t * (0.08 + 0.35 * low) * (0.6 + 0.8 * fn));
-  float nearB = 1.0 / (1.0 + 4.0 * dot(bulb - (vP + rd * min(t, 1.5)), bulb - (vP + rd * min(t, 1.5))));   // the haze glows round the bulb
-  vec3 fogC = vec3(0.07, 0.085, 0.065) * (0.6 + 0.8 * fn) + vec3(1.0, 0.75, 0.45) * nearB * 0.9 * flick;
-  col = mix(col, fogC, clamp(fog, 0.0, 0.8));
-  // the bulb itself, a hot point where the ray passes close to it
-  vec3 cb = bulb - vP; float along = clamp(dot(cb, rd), 0.0, t);
-  float miss = length(cb - rd * along);
-  col += vec3(1.0, 0.82, 0.55) * flick * (exp(-miss * miss * 900.0) * 3.0 + exp(-miss * miss * 40.0) * 0.35);
-  // and a veil of it right in the opening, thickest along the frame
-  float veil = (1.0 - q) * 0.45 + 0.3 * fn * smoothstep(0.9, -0.2, vP.y);
-  col = mix(col, fogC * 1.6 + vec3(0.05, 0.055, 0.045), clamp(veil, 0.0, 0.7));
-  // grain, heavy and alive: every frame another
-  vec2 gp = floor(gl_FragCoord.xy * 0.75);
-  float gr = fract(sin(dot(gp + floor(uTime * 24.0) * vec2(17.0, 31.0), vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
-  col += gr * 0.3 * (0.35 + grey);
-  col *= 1.0 - 0.35 * smoothstep(0.35, 0.7, length((vP.xy - vec2(0.0, DH * 0.5)) / vec2(DW, DH)));
+  // what the doorway dreams: ?dream=1|2|3 are the sketches to choose from,
+  // without a flag the bulb-lit nightmare
+  if (uDream == 1) {
+    // 1 · a faded photograph: soft focus, light blooming out of the bright
+    // parts, a milky haze, the whole picture breathing slowly
+    vec2 buv = (uv - 0.5) * (1.0 + 0.025 * sin(uTime * 0.6)) + 0.5;
+    vec3 soft = picBlur(buv, 0.012);
+    vec3 halo = max(picBlur(buv, 0.035) - 0.35, 0.0) * 1.6;
+    col = pow(soft, vec3(0.8)) * uGain * 0.9 + halo * uGain;
+    col = mix(col, vec3(0.86, 0.82, 0.76), 0.28 + 0.25 * smoothstep(0.0, RD, RD - dz));
+    col = mix(vec3(dot(col, vec3(0.33))), col, 0.55) * vec3(1.04, 1.0, 0.94);
+    col += softGrain() * 0.035;
+    col *= 1.0 - 0.3 * smoothstep(0.3, 0.75, length((vP.xy - vec2(0.0, DH * 0.5)) / vec2(DW, DH)));
+  } else if (uDream == 2) {
+    // 2 · through water: the stairwell wavers as if seen up through a
+    // depth of water, soft moving glints, a cold teal
+    vec2 wv = uv + 0.014 * vec2(sin(uv.y * 17.0 + uTime * 1.3) + sin(uv.y * 5.0 - uTime * 0.7), cos(uv.x * 13.0 + uTime * 1.1));
+    col = pow(picBlur(wv, 0.004), vec3(0.8)) * uGain;
+    float c1 = n2(uv * 9.0 + vec2(uTime * 0.4, uTime * 0.3)), c2 = n2(uv * 13.0 - vec2(uTime * 0.35, -uTime * 0.2));
+    float caust = pow(1.0 - abs(c1 - c2), 8.0);
+    col = col * vec3(0.55, 0.86, 0.92) + vec3(0.6, 0.95, 1.0) * caust * 0.25;
+    col = mix(col, vec3(0.05, 0.16, 0.2), clamp(t * 0.12, 0.0, 0.6));
+    col *= 1.0 - 0.35 * smoothstep(0.3, 0.75, length((vP.xy - vec2(0.0, DH * 0.5)) / vec2(DW, DH)));
+  } else if (uDream == 3) {
+    // 3 · smoke: thick slow billows rolling up through the doorway, the
+    // stairs surfacing and sinking in them, warm light from the bulb above
+    float sw = sin(uTime * 1.7) * 0.35;
+    vec3 bulb = vec3(sw, 2.25 - abs(sw) * 0.15, -0.9);
+    float lb = 0.5 + 3.5 / (1.0 + dot(bulb - hit, bulb - hit));
+    col *= mix(vec3(1.0), vec3(1.2, 0.95, 0.7), 0.6) * lb * 0.8;
+    vec2 sp = vP.xy * vec2(1.3, 0.9) + vec2(0.0, -uTime * 0.18);
+    float smoke = n2(sp * 1.6 + vec2(n2(sp * 0.7 + uTime * 0.05) * 2.0, 0.0)) * 0.6 + n2(sp * 3.7 - uTime * 0.1) * 0.4;
+    smoke = smoothstep(0.35, 0.8, smoke) * (0.55 + 0.45 * smoothstep(1.4, -0.4, vP.y));
+    vec3 smokeC = vec3(0.32, 0.29, 0.25) + vec3(0.5, 0.38, 0.22) * (1.0 / (1.0 + 3.0 * dot(bulb - vP, bulb - vP)));
+    col = mix(col, smokeC, clamp(smoke * 0.85 + 0.15, 0.0, 0.9));
+    col *= 1.0 - 0.3 * smoothstep(0.35, 0.75, length((vP.xy - vec2(0.0, DH * 0.5)) / vec2(DW, DH)));
+  } else {
+    // ── the nightmare: one bare bulb swinging on its flex (the same one that
+    // lights the door's edges, stairwell.js tick), the picture drained toward
+    // the hospital's sick green and the bulb's tungsten, fog lying low and
+    // thick at the threshold, heavy crawling grain
+    float sw = sin(uTime * 1.7) * 0.35;
+    vec3 bulb = vec3(sw, 2.25 - abs(sw) * 0.15, -0.9);
+    float flick = 0.85 + 0.15 * sin(uTime * 23.0) * sin(uTime * 7.1);
+    vec3 toB = bulb - hit; float db = length(toB);
+    float lb = flick * (0.6 + 5.0 / (1.0 + db * db));    // the room is lit by it and nothing else
+    float grey = dot(col, vec3(0.3, 0.55, 0.15));
+    col = mix(vec3(grey), col, 0.35) * vec3(0.85, 1.0, 0.82) * mix(vec3(1.0), vec3(1.25, 1.0, 0.7), 0.5) * lb;
+    col = smoothstep(0.0, 0.62, col);              // hard contrast: the steps and the windows cut out of the dark
+    // fog: denser the further the ray goes and the lower it runs, drifting
+    float fn = n2(hit.xz * 1.3 + vec2(uTime * 0.12, -uTime * 0.07)) * 0.6 + n2(hit.xy * 2.1 - uTime * 0.05) * 0.4;
+    float low = smoothstep(1.2, -0.8, hit.y);
+    float fog = 1.0 - exp(-t * (0.08 + 0.35 * low) * (0.6 + 0.8 * fn));
+    float nearB = 1.0 / (1.0 + 4.0 * dot(bulb - (vP + rd * min(t, 1.5)), bulb - (vP + rd * min(t, 1.5))));   // the haze glows round the bulb
+    vec3 fogC = vec3(0.07, 0.085, 0.065) * (0.6 + 0.8 * fn) + vec3(1.0, 0.75, 0.45) * nearB * 0.9 * flick;
+    col = mix(col, fogC, clamp(fog, 0.0, 0.8));
+    // the bulb itself, a hot point where the ray passes close to it
+    vec3 cb = bulb - vP; float along = clamp(dot(cb, rd), 0.0, t);
+    float miss = length(cb - rd * along);
+    col += vec3(1.0, 0.82, 0.55) * flick * (exp(-miss * miss * 900.0) * 3.0 + exp(-miss * miss * 40.0) * 0.35);
+    // and a veil of it right in the opening, thickest along the frame
+    float veil = (1.0 - q) * 0.45 + 0.3 * fn * smoothstep(0.9, -0.2, vP.y);
+    col = mix(col, fogC * 1.6 + vec3(0.05, 0.055, 0.045), clamp(veil, 0.0, 0.7));
+    // grain, heavy and alive: every frame another
+    col += softGrain() * 0.18 * (0.35 + grey);
+    col *= 1.0 - 0.35 * smoothstep(0.35, 0.7, length((vP.xy - vec2(0.0, DH * 0.5)) / vec2(DW, DH)));
+  }
   gl_FragColor = vec4(max(col, 0.0), uK);
   #include <colorspace_fragment>
 }
@@ -247,6 +296,7 @@ export function buildStairwell(atmo, imgUrl) {
       uMap: { value: new THREE.DataTexture(new Uint8Array([10, 14, 18, 255]), 1, 1) },
       uEye: { value: new THREE.Vector3(0, 1.5, 3) }, uTint: { value: new THREE.Color(...DEFAULT_TINT) },
       uK: { value: 0 }, uTime: { value: 0 }, uRoomH: { value: 2 * ROOM_HW / 0.75 }, uGain: { value: 1.6 },
+      uDream: { value: +(new URLSearchParams(location.search).get('dream') || 0) },   // sketches: ?dream=1|2|3
     },
     vertexShader: ROOM_VERT, fragmentShader: ROOM_FRAG,
   });
