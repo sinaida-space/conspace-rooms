@@ -130,6 +130,7 @@ const SEED_SOULQ = CONSPACE_SEED ^ 0x50a1;
 const SEED_EGG = CONSPACE_SEED ^ 0xe66c;
 const SEED_PROPS = CONSPACE_SEED ^ 0x9e05;
 const SEED_STAIR = CONSPACE_SEED ^ 0x57a1;
+const STAIR_PICS = 85;           // assets/stairs/stairs_1..85.webp
 const EGG_BAND = new Set([4, 5, 10, 11]);   // the corridor lattice, mirrored from world.js
 const mod16 = v => ((v % CHUNK) + CHUNK) % CHUNK;   // a global cell's position on that lattice
 const SKY = '#cfe6ff';                              // the questions of the light, pale sky blue
@@ -1315,10 +1316,25 @@ export class SoulPath {
       stuff.portals.push(this._makePortal(group, plan.x, plan.z, plan.west, target));
     }
   }
+  // The stairwells behind the rusty door: a deck of all of them, shuffled
+  // by the visit's seed (the date and the second the visit began), dealt one
+  // per opening; none comes twice until the deck runs out, then it is
+  // shuffled again, never starting on the one just seen.
+  _nextStair() {
+    if (!this._stairDeck?.length) {
+      const r = mulberry32(SEED_STAIR + (this._stairDeals = (this._stairDeals || 0) + 1));
+      const deck = Array.from({ length: STAIR_PICS }, (_, i) => i + 1);
+      for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+      if (deck[deck.length - 1] === this._stairLast) [deck[0], deck[deck.length - 1]] = [deck[deck.length - 1], deck[0]];
+      this._stairDeck = deck;
+    }
+    return (this._stairLast = this._stairDeck.pop());
+  }
+
   _ensureStairwellFor(cx, cz, group, stuff) {
     const plan = this.stairwellPlan;
     if (!plan || plan.cx !== cx || plan.cz !== cz || stuff.stairwell || this.stage.stage !== 0) return;
-    const idx = (hash2i(SEED_STAIR, 0, 0) % 5) + 1;
+    const idx = this._nextStair();
     const sw = buildStairwell(this.atmo, `assets/stairs/stairs_${idx}.webp`);
     sw.group.position.set(plan.x, 0, plan.z);
     sw.group.rotation.y = plan.rotY;
@@ -3040,7 +3056,7 @@ export class SoulPath {
       } else if (sw.phase === 'cool') {
         if (d > STAIR_NEAR + 1.5 || (DREAM_PREVIEW && sw.t > 3)) {   // walked away (or judging a sketch: a pause): it opens for the next pass, onto another stairwell
           sw.phase = 'wait';
-          sw.pic = ((sw.pic + Math.floor(Math.random() * 4)) % 5) + 1;   // any of the other four
+          sw.pic = this._nextStair();                  // the next of the deck: never one already seen
           sw.setImage(`assets/stairs/stairs_${sw.pic}.webp`);
         }
       }
