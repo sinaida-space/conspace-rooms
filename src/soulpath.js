@@ -530,7 +530,9 @@ export class SoulPath {
       this._mTimes = this._mTimes.filter(tm => now - tm < 2500).concat(now);
       if (this._mTimes.length < 5) return;
       this._mTimes = [];
-      if (this.stage.stage === 2) { if (!this.guide) this._cheatFinale(); return; }
+      // in the light the ending plays, chevrons or not: the ones lit on the way
+      // here have nothing left to lead to, and go out
+      if (this.stage.stage === 2) { if (this.guide) this._toggleGuide(); this._cheatFinale(); return; }
       if (!this.guide) {
         if (this.stage.stage === 1) this.visitedRoom = true;
         const next = this.stage.stage + 1;
