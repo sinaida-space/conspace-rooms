@@ -4,7 +4,7 @@ import { keyCode } from './input.js';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, mulberry32 } from './world.js';
 import { zoneWeights, ORIGIN } from './zones.js';
 import { t, getLang } from './i18n.js';
-import { boardTexture, carpetTexture, rugTexture, runnerTexture, prewarmBoards } from './boards.js';
+import { boardTexture, carpetTexture, rugTexture, runnerTexture, boardPaintJobs } from './boards.js';
 import { createChandeliers } from './chandeliers.js';
 import { EYE_HEIGHT } from './player.js';
 import { buildKitchen, createKitchenRig, buildScatter, tickCandles, shadeOf } from './kitchen.js';
@@ -458,7 +458,7 @@ export class SoulPath {
     this._lastStage = stage.stage;
     this._prevPos = { x: player.pos.x, z: player.pos.y };
     this.kitchenRig = createKitchenRig(scene, renderer, quality);
-    prewarmBoards();
+    this._paint = [];               // canvases waiting to be painted, one a frame (_stepPaint)
     this.seen = new Set();          // art ids seen this visit
     this.asked = [];                // what the souls asked, in order, for the card
     this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
@@ -606,14 +606,21 @@ export class SoulPath {
   _sync() {
     const P = this.player.pos, span = CHUNK * CELL, first = !this.chunkStuff.size;
     let next = null, nd = Infinity;
+    // the first chunks are painted as they are built, behind the loading screen;
+    // after that every canvas waits its turn (_stepPaint)
+    this._deferPaint = !first;
+    const dress = (key, cx, cz) => { this.chunkStuff.set(key, this._buildChunk(cx, cz)); this._dressed = true; };
     for (const key of this.world.chunks.keys()) {
       if (this.chunkStuff.has(key)) continue;
       const [cx, cz] = key.split(':').map(Number);
       const d = Math.hypot((cx + 0.5) * span - P.x, (cz + 0.5) * span - P.y);
-      if (first || d < span * 0.75) { this.chunkStuff.set(key, this._buildChunk(cx, cz)); continue; }
+      if (first || d < span * 0.75) { dress(key, cx, cz); continue; }
       if (d < nd) { nd = d; next = [key, cx, cz]; }
     }
-    if (next) this.chunkStuff.set(next[0], this._buildChunk(next[1], next[2]));
+    // not in the frame in which the world itself laid a new row of chunks
+    const moved = this.world._cx !== this._wcx || this.world._cz !== this._wcz;
+    this._wcx = this.world._cx; this._wcz = this.world._cz;
+    if (next && !(moved && !first)) dress(...next);
     // the clock nook only exists in the memory stage, like the ward's islands
     // in the fear stage; re-check every frame, cheap since it is one flag
     const memStage = this.stage.stage === 1;
@@ -711,9 +718,8 @@ export class SoulPath {
     if (carpetWall && rpo() < 0.65) {
       const mesh = onWall(carpetWall, 2.0, 1.46, 1.62, 0);     // landscape, as they hung over a sofa
       const seed = Math.floor(rpo() * 1e6);
-      mesh.material.uniforms.uMap.value = carpetTexture(seed);
-      mesh.material.uniforms.uHasMap.value = 1;
-      mesh.visible = this.stage.stage === 1;
+      mesh.userData.paint = () => { mesh.material.uniforms.uMap.value = carpetTexture(seed); mesh.material.uniforms.uHasMap.value = 1; };
+      this._showMemory(mesh);
       hangOrDrop(mesh, carpetWall, 'wall carpet', 1.0);
       stuff.carpets.push(mesh);
       (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.2]);
@@ -726,12 +732,13 @@ export class SoulPath {
     const rr = mulberry32(hash2i(SEED_POSTER ^ 0x7a9, cx, cz));
     const kRoom = kitchenPlan(cx, cz);
     const addRug = (x, z, w, d, rot, pal = null) => {
-      const mat = this.atmo.prop({ map: pal?.runner ? runnerTexture(Math.floor(rr() * 1e6)) : rugTexture(Math.floor(rr() * 1e6), pal), rust: 0 });
+      const seed = Math.floor(rr() * 1e6), mat = this.atmo.prop({ rust: 0 });
       mat.polygonOffset = true; mat.polygonOffsetFactor = -1; mat.polygonOffsetUnits = -1;
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), mat);
       mesh.position.set(x, 0.003, z); mesh.rotation.y = rot;
-      mesh.visible = this.stage.stage === 1;
+      mesh.userData.paint = () => { mat.uniforms.uMap.value = pal?.runner ? runnerTexture(seed) : rugTexture(seed, pal); mat.uniforms.uHasMap.value = 1; };
       group.add(mesh);
+      this._showMemory(mesh);
       stuff.rugs.push(mesh);
     };
     // under most of grandmother's rooms a big one, the television and table on it
@@ -827,53 +834,62 @@ export class SoulPath {
     if (kp) {
       const kg = new THREE.Group();                   // only exists in the memory stage
       group.add(kg);
-      stuff.kitchen = { ...kp, group: kg, room: buildKitchen(kg, kp.x, kp.z) };
-      if (bigRug) {                                     // the table and the television both on it, in the lampshade's colours
-        const tv = stuff.kitchen.room.tv, m = 1.35;          // room.tv is half a metre before the set: reach past it
-        const x0 = Math.max(kp.minX + 0.3, Math.min(kp.x - 1.3, tv.x - m)), x1 = Math.min(kp.maxX - 0.3, Math.max(kp.x + 1.3, tv.x + m));
-        const z0 = Math.max(kp.minZ + 0.3, Math.min(kp.z - 1.3, tv.z - m)), z1 = Math.min(kp.maxZ - 0.3, Math.max(kp.z + 1.3, tv.z + m));
-        const sh = shadeOf(kp.x, kp.z), hex = n => '#' + n.toString(16).padStart(6, '0');
-        if (x1 - x0 > 1.5 && z1 - z0 > 1.5) addRug((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, 0, { field: sh.v[1], dark: sh.v[0], light: hex(sh.fringe) });
-      }
-      // a woven runner up to the table (#38): along the most open way that is
-      // not the television's, starting past the big rug, stopping short of the wall
-      {
-        const big = bigRug ? stuff.rugs[stuff.rugs.length - 1] : null, tv = stuff.kitchen.room.tv;
-        let best = null;
-        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          if (((tv.x - kp.x) * dx + (tv.z - kp.z) * dz) > 0.5) continue;             // not toward the set
-          let s0 = 0.95;
-          if (big) { const p = big.geometry.parameters; s0 = Math.max(s0, (dx ? Math.abs(big.position.x + dx * p.width / 2 - kp.x) : Math.abs(big.position.z + dz * p.height / 2 - kp.z)) + 0.05); }
-          let s1 = s0;
-          while (s1 < s0 + 4.5 && !solidAtGlobal(cellOf(kp.x + dx * (s1 + 0.3)), cellOf(kp.z + dz * (s1 + 0.3)))
-            && !solidAtGlobal(cellOf(kp.x + dx * s1 - dz * 0.45), cellOf(kp.z + dz * s1 + dx * 0.45)) && !solidAtGlobal(cellOf(kp.x + dx * s1 + dz * 0.45), cellOf(kp.z + dz * s1 - dx * 0.45))) s1 += 0.1;
-          if (s1 - s0 >= 2 && (!best || s1 - s0 > best.len)) best = { dx, dz, s0, len: s1 - s0 };
+      // The room is some forty milliseconds of building and only the memory
+      // stage shows it: its place is kept from the start (the candles keep
+      // out of it), the room itself is built when that stage wants it, in a
+      // frame of its own (_wantRoom).
+      stuff.kitchen = { ...kp, group: kg, room: null, wisps: null };
+      stuff.kitchen.build = () => {
+        if (group.userData.gone || stuff.kitchen.room) return;
+        stuff.kitchen.room = buildKitchen(kg, kp.x, kp.z);
+        if (bigRug) {                                     // the table and the television both on it, in the lampshade's colours
+          const tv = stuff.kitchen.room.tv, m = 1.35;          // room.tv is half a metre before the set: reach past it
+          const x0 = Math.max(kp.minX + 0.3, Math.min(kp.x - 1.3, tv.x - m)), x1 = Math.min(kp.maxX - 0.3, Math.max(kp.x + 1.3, tv.x + m));
+          const z0 = Math.max(kp.minZ + 0.3, Math.min(kp.z - 1.3, tv.z - m)), z1 = Math.min(kp.maxZ - 0.3, Math.max(kp.z + 1.3, tv.z + m));
+          const sh = shadeOf(kp.x, kp.z), hex = n => '#' + n.toString(16).padStart(6, '0');
+          if (x1 - x0 > 1.5 && z1 - z0 > 1.5) addRug((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, 0, { field: sh.v[1], dark: sh.v[0], light: hex(sh.fringe) });
         }
-        if (best) {
-          const mid = best.s0 + best.len / 2, len = Math.min(best.len, 4.5);
-          addRug(kp.x + best.dx * mid, kp.z + best.dz * mid, 0.8, len, best.dx ? Math.PI / 2 : 0, { runner: true });
+        // a woven runner up to the table (#38): along the most open way that is
+        // not the television's, starting past the big rug, stopping short of the wall
+        {
+          const big = bigRug ? stuff.rugs[stuff.rugs.length - 1] : null, tv = stuff.kitchen.room.tv;
+          let best = null;
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            if (((tv.x - kp.x) * dx + (tv.z - kp.z) * dz) > 0.5) continue;             // not toward the set
+            let s0 = 0.95;
+            if (big) { const p = big.geometry.parameters; s0 = Math.max(s0, (dx ? Math.abs(big.position.x + dx * p.width / 2 - kp.x) : Math.abs(big.position.z + dz * p.height / 2 - kp.z)) + 0.05); }
+            let s1 = s0;
+            while (s1 < s0 + 4.5 && !solidAtGlobal(cellOf(kp.x + dx * (s1 + 0.3)), cellOf(kp.z + dz * (s1 + 0.3)))
+              && !solidAtGlobal(cellOf(kp.x + dx * s1 - dz * 0.45), cellOf(kp.z + dz * s1 + dx * 0.45)) && !solidAtGlobal(cellOf(kp.x + dx * s1 + dz * 0.45), cellOf(kp.z + dz * s1 - dx * 0.45))) s1 += 0.1;
+            if (s1 - s0 >= 2 && (!best || s1 - s0 > best.len)) best = { dx, dz, s0, len: s1 - s0 };
+          }
+          if (best) {
+            const mid = best.s0 + best.len / 2, len = Math.min(best.len, 4.5);
+            addRug(kp.x + best.dx * mid, kp.z + best.dz * mid, 0.8, len, best.dx ? Math.PI / 2 : 0, { runner: true });
+          }
         }
-      }
-      stuff.kitchen.wisps = [0, 1, 2, 0, 1, 2].map(cat => {
-        const color = SOUL_COLORS[cat];
-        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-          map: glowTexture(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
-        }));
-        sprite.scale.set(0.35, 0.35, 1);
-        kg.add(sprite);
-        // a faint tail of smaller lights that lag behind, so it reads as alive
-        const tail = [0.6, 0.42, 0.28].map(k => {
-          const tsp = new THREE.Sprite(new THREE.SpriteMaterial({
-            map: glowTexture(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: k,
+        stuff.kitchen.wisps = [0, 1, 2, 0, 1, 2].map(cat => {
+          const color = SOUL_COLORS[cat];
+          const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: glowTexture(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
           }));
-          tsp.scale.set(0.35 * k, 0.35 * k, 1);
-          kg.add(tsp);
-          return tsp;
+          sprite.scale.set(0.35, 0.35, 1);
+          kg.add(sprite);
+          // a faint tail of smaller lights that lag behind, so it reads as alive
+          const tail = [0.6, 0.42, 0.28].map(k => {
+            const tsp = new THREE.Sprite(new THREE.SpriteMaterial({
+              map: glowTexture(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: k,
+            }));
+            tsp.scale.set(0.35 * k, 0.35 * k, 1);
+            kg.add(tsp);
+            return tsp;
+          });
+          const w = { sprite, tail, cat, gone: false, back: 0, seed: Math.random() * 10, pull: new THREE.Vector3() };
+          this._placeWisp(w, stuff.kitchen);
+          return w;
         });
-        const w = { sprite, tail, cat, gone: false, back: 0, seed: Math.random() * 10, pull: new THREE.Vector3() };
-        this._placeWisp(w, stuff.kitchen);
-        return w;
-      });
+      };
+      this._wantRoom(stuff.kitchen);
     }
     // whatever the walls took on where the metal door stands comes down before anyone sees it
     const sp = this.stairwellPlan;
@@ -885,12 +901,54 @@ export class SoulPath {
     const st = this.stage.stage, u = p.mesh.material.uniforms;
     p.mesh.visible = st === 0;                        // past the hospital the souls, clouds and balloons ask
     if (st !== 0) return;
-    const list = t('fearQuestions').concat(t('posterQuestions'));
-    const old = u.uMap.value;
-    u.uMap.value = boardTexture(list[p.q % list.length], p.q + 1, getLang());
-    u.uHasMap.value = 1;
     p.mesh.scale.set(1.55, 0.85, 1);                  // a wide board
-    old?.dispose();
+    const paint = () => {
+      const host = p.mesh.parent;
+      if (this.stage.stage !== 0 || !host || host.userData.gone) return;   // the world moved on, or the chunk is gone
+      const list = t('fearQuestions').concat(t('posterQuestions'));
+      const old = u.uMap.value;
+      u.uMap.value = boardTexture(list[p.q % list.length], p.q + 1, getLang());
+      u.uHasMap.value = 1;
+      old?.dispose();
+    };
+    if (this._deferPaint) this._paint.push(paint); else paint();
+  }
+
+  // ── painting on canvases, a little a frame ─────────────────────────────
+  // A notice board, a carpet or a rug is a canvas painted in JavaScript, ten
+  // to twenty milliseconds each: painted as a chunk was dressed, they were
+  // most of the long frames at every chunk crossing. Mid-walk they wait here
+  // and are painted a few milliseconds a frame, never in a frame that has
+  // just dressed a chunk; the chunk is still far off in the fog by then.
+  _stepPaint() {
+    if (this._dressed) { this._dressed = false; return; }
+    const until = performance.now() + 4;
+    while (this._paint.length && performance.now() < until) this._paint.shift()();
+  }
+
+  // Grandmother's room, built once the memory stage wants it: at once behind
+  // the loading screen, otherwise in its turn, like the canvases.
+  _wantRoom(k) {
+    if (this.stage.stage !== 1 || k.room || k.queued) return;
+    if (!this._deferPaint) { k.build(); return; }
+    k.queued = true;
+    this._paint.push(k.build);
+  }
+
+  // A thing of grandmother's stage whose canvas is painted only when that
+  // stage shows it (in the hospital nobody sees a carpet): shown at once when
+  // the painting is done or may be done now, otherwise after its turn.
+  _showMemory(mesh) {
+    const on = this.stage.stage === 1, paint = mesh.userData.paint;
+    if (!on || !paint) { mesh.visible = on; return; }
+    mesh.userData.paint = null;
+    if (!this._deferPaint) { paint(); mesh.visible = true; return; }
+    mesh.visible = false;
+    this._paint.push(() => {
+      if (!mesh.parent || mesh.parent.userData.gone) return;
+      paint();
+      mesh.visible = this.stage.stage === 1;
+    });
   }
 
   // Somewhere inside the room, at chest height, away from the walls.
@@ -2739,6 +2797,7 @@ export class SoulPath {
     if (this._titleFor !== this.stage.stage) { this._titleFor = this.stage.stage; this._zoneTitle(this.stage.stage); }
     this._sync();
     this._stepRebuild();                                // one chunk a frame of a pending rebuild
+    this._stepPaint();                                  // and a few milliseconds of canvas painting
     this.petals.update(dt, time);
     this._time = time;
     this._tickMarks(time);
@@ -2975,7 +3034,13 @@ export class SoulPath {
       const target = { fear: +(this.stage.stage === 0), memory: +(this.stage.stage === 1), accept: +(this.stage.stage === 2) };
       for (const st of this.chunkStuff.values()) for (const w of st.writings) { w.zone = target; this._writeOn(w); }
       for (const st of this.chunkStuff.values()) for (const p of st.posters || []) this._printPoster(p);
-      for (const st of this.chunkStuff.values()) for (const m of (st.carpets || []).concat(st.rugs || [], st.toys || [])) m.visible = this.stage.stage === 1;
+      for (const st of this.chunkStuff.values()) if (st.kitchen) this._wantRoom(st.kitchen);   // the rooms first: they are what the stage is for
+      for (const st of this.chunkStuff.values()) {
+        for (const m of (st.carpets || []).concat(st.rugs || [])) this._showMemory(m);
+        for (const m of st.toys || []) m.visible = this.stage.stage === 1;
+      }
+      // and the rest of the plain carpets and rugs, ahead of the chunks that will want them
+      if (this.stage.stage === 1 && !this._paintedAhead) { this._paintedAhead = true; this._paint.push(...boardPaintJobs()); }
       this._rebuildScatter();
       for (const st of this.chunkStuff.values()) if (st.ward) st.ward.group.visible = this.stage.stage === 0;
       for (const st of this.chunkStuff.values()) if (st.beds) st.beds.group.visible = this.stage.stage === 0;
