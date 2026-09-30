@@ -47,7 +47,10 @@ const server = http.createServer(async (req, res) => {
   try {
     const body = await readFile(file);
     res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-store', 'content-security-policy': CSP }).end(body);
-  } catch { res.writeHead(404).end(); }
+  } catch {                                         // a missing path gets the site's own 404 page, as on Vercel
+    const body = await readFile(join(ROOT, '404.html')).catch(() => '');
+    res.writeHead(404, { 'content-type': MIME['.html'], 'cache-control': 'no-store', 'content-security-policy': CSP }).end(body);
+  }
 });
 await new Promise(ok => server.listen(0, '127.0.0.1', ok));
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -78,6 +81,7 @@ try {
   for (const path of ['tech.html', 'privacy.html', 'rider.html', 'press.html', 'voprosy.html', 'gallery.html?lang=en', 'no-such-page']) {
     await page.goto(`${base}/${path}`, { waitUntil: 'load' }).catch(() => {});
     await page.waitForTimeout(300);
+    if (path === 'no-such-page' && !(await page.locator('#site-footer .footer-col').count())) errors.push('the 404 page did not come up whole (its footer is missing)');
   }
   for (let i = errors.length - 1; i >= 0; i--) if (/^404 \/no-such-page|Failed to load resource.*404/.test(errors[i])) errors.splice(i, 1);   // the 404 we asked for
 
