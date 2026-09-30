@@ -262,7 +262,8 @@ function metalMat(map) {
 
 // Build the door and the picture behind it. atmo: the world's material kit
 // (kept for the caller's signature). imgUrl: one of
-// assets/stairs/stairs_1..5.webp, chosen by the caller from the visit's seed.
+// assets/stairs/stairs_1..85.webp, dealt by the caller from a deck
+// shuffled by the visit's seed.
 // Local +Z points out of the wall, into the corridor.
 export function buildStairwell(atmo, imgUrl) {
   const g = new THREE.Group();   // always visible: the door itself is never a secret
