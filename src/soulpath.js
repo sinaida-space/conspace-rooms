@@ -2823,7 +2823,7 @@ export class SoulPath {
 
     // seen: close enough and roughly in front
     for (const a of this.artworks.active) {
-      if (a.hidden) continue;
+      if (a.hidden || !a.ready) continue;               // a canvas still dark (its picture on the way) is not a work seen
       const dx = a.centerWorld.x - P.pos.x, dz = a.centerWorld.z - P.pos.y;
       const d = Math.hypot(dx, dz);
       if (d < SEEN_DIST && (fx * dx + fz * dz) / (d || 1) > 0.5) this.seen.add(a.art.id);
@@ -3036,7 +3036,10 @@ export class SoulPath {
       const target = { fear: +(this.stage.stage === 0), memory: +(this.stage.stage === 1), accept: +(this.stage.stage === 2) };
       for (const st of this.chunkStuff.values()) for (const w of st.writings) { w.zone = target; this._writeOn(w); }
       for (const st of this.chunkStuff.values()) for (const p of st.posters || []) this._printPoster(p);
-      for (const st of this.chunkStuff.values()) if (st.kitchen) this._wantRoom(st.kitchen);   // the rooms first: they are what the stage is for
+      // the rooms first, the nearest first: they are what the stage is for
+      const rooms = [...this.chunkStuff.values()].map(st => st.kitchen).filter(Boolean)
+        .sort((a, b) => Math.hypot(a.x - P.pos.x, a.z - P.pos.y) - Math.hypot(b.x - P.pos.x, b.z - P.pos.y));
+      for (const k of rooms) this._wantRoom(k);
       for (const st of this.chunkStuff.values()) {
         for (const m of (st.carpets || []).concat(st.rugs || [])) this._showMemory(m);
         for (const m of st.toys || []) m.visible = this.stage.stage === 1;
