@@ -425,8 +425,9 @@ export class Artworks {
   _fetchNear() {
     const P = this.player.pos;
     let due = null;
+    const now = performance.now();
     for (const a of this.active) {
-      if (a.wanted) continue;
+      if (a.wanted || now < a.retryAt) continue;
       a.dist = Math.hypot(a.centerWorld.x - P.x, a.centerWorld.z - P.y);
       if (a.dist < FETCH_NEAR) (due ||= []).push(a);
     }
@@ -434,9 +435,18 @@ export class Artworks {
     due.sort((a, b) => a.dist - b.dist);
     for (const a of due) {
       a.wanted = a.sub.userData.textureWanted = true;
-      this._getTexture(a.art).then(tex => {
-        if (this.active.includes(a)) a.canvas.material.map = tex;   // else its chunk went meanwhile, and the texture was released with it
-      }).catch(e => console.warn('[artworks] failed to load', a.art.id, e));
+      const promise = this._getTexture(a.art), entry = this.texCache.get(a.art.id);
+      promise.then(tex => {
+        if (!this.active.includes(a)) return;            // its chunk went meanwhile, and the texture was released with it
+        a.canvas.material.map = tex;
+        a.ready = true;                                  // only now can it be looked at, opened, counted as seen
+      }).catch(e => {
+        // the file did not come (a bad network): forget the try and ask again in a while
+        console.warn('[artworks] failed to load', a.art.id, e);
+        if (this.texCache.get(a.art.id) === entry) this.texCache.delete(a.art.id);
+        a.wanted = a.sub.userData.textureWanted = false;
+        a.retryAt = performance.now() + 5000;
+      });
     }
   }
 
@@ -507,6 +517,8 @@ export class Artworks {
       hidden: false,
       canvas: canvasMesh,
       wanted: false,  // its picture has been asked for (_fetchNear)
+      ready: false,   // and has arrived: a dark canvas is never opened or counted as seen
+      retryAt: 0,
     });
   }
 
@@ -548,7 +560,7 @@ export class Artworks {
     if (!e) return;
     if (--e.refs <= 0) {
       this.texCache.delete(id);
-      e.promise.then(tex => tex.dispose()); // safe even if already resolved
+      e.promise.then(tex => { tex.dispose(); tex.image?.close?.(); }, () => {});   // safe even if already resolved; a bitmap gives its memory back at once
     }
   }
   _getPlacard(art) {
@@ -617,7 +629,7 @@ export class Artworks {
     const fx = -Math.sin(this.player.yaw), fz = -Math.cos(this.player.yaw);
     let best = null, bestD = Infinity;
     for (const a of this.active) {
-      if (a.hidden || this._autoShown.has(autoKey(a)) || a === this.inspecting) continue;
+      if (a.hidden || !a.ready || this._autoShown.has(autoKey(a)) || a === this.inspecting) continue;
       const dx = a.centerWorld.x - px, dz = a.centerWorld.z - pz;
       const d = Math.hypot(dx, dz);
       if (d > AUTO_DIST || d < 1e-4) continue;
@@ -641,7 +653,7 @@ export class Artworks {
     const fx = -Math.sin(this.player.yaw), fz = -Math.cos(this.player.yaw);
     let best = null, bestD = Infinity;
     for (const a of this.active) {
-      if (a.hidden) continue;
+      if (a.hidden || !a.ready) continue;
       const dx = a.centerWorld.x - px, dz = a.centerWorld.z - pz;
       const d = Math.hypot(dx, dz);
       if (d > INSPECT_DIST || d < 1e-4) continue;
