@@ -279,7 +279,8 @@ export function createPetals(scene, camera, quality) {
   function corner() {
     camera.updateMatrixWorld();
     const ty = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-    _c.set(CORNER_NDC[0] * ty * camera.aspect * CORNER_DEPTH, CORNER_NDC[1] * ty * CORNER_DEPTH, -CORNER_DEPTH)
+    const aspect = camera.aspect > 0 && Number.isFinite(camera.aspect) ? camera.aspect : 1;   // a hidden, zero-height window gives NaN
+    _c.set(CORNER_NDC[0] * ty * aspect * CORNER_DEPTH, CORNER_NDC[1] * ty * CORNER_DEPTH, -CORNER_DEPTH)
       .applyMatrix4(camera.matrixWorld);
     _r.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
     _u.setFromMatrixColumn(camera.matrixWorld, 1).normalize();

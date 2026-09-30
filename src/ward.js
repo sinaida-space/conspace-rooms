@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/addons/GLTFLoader.js';
-import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
+import { mergeGeometries, deinterleaveGeometry } from '../vendor/addons/BufferGeometryUtils.js';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, hash2i, mulberry32, isLampCell } from './world.js';
 import { ORIGIN } from './zones.js';
 import { roundedBox } from './geom.js';
@@ -676,6 +676,7 @@ async function loadModels(atmo) {
     gltf.scene.traverse(o => { if (!src && o.isMesh) src = o; });
     const geo = src.geometry.clone().applyMatrix4(src.matrixWorld);
     for (const n of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(n)) geo.deleteAttribute(n);
+    deinterleaveGeometry(geo);                   // own arrays: the file's shared buffer carries NaN in a channel we drop
     geo.computeBoundingBox();
     let b = geo.boundingBox, sx = b.max.x - b.min.x, sz = b.max.z - b.min.z;
     if (sz > sx) { geo.rotateY(Math.PI / 2); geo.computeBoundingBox(); b = geo.boundingBox; }
