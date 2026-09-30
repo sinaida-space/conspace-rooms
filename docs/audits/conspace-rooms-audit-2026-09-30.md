@@ -4,7 +4,7 @@ Prepared for Sinaida Krivchenko, 30 September 2026. Scope: repo at `98432d5` (e
 
 ## Executive summary
 
-The piece is strong in concept and in privacy, machines read it well, and it holds its memory flat over a long walk. Its weakest side is delivery: every 19 m the walk stalls for about five frames of 40 to 160 ms on an Apple M2, and a visitor downloads 7.2 MB of paintings before the first step, phones included. The most consequential finding is F-001, the chunk-boundary stall, because it touches the one thing the work asks of the visitor: a slow, unbroken walk.
+The piece is strong in concept and in privacy, machines read it well, and it holds its memory flat over a long walk. Its weakest side is delivery: a visitor downloads 7.2 MB of paintings before the first step, phones included, and nothing is cached between visits. The most consequential finding is F-002, the weight of the paintings, because most visitors arrive on a phone. F-001 was rated first in the morning and corrected the same day: at walking pace a chunk crossing costs one frame of about 42 ms, where the first measurement showed five.
 
 **Overall: 7.5 / 10.**
 
@@ -12,7 +12,7 @@ The piece is strong in concept and in privacy, machines read it well, and�
 |---|---|---|
 | Concept and scope | 9 | One arc (fear, memory, acceptance) carried by space, light and sound, and by the text. Scope sits at the upper limit for a solo build. |
 | Mechanics | 8 | Candles as the map, a rose as the counter, portals that come once works are seen, souls with questions, a finale. The gates are invisible and the full length has no playtest data. |
-| Rendering | 6.5 | Steady state is light (263 draw calls, 336 k triangles at tier 2). Chunk crossings stall. |
+| Rendering | 7 | Steady state is light (263 draw calls, 336 k triangles at tier 2). One long frame per chunk crossing. |
 | Loading and network | 5.5 | 76 requests and 10.7 MB decoded at entry, no cache policy, JPEG only. |
 | Accessibility | 6 | Good text contrast and focus rings. Zoom is locked, WebGL ignores reduced motion, no plain route to the works. |
 | Security | 7 | HSTS, no secrets, no backend. No CSP or companion headers, third-party code runs beside the camera. |
@@ -33,8 +33,8 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 
 | # | Finding | Category | Impact | Probability | Rating |
 |---|---|---|---|---|---|
-| F-001 | Every chunk crossing stalls the walk for about five frames | Performance | Medium | High | **High** |
 | F-002 | 7.2 MB of JPEG paintings at entry, full size on phones too | Performance | Medium | High | **High** |
+| F-001 | Every chunk crossing costs one frame of about 42 ms (corrected, see the finding) | Performance | Low | High | **Medium** |
 | F-003 | One 3 165-line class, global wiring, no tests, no CI | Code health | Medium | Medium | **Medium** |
 | F-004 | No cache policy: every file revalidates on every visit | Performance | Low | High | **Medium** |
 | F-005 | Flicker and glitch in WebGL ignore reduced motion | Accessibility | Medium | Medium | **Medium** |
@@ -54,7 +54,8 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 - **Category:** Performance
 - **Impact:** Medium. The walk is the work; a hitch every 19 m reads as a broken machine on anything slower than an M2.
 - **Probability:** High. It happens to every visitor at every chunk border.
-- **Rating:** High
+- **Rating:** Medium (was High, see the correction)
+- **Correction, 30 September, from the smoke run of wave 2:** the numbers below were taken while the visitor was moved 1.2 m a frame, which is 72 m/s. At walking pace (3 m/s, 0.05 m a frame, seed 1224, tier 2, Apple M2, real GPU) two crossings over 40 m gave one frame of about 42 ms each, 2 frames of 800 past 33 ms, median 7.5 ms. The dressing of a chunk is already spread over frames; one frame per crossing still runs long. Impact is therefore Low on this hardware, and a slower machine remains unmeasured. `tests/smoke.mjs` repeats the measurement.
 - **Evidence:** stepping east through four borders gave, per border, five slow frames in a row: 56, 77, 22, 115, 66 ms; then 120, 64, 45, 22, 72; then 11, 160, 22, 126, 24; then 37, 39, 40, 42, 40. Over twelve more chunks 26 of 192 frames ran past 33 ms, worst 109 ms. The scene holds about 2 000 meshes and 2 600 to 2 900 objects for 30 chunks, 1 664 of them built by `SoulPath._buildChunk` (`src/soulpath.js:637`, 250 lines, synchronous) on top of `World._buildChunk` (`src/world.js:181`), which fills plain JS arrays with `push` and copies them into typed arrays.
 - **Why it matters:** the governor in `src/quality.js` reads the median frame, so these hitches never trigger a step down, and a step down would not help anyway: the cost is CPU work of dressing a chunk, which no tier removes except by density.
 - **Recommended remediation:** spread the dressing of a new row of chunks over frames with a time budget (about 4 ms a frame), nearest chunk first; build one ring further out than the eye reaches so a chunk is ready before it shows; move `World._buildChunk` to preallocated typed arrays. Merging static props of a chunk into a few meshes per material would cut both build time and the object count. The pure geometry of `world.js` can go to a Worker later if the budget alone is not enough.
@@ -79,7 +80,7 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 
 ### F-004 · No cache policy: every file revalidates on every visit
 - **Category:** Performance
-- **Impact:** Low. The second visit works, only slower than necessary.
+- **Impact:** Low. The second visit works, only slower than necessary.
 - **Probability:** High. Every repeat visit, and every reload in gallery mode after each visitor.
 - **Rating:** Medium
 - **Evidence:** live headers for `/`, `/vendor/three.module.js` and `/assets/artworks/08.jpg` all answer `cache-control: public, max-age=0, must-revalidate`. `vercel.json` sets no `Cache-Control` anywhere.
@@ -88,7 +89,7 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 
 ### F-005 · Flicker and glitch in WebGL ignore reduced motion
 - **Category:** Accessibility
-- **Impact:** Medium. The content warning names photosensitive epilepsy, and the visitor who set the system preference still gets the full effect.
+- **Impact:** Medium. The content warning names photosensitive epilepsy, and the visitor who set the system preference still gets the full effect.
 - **Probability:** Medium. Applies to visitors with the preference set.
 - **Rating:** Medium
 - **Evidence:** `prefers-reduced-motion` is read in `css/style.css` (three blocks), `src/tunnel.js`, `src/petals.js` and `src/ui.js`. It is not read in `src/post.js` (glitch bursts, RGB shift), `src/materials.js` (lamp flicker), `src/events.js` (flicker event) or `src/player.js` (head bob).
@@ -124,7 +125,7 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 ### F-009 · Zoom locked on the home page and the gallery page
 - **Category:** Accessibility
 - **Impact:** Medium. WCAG 1.4.4; the welcome screen is a long text in a pixel font.
-- **Probability:** Low. iOS ignores the lock; Android honours the lock.
+- **Probability:** Low. iOS ignores the lock; Android honours the lock.
 - **Rating:** Low
 - **Evidence:** `index.html:15` and `gallery.html:5`: `maximum-scale=1, user-scalable=no`.
 - **Recommended remediation:** drop both from the meta tag and keep the pinch away from the canvas with `touch-action: none` on `#gl` while walking (the body already gets `.walking`).
@@ -182,7 +183,7 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 
 ## Recommended next steps
 
-F-001 and F-002 decide how the piece feels on a stranger’s machine and are the two I would settle before the piece is shown further. F-004, F-008, F-009, F-012 and F-014 are small edits that fit one short session. F-003 and F-006 are investments that pay back in the gallery version (issue #22). F-007 is settled by a playtest with people; code follows the results.
+F-002 decides how the piece opens on a stranger’s phone and is the one I would settle first. F-001 is one long frame every 19 m and worth a measured fix. F-004, F-008, F-009, F-012 and F-014 are small edits that fit one short session. F-003 and F-006 are investments that pay back in the gallery version (issue #22). F-007 is settled by a playtest with people; code follows the results.
 
 **This report is a diagnosis. Say which findings (by number) should become fixes, and in what order.**
 
