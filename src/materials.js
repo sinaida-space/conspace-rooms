@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { calm } from './calm.js';
 import { sketchParam } from './device.js';
 import { CEIL_H, CELL, lampLineNear, solidAtGlobal, isChandelierCell } from './world.js';
 import { ZONE, ORIGIN } from './zones.js';
@@ -1099,7 +1100,7 @@ export function createMaterials(quality) {
   // Flicker: a fixture near the visitor stutters, only when the event
   // director asks (#43, events.js: one event every 20-40 s), never in the
   // light. shiver: the candles' flames shudder together for a moment.
-  let pending = 0, active = 0, shiver = 0;
+  let pending = 0, active = 0, activeFor = 1, shiver = 0;
   // footstep trail: a ring buffer of the last few places walked through
   let trailHead = 0, sinceSample = 0;
   const lastPos = new THREE.Vector2(1e5, 1e5);
@@ -1162,7 +1163,8 @@ export function createMaterials(quality) {
       if (active > 0) {
         active -= dt;
         const s = Math.sin(t * 41.0) * Math.sin(t * 19.0); // two beating sines → hard dips
-        shared.uFlickerAmt.value = s > 0.15 ? 0.12 : 1.0;
+        // calm: the lamp dims once and comes back, no stutter
+        shared.uFlickerAmt.value = calm.on ? 1 - 0.55 * Math.sin(Math.PI * Math.min(1, Math.max(0, 1 - active / activeFor))) : (s > 0.15 ? 0.12 : 1.0);
         if (active <= 0) {
           shared.uFlickerAmt.value = 1;
           shared.uFlickerTile.value.set(1e5, 1e5);
@@ -1171,7 +1173,7 @@ export function createMaterials(quality) {
         const tx = lampLineNear(camPos.x / CELL, Math.round(rand(-1.4, 1.4)));
         const tz = lampLineNear(camPos.z / CELL, Math.round(rand(-1.4, 1.4)));
         shared.uFlickerTile.value.set(tx, tz);
-        active = rand(0.6, 1.3) * (0.6 + fear) * pending;
+        active = activeFor = rand(0.6, 1.3) * (0.6 + fear) * pending;
         pending = 0;
       }
       shiver = Math.max(0, shiver - dt);

@@ -2,6 +2,7 @@
 // bursts on demand. Init-only — not auto-started; call render() from the
 // app loop once wired up.
 import * as THREE from 'three';
+import { calm } from './calm.js';
 import { sketchParam } from './device.js';
 
 const FRAG = /* glsl */`
@@ -154,7 +155,7 @@ export function createPost(renderer, quality) {
     get enabled() { return quality.p.post; },
     dbg,
     resize,
-    burst(strength = 1) { glitch = Math.min(1.5, glitch + strength); },
+    burst(strength = 1) { glitch = Math.min(1.5, glitch + strength * (calm.on ? 0.25 : 1)); },   // calm: a quarter of the tear
     black(seconds = 0.3) { blackT = seconds; },
     render(mainScene, mainCam, dt, t, speed) {
       if (!quality.p.post) { renderer.setRenderTarget(null); renderer.render(mainScene, mainCam); return; }
