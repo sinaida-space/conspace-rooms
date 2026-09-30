@@ -1,12 +1,18 @@
-// Headless smoke run: serve the site, enter on keys, step the walk by hand
-// across chunk borders along the corridor that always runs east from the
-// spawn, and fail on any error the page reports. It also prints the frame
-// times of the crossing, which is the measurement the audit used (F-001).
+// Headless smoke run: serve the site, enter on keys and walk east along the
+// corridor that always runs from the spawn, across chunk borders, in the
+// piece's own render loop. It fails on any error the page reports, and it
+// prints the time between frames, which is what a visitor feels (F-001).
 //
-//   node smoke.mjs                          CI: software WebGL, tier 0
-//   SMOKE_GPU=1 TIER=2 node smoke.mjs       a real GPU, the audit's setup
-//   FRAMES=800 STEP=0.05 BUDGET_MS=33 ...   walking pace (3 m/s at 60 fps); BUDGET_MS fails the run on a slower frame
-//   VIEW=1280x800                           window size (software WebGL defaults to 320x200)
+//   node smoke.mjs                                  CI: software WebGL, tier 0
+//   SMOKE_GPU=1 TIER=2 SPEED=3 METRES=80 BUDGET_MS=33 node smoke.mjs
+//                                                   a real GPU at walking pace; BUDGET_MS fails the run on a longer frame
+//   STAGE=1                                         walk in grandmother's stage (2: the light)
+//   VIEW=1280x800                                   window size (software WebGL defaults to 320x200)
+//
+// Two traps this measurement fell into before, kept here so nobody repeats them:
+// the visitor has to look where they walk (the new chunks ahead must be in
+// view), and the position has to be set past the doors every frame, or the
+// walk stops at the first door and never crosses a border at all.
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -14,11 +20,12 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const TIER = process.env.TIER ?? '0';
-const FRAMES = +(process.env.FRAMES ?? 200);
-const STEP = +(process.env.STEP ?? 0.2);            // metres a frame: 200 frames cross two borders
-const BUDGET_MS = process.env.BUDGET_MS ? +process.env.BUDGET_MS : null;
 const GPU = !!process.env.SMOKE_GPU;
+const TIER = process.env.TIER ?? '0';
+const STAGE = +(process.env.STAGE ?? 0);
+const SPEED = +(process.env.SPEED ?? (GPU ? 3 : 12));   // metres a second; software WebGL is slow, so CI strides
+const METRES = +(process.env.METRES ?? 40);             // 40 m cross two borders
+const BUDGET_MS = process.env.BUDGET_MS ? +process.env.BUDGET_MS : null;
 // software WebGL shades every pixel on the CPU: a small window keeps the CI run to minutes
 const [WIDTH, HEIGHT] = (process.env.VIEW ?? (GPU ? '1280x800' : '320x200')).split('x').map(Number);
 
@@ -64,30 +71,50 @@ try {
   await page.locator('#mode-select [data-mode="keys"]').click({ timeout: 60_000 });
   await page.locator('#btn-enter').click();
   await page.waitForFunction(() => window.__app?.player && window.__app?.soul && window.__app?.artworks, null, { timeout: 120_000 });
+  await page.waitForFunction(() => { const el = document.getElementById('loading'); return !el || el.classList.contains('gone'); }, null, { timeout: 60_000 });   // the loading screen is down: the walk has begun
+  await page.waitForTimeout(1500);
+  if (STAGE) { await page.evaluate(n => window.__app.stage.set(n), STAGE); await page.waitForTimeout(4000); }
 
-  result = await page.evaluate(({ frames, step }) => {
-    const a = window.__app, gl = a.renderer.getContext(), p = a.player.pos;
-    a.renderer.setAnimationLoop(null);              // from here the walk moves only when this script steps it
-    for (let i = 0; i < 20; i++) a.frame();         // let the first chunks settle
-    const ms = [];
-    for (let i = 0; i < frames; i++) {
-      p.x += step;
-      const t0 = performance.now();
-      a.frame();
-      gl.finish();
-      ms.push(performance.now() - t0);
+  result = await page.evaluate(async ({ speed, metres, limit }) => {
+    const a = window.__app, p = a.player.pos;
+    // the yaw that looks east: tried, since the camera's convention is the player's business
+    const Vec = a.camera.position.constructor;
+    let east = 0, best = -2;
+    for (let k = 0; k < 8; k++) {
+      a.player.yaw = k * Math.PI / 4; a.frame();
+      const dx = a.camera.getWorldDirection(new Vec()).x;
+      if (dx > best) { best = dx; east = a.player.yaw; }
     }
-    const sorted = [...ms].sort((x, y) => x - y);
+    const gaps = [], x0 = p.x, z0 = p.y;
+    let x = p.x, last = performance.now(), n = 0, borders = 0, cx = a.world._cx, done;
+    const walked = new Promise(ok => { done = ok; });
+    a.renderer.setAnimationLoop(() => {
+      const now = performance.now(), gap = now - last;
+      last = now;
+      x += speed * Math.min(gap, 50) / 1000;
+      p.x = x; p.y = z0; a.player.yaw = east;        // straight through the doors: the road east is always open
+      a.frame();
+      if (a.world._cx !== cx) { cx = a.world._cx; borders++; }
+      if (++n > 10) gaps.push(gap);
+      if (x - x0 >= metres) done(false);
+    });
+    const timedOut = await Promise.race([walked, new Promise(ok => setTimeout(() => ok(true), limit))]);
+    a.renderer.setAnimationLoop(null);
+    const sorted = [...gaps].sort((u, v) => u - v);
     let objects = 0, meshes = 0;
     a.scene.traverse(o => { objects++; if (o.isMesh) meshes++; });
     const place = window.__place?.list() ?? [];
     return {
-      tier: a.quality.tier, metres: +(frames * step).toFixed(1), chunks: a.world.chunks.size,
-      frame: { median: +sorted[frames >> 1].toFixed(1), p95: +sorted[Math.floor(frames * 0.95)].toFixed(1), max: +sorted[frames - 1].toFixed(1), over33: ms.filter(v => v > 33).length },
+      tier: a.quality.tier, stage: a.stage.stage, timedOut, metres: +(x - x0).toFixed(1), borders, chunks: a.world.chunks.size,
+      frames: gaps.length,
+      gap: {
+        median: +sorted[gaps.length >> 1].toFixed(1), p99: +sorted[Math.floor(gaps.length * 0.99)].toFixed(1), max: +sorted[gaps.length - 1].toFixed(1),
+        over25: gaps.filter(v => v > 25).length, over33: gaps.filter(v => v > 33).length, over50: gaps.filter(v => v > 50).length,
+      },
       objects, meshes, geometries: a.renderer.info.memory.geometries, textures: a.renderer.info.memory.textures,
       placed: place.length, placedBad: place.filter(e => !e.ok).length,
     };
-  }, { frames: FRAMES, step: STEP });
+  }, { speed: SPEED, metres: METRES, limit: GPU ? 120_000 : 600_000 });
 } catch (e) {
   errors.push(`smoke: ${e.message.split('\n')[0]}`);
 } finally {
@@ -98,10 +125,12 @@ try {
 if (result) console.log(JSON.stringify(result, null, 2));
 const fail = [...errors];
 if (result) {
-  const maxChunks = (2 * ((+TIER === 0 ? 1 : 2) + 1) + 1) ** 2;
+  const maxChunks = (2 * ((result.tier === 0 ? 1 : 2) + 1) + 1) ** 2;
+  if (result.timedOut) fail.push(`the walk did not finish: ${result.metres} m of ${METRES}`);
+  if (!result.borders) fail.push('no chunk border was crossed');
   if (result.chunks > maxChunks) fail.push(`chunks grew to ${result.chunks} (limit ${maxChunks})`);
   if (result.placedBad) fail.push(`${result.placedBad} bad placements`);
-  if (BUDGET_MS !== null && result.frame.max > BUDGET_MS) fail.push(`slowest frame ${result.frame.max} ms, budget ${BUDGET_MS} ms`);
+  if (BUDGET_MS !== null && result.gap.max > BUDGET_MS) fail.push(`longest frame ${result.gap.max} ms, budget ${BUDGET_MS} ms`);
 }
 if (fail.length) {
   console.error(`\nsmoke failed:\n- ${[...new Set(fail)].join('\n- ')}`);
