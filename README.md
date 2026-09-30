@@ -15,7 +15,8 @@
 
 Add `?lang=ru` or `?lang=en` to any page for the language. The mirror is for
 networks where Vercel does not open: `?mirror` keeps you on GitHub Pages and the
-browser remembers it. Gesture control still needs jsDelivr and Google.
+browser remembers it. Gesture control works there too: the hand tracker is
+served from the site itself.
 
 A walk-through web installation by [Sinaida](https://sinaida.eu/) and
 [UVALISS](https://uvaliss.ru/) (Alisa Feer). Eighteen works from the SOULS series
@@ -202,7 +203,7 @@ opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 - Two CC0 models from [Poly Haven](https://polyhaven.com/) in `assets/models/` (Old Bed Frame, Wheelchair 01), simplified with glTF-Transform; every other hospital prop is drawn in `src/ward.js`
 - Rough Linen texture, [Poly Haven](https://polyhaven.com/a/rough_linen), CC0, in `assets/textures/linen_*.webp` (weave in grey, normals; 512 px)
 - Monstera Plant by Isa Lousberg, [Poly Pizza](https://poly.pizza/), CC0, in `assets/models/monstera.glb` (its own pot is cut away in `src/plants.js`)
-- [MediaPipe Tasks Vision](https://developers.google.com/mediapipe) hand landmarker for gesture mode (loaded lazily, opt-in)
+- [MediaPipe Tasks Vision](https://developers.google.com/mediapipe) 0.10.14 (Apache 2.0) hand landmarker for gesture mode, vendored in `vendor/mediapipe/` with its WebAssembly and both models; loaded lazily, opt-in, and no other host is asked for anything
 
 ## Rights
 
