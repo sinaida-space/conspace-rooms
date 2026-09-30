@@ -75,6 +75,8 @@ darkness, childhood and dreams.
 | Full screen            | F                            | F                             | —                                |
 | Menu                    | Tab                          | Tab                            | tap the menu tape                |
 | Sound on/off            | N                             | N                               | tap the menu tape                |
+| Volume                  | [ and ]                       | [ and ]                         | the slider in the menu           |
+| Flicker on/off (calm)   | the menu                      | the menu (Tab, then arrows)     | tap the menu tape                |
 | Main screen             | H                             | H                               | tap the menu tape                |
 | Clip (when available)   | C                             | C                               | tap the menu tape                |
 | Finish (hold 1 s)       | Q                             | Q                               | tap the menu tape                |
