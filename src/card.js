@@ -1,13 +1,20 @@
 // ── conspace-rooms · card.js ────────────────────────────────────────────────
 // The end of a walk: every question the souls asked, on 1080×1920 cards
-// to keep or post as a story. Black ground, the site's pixel font and
-// phosphor greens, CONSPACE ROOMS on top with a light CRT tear, the two
-// names in the bottom corners. Drawn on a canvas in the browser; nothing is
+// to keep or post as a story. Black ground, the site's pixel font in one
+// of four palettes (light violet by default), CONSPACE ROOMS on top with
+// a light CRT tear, the two names in the bottom corners. Drawn on a canvas in the browser; nothing is
 // sent anywhere. "Save image" downloads a PNG, or on a phone opens the share
 // sheet where the browser offers one.
 
 const W = 1080, H = 1920, PAD = 96;
-const FG = '#baffc9', DIM = '#3f8a5a';
+// the card's colours: the letters, the quieter print, and the glow (r, g, b)
+export const PALETTES = {
+  violet: { fg: '#dccbff', dim: '#7d6aa8', glow: '170, 130, 255' },
+  phosphor: { fg: '#baffc9', dim: '#3f8a5a', glow: '57, 255, 106' },
+  rose: { fg: '#ffc4cd', dim: '#9a3a4c', glow: '255, 60, 90' },
+  candle: { fg: '#ffe2b0', dim: '#a0703a', glow: '255, 170, 70' },
+};
+const PALETTE_KEY = 'conspace-card-palette';
 const FONT = '"Departure Mono", ui-monospace, monospace';
 
 function wrap(g, text, width) {
@@ -47,7 +54,8 @@ export function paginate(questions) {
 
 // Draw one card. questions: strings in the order they were asked; first:
 // the number of the first one; page / pages when the walk takes several.
-export function drawCard(canvas, { questions, heading, empty, boot, first = 1, page = 1, pages = 1 }) {
+export function drawCard(canvas, { questions, heading, empty, boot, first = 1, page = 1, pages = 1, palette = 'violet' }) {
+  const { fg: FG, dim: DIM, glow: GLOW } = PALETTES[palette] || PALETTES.violet;
   canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d');
   g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
@@ -66,7 +74,7 @@ export function drawCard(canvas, { questions, heading, empty, boot, first = 1, p
   g.fillStyle = 'rgba(255, 40, 60, 0.35)'; g.fillText(title, tx - 5, ty);
   g.fillStyle = 'rgba(40, 220, 255, 0.3)'; g.fillText(title, tx + 5, ty + 1);
   g.globalCompositeOperation = 'source-over';
-  g.shadowColor = 'rgba(57, 255, 106, 0.85)'; g.shadowBlur = 26;
+  g.shadowColor = `rgba(${GLOW}, 0.85)`; g.shadowBlur = 26;
   g.fillStyle = FG; g.fillText(title, tx, ty);
   g.shadowBlur = 0;
   for (const [y, h, dx] of [[ty - 52, 9, 14], [ty - 20, 6, -10]]) {
@@ -93,7 +101,7 @@ export function drawCard(canvas, { questions, heading, empty, boot, first = 1, p
       g.fillText(String(first + i).padStart(2, '0'), PAD, y);
     }
     g.font = `400 ${size}px ${FONT}`; g.fillStyle = FG;
-    g.shadowColor = 'rgba(57, 255, 106, 0.35)'; g.shadowBlur = 10;
+    g.shadowColor = `rgba(${GLOW}, 0.35)`; g.shadowBlur = 10;
     for (const line of lines) { g.fillText(line, PAD + 90, y); y += size * 1.42; }
     g.shadowBlur = 0;
     y += size * 0.75;
@@ -120,45 +128,75 @@ export function drawCard(canvas, { questions, heading, empty, boot, first = 1, p
   g.fillStyle = DIM; const x = '×'; g.fillText(x, (W - g.measureText(x).width) / 2, H - 110);
 
   // CRT: scanlines, a faint phosphor grain, darker corners
-  g.fillStyle = 'rgba(57, 255, 106, 0.035)';
+  g.fillStyle = `rgba(${GLOW}, 0.035)`;
   for (let sy = 0; sy < H; sy += 4) g.fillRect(0, sy, W, 1);
-  for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(186, 255, 201, ${Math.random() * 0.05})`; g.fillRect(Math.random() * W, Math.random() * H, 2, 2); }
+  for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(${GLOW}, ${Math.random() * 0.04})`; g.fillRect(Math.random() * W, Math.random() * H, 2, 2); }
   const v = g.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.75);
   v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
   g.fillStyle = v; g.fillRect(0, 0, W, H);
 }
 
-// The overlay: the card, Save image, back to the labyrinth, walk again.
-export async function showCard({ questions, strings, onBack, onAgain }) {
+// The overlay: a row of palettes above the card, the card, Save image,
+// Home, Finish. Finish turns the overlay into a last screen: thanks, one
+// farewell drawn at random, and the ways to find the two authors.
+// strings: heading, empty, boot, save, home, finish, palette, palettes
+// (names, in PALETTES order), thanks, farewells (list), links (the heading over them)
+export async function showCard({ questions, strings, onHome, onFinish }) {
   try { await document.fonts?.load(`400 46px ${FONT}`); } catch (e) { /* draw with what there is */ }
+  let palette = 'violet';
+  try { const v = localStorage.getItem(PALETTE_KEY); if (PALETTES[v]) palette = v; } catch (e) { /* no storage: the default */ }
   const wrapEl = document.createElement('div');
   wrapEl.id = 'final-card';
   wrapEl.setAttribute('role', 'dialog');
   wrapEl.setAttribute('aria-modal', 'true');
   wrapEl.setAttribute('aria-label', strings.heading);
   const pages = paginate(questions);
-  wrapEl.innerHTML = `<div class="fc-pages">${pages.map(() => '<canvas class="fc-canvas"></canvas>').join('')}</div>
+  const swatch = (k, i) => `<button type="button" class="fc-swatch" data-p="${k}" style="--sw:${PALETTES[k].fg}" aria-label="${strings.palettes[i]}" aria-pressed="${k === palette}" title="${strings.palettes[i]}"></button>`;
+  wrapEl.innerHTML = `<div class="fc-palette" role="group" aria-label="${strings.palette}">${Object.keys(PALETTES).map(swatch).join('')}</div>
+    <div class="fc-pages">${pages.map(() => '<canvas class="fc-canvas"></canvas>').join('')}</div>
     <div class="fc-actions">
       <button type="button" class="btn-enter fc-save">${strings.save}</button>
-      <button type="button" class="btn-enter fc-back dialog-no">${strings.back}</button>
-      <button type="button" class="btn-enter fc-again dialog-no">${strings.again}</button>
+      <button type="button" class="btn-enter fc-home dialog-no">${strings.home}</button>
+      <button type="button" class="btn-enter fc-finish dialog-no">${strings.finish}</button>
     </div>`;
   const canvases = [...wrapEl.querySelectorAll('canvas')];
-  pages.forEach((p, i) => {
-    const canvas = canvases[i];
-    drawCard(canvas, { questions: p.questions, first: p.first, page: i + 1, pages: pages.length, heading: strings.heading, empty: strings.empty, boot: strings.boot });
-    canvas.setAttribute('role', 'img');
-    canvas.setAttribute('aria-label', [strings.heading, ...p.questions].join('. '));
+  const draw = () => pages.forEach((p, i) => {
+    drawCard(canvases[i], { questions: p.questions, first: p.first, page: i + 1, pages: pages.length, heading: strings.heading, empty: strings.empty, boot: strings.boot, palette });
+    const pal = PALETTES[palette];                   // the buttons and the frame take the card's colours too
+    for (const [k, v] of [['--fc-glow', pal.glow], ['--accent', pal.fg], ['--fg', pal.fg], ['--dim', pal.dim]]) wrapEl.style.setProperty(k, v);
   });
+  draw();
+  canvases.forEach((c, i) => { c.setAttribute('role', 'img'); c.setAttribute('aria-label', [strings.heading, ...pages[i].questions].join('. ')); });
   document.body.appendChild(wrapEl);
   requestAnimationFrame(() => wrapEl.classList.add('visible'));
   wrapEl.querySelector('.fc-save').focus();
 
-  const close = () => { wrapEl.remove(); removeEventListener('keydown', onKey); };
-  const onKey = e => { if (e.key === 'Escape') { close(); onBack?.(); } };
-  addEventListener('keydown', onKey);
-  wrapEl.querySelector('.fc-back').addEventListener('click', () => { close(); onBack?.(); });
-  wrapEl.querySelector('.fc-again').addEventListener('click', () => onAgain?.());
+  wrapEl.querySelectorAll('.fc-swatch').forEach(b => b.addEventListener('click', () => {
+    palette = b.dataset.p;
+    try { localStorage.setItem(PALETTE_KEY, palette); } catch (e) { /* remembered for this card only */ }
+    wrapEl.querySelectorAll('.fc-swatch').forEach(o => o.setAttribute('aria-pressed', String(o === b)));
+    draw();
+  }));
+  wrapEl.querySelector('.fc-home').addEventListener('click', () => onHome?.());
+  wrapEl.querySelector('.fc-finish').addEventListener('click', () => {
+    const line = strings.farewells[Math.floor(Math.random() * strings.farewells.length)];
+    const ext = 'target="_blank" rel="noopener"';
+    wrapEl.classList.add('fc-end');
+    wrapEl.innerHTML = `<div class="fc-bye">
+      <p class="fc-thanks">${strings.thanks}</p>
+      <p class="fc-line">${line}</p>
+      <nav class="fc-links" aria-label="${strings.links}">
+        <a href="https://sinaida.eu/" ${ext}>sinaida.eu</a>
+        <a href="https://www.instagram.com/sin.ai.da" ${ext}>@sin.ai.da</a>
+        <a href="https://uvaliss.ru/" ${ext}>uvaliss.ru</a>
+        <a href="https://www.instagram.com/uvaliss/" ${ext}>@uvaliss</a>
+      </nav>
+      <button type="button" class="fc-home-quiet">${strings.home}</button>
+    </div>`;
+    wrapEl.querySelector('.fc-home-quiet').addEventListener('click', () => onHome?.());
+    wrapEl.querySelector('.fc-home-quiet').focus();
+    onFinish?.();
+  });
   wrapEl.querySelector('.fc-save').addEventListener('click', async () => {
     const blobs = await Promise.all(canvases.map(c => new Promise(res => c.toBlob(res, 'image/png'))));
     if (blobs.some(b => !b)) return;
