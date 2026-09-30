@@ -1,74 +1,58 @@
 import * as THREE from 'three';
 
 // ── conspace-rooms · footdust.js ────────────────────────────────────────────
-// Grey dust settling on the floor where the visitor has already walked, so a
-// corridor walked twice looks walked: the way back reads as grey, the way on
-// as clean floor (#53). One instanced draw of soft blotches, one per cell
-// passed, grown in over a couple of seconds; the oldest go first when the
-// pool is full. Cleared when the stage changes.
+// Dust settling on the things the visitor has already walked past: the beds,
+// chairs, trolleys and boxes of a corridor walked once go grey on top, like
+// fear's ficus, so a corridor walked twice looks walked (#53). The floor stays
+// as it is. A small map of the cells around the visitor (one texel a cell)
+// feeds the props' shader (materials.js, uDust); a cell passed fills in over
+// a few seconds. The map follows the visitor, re-centred when they near its
+// edge; the cells walked are kept, so the dust is still there on return.
+// Cleared when the stage changes.
 
-const POOL = 360;              // cells remembered
-const SETTLE = 2.5;            // seconds a blotch takes to settle
-const SIZE = 1.25;             // metres across, about one cell
+const N = 96;                  // cells a side of the map (~115 m)
+const SETTLE = 4;              // seconds for dust to settle on a cell passed
+const REACH = 1;               // cells around the one walked through that gather dust too
 
-function dustTexture() {
-  const c = document.createElement('canvas'); c.width = c.height = 128;
-  const g = c.getContext('2d');
-  for (let k = 0; k < 7; k++) {                        // a few puffs, not one disc: a ragged drift
-    const x = 64 + (Math.random() - 0.5) * 50, y = 64 + (Math.random() - 0.5) * 50, rad = 18 + Math.random() * 22;
-    const r = g.createRadialGradient(x, y, 2, x, y, rad);
-    r.addColorStop(0, 'rgba(255,255,255,0.5)'); r.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = r; g.fillRect(0, 0, 128, 128);
-  }
-  for (let i = 0; i < 900; i++) {                      // grit: the dust is grains, not a stain
-    const a = Math.random() * 6.28, d = Math.sqrt(Math.random()) * 58;
-    g.fillStyle = `rgba(255,255,255,${0.15 + Math.random() * 0.45})`;
-    g.fillRect(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, 1.5, 1.5);
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
+export function createFootDust(atmo, cell) {
+  const data = new Uint8Array(N * N);
+  const tex = new THREE.DataTexture(data, N, N, THREE.RedFormat, THREE.UnsignedByteType);
+  tex.magFilter = tex.minFilter = THREE.LinearFilter;  // soft at the edges of a walked stretch
+  tex.needsUpdate = true;
+  const u = atmo?.dust;
+  const walked = new Map();                             // "gi,gj" -> { gi, gj, t0 }: when the dust began to settle
+  let oi = 0, oj = 0, placed = false, settling = 0;
 
-export function createFootDust(scene, cell) {
-  const mat = new THREE.MeshBasicMaterial({ map: dustTexture(), color: 0xe6dfcf, transparent: true, opacity: 0.6, depthWrite: false, fog: true,
-    polygonOffset: true, polygonOffsetFactor: -1 });   // pale as ash: the floors are grey already
-  const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat, POOL);
-  mesh.count = 0; mesh.frustumCulled = false; mesh.renderOrder = 1;
-  scene.add(mesh);
-  const cells = [];                                     // { key, x, z, rot, s, t0 }
-  const keys = new Set();
-  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
-  let growUntil = 0;
-
-  const write = (i, c, k) => {
-    Q.setFromAxisAngle(Y, c.rot);
-    const s = SIZE * c.s * k;
-    M.compose(V.set(c.x, 0.006, c.z), Q, S.set(s, 1, s));
-    mesh.setMatrixAt(i, M);
+  const paint = time => {
+    data.fill(0);
+    for (const { gi, gj, t0 } of walked.values()) {
+      const i = gi - oi, j = gj - oj;
+      if (i < 0 || j < 0 || i >= N || j >= N) continue;
+      data[j * N + i] = Math.round(255 * Math.min(1, (time - t0) / SETTLE));
+    }
+    tex.needsUpdate = true;
+  };
+  // the map's corner, in cells, so the visitor stands near its middle
+  const recentre = (gi, gj, time) => {
+    oi = gi - (N >> 1); oj = gj - (N >> 1); placed = true;
+    u.map.value = tex; u.origin.value.set(oi * cell, oj * cell, N * cell);
+    paint(time);
   };
 
   return {
-    mesh,
     // pos: the visitor on the floor plan ({x, y}); time: seconds
     update(pos, time, on = true) {
-      mesh.visible = on;
-      if (!on) return;
-      const gi = Math.floor(pos.x / cell), gj = Math.floor(pos.y / cell), key = gi + ',' + gj;
-      if (!keys.has(key)) {
-        if (cells.length >= POOL) keys.delete(cells.shift().key);
-        keys.add(key);
-        cells.push({ key, x: (gi + 0.5) * cell + (Math.random() - 0.5) * 0.3, z: (gj + 0.5) * cell + (Math.random() - 0.5) * 0.3, rot: Math.random() * 6.28, s: 0.8 + Math.random() * 0.4, t0: time });
-        cells.forEach((c, i) => write(i, c, Math.min(1, (time - c.t0) / SETTLE)));
-        mesh.count = cells.length; mesh.instanceMatrix.needsUpdate = true;
-        growUntil = time + SETTLE;
-        return;
+      if (!u) return;
+      if (!on) { if (placed) { u.origin.value.set(1e6, 1e6, 1); placed = false; } return; }
+      const gi = Math.floor(pos.x / cell), gj = Math.floor(pos.y / cell);
+      if (!placed || gi - oi < 12 || gj - oj < 12 || gi - oi > N - 12 || gj - oj > N - 12) recentre(gi, gj, time);
+      for (let dj = -REACH; dj <= REACH; dj++) for (let di = -REACH; di <= REACH; di++) {
+        const key = (gi + di) + ',' + (gj + dj);
+        if (!walked.has(key)) { walked.set(key, { gi: gi + di, gj: gj + dj, t0: time }); settling = time + SETTLE; }
       }
-      if (time > growUntil) return;                      // settled: nothing to write
-      for (let i = Math.max(0, cells.length - 8); i < cells.length; i++) write(i, cells[i], Math.min(1, (time - cells[i].t0) / SETTLE));
-      mesh.instanceMatrix.needsUpdate = true;
+      if (time <= settling) paint(time);                // only while some cell is still filling in
     },
-    clear() { cells.length = 0; keys.clear(); mesh.count = 0; },
+    clear() { walked.clear(); data.fill(0); tex.needsUpdate = true; settling = 0; },
   };
 }
 

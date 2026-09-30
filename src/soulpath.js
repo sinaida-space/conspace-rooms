@@ -468,7 +468,7 @@ export class SoulPath {
     this.roses = createRoseCounter(this.total);
     this.petals = createPetals(scene, camera, quality);
     this.glowPetals = createGlowPetals(scene);   // the light's way-marks: petals on the water
-    this.footDust = createFootDust(scene, CELL);  // grey dust where the walk has already been (#53)
+    this.footDust = createFootDust(atmo, CELL);   // dust on the things the walk has already passed (#53)
     this.props = createPropKit(atmo, quality);
     this.wallThings = createWallThings(atmo);
     this.drowned = createDrowned(atmo, quality);   // what the water on the floor uncovers, acceptance stage only
