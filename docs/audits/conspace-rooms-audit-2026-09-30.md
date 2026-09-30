@@ -97,6 +97,7 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 - **Evidence:** `prefers-reduced-motion` is read in `css/style.css` (three blocks), `src/tunnel.js`, `src/petals.js` and `src/ui.js`. It is not read in `src/post.js` (glitch bursts, RGB shift), `src/materials.js` (lamp flicker), `src/events.js` (flicker event) or `src/player.js` (head bob).
 - **Why it matters:** WCAG 2.3.1 and 2.3.3; the skill treats missing support as an accessibility gap.
 - **Recommended remediation:** one `calm` flag read once in `main.js` and passed down: glitch bursts scaled to a quarter, lamp flicker replaced by a slow dim, the flicker event swapped for a sound event, head bob off. Add a “calm” line to the menu so the choice is also manual.
+- **Done in wave 5:** `src/calm.js`, on by itself with the system preference and switched in the menu (“flicker: on / off”) for the visit, nothing stored. In calm the lamp dims once and comes back where it stuttered, the glitch is a quarter of itself, the head keeps level, the candles do not shudder, the event director plays a creak where it would flicker a lamp, and the crossing flies slowly. The content warning says that flicker and glitch are adjustable in the menu.
 
 ### F-006 · Third-party code and models load beside the camera
 - **Category:** Security
@@ -147,6 +148,7 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 - **Rating:** Low
 - **Evidence:** `src/ui.js:413` calls `preventDefault` on Tab and toggles the menu; focus stays on the canvas, so the items cannot be reached by keyboard, and volume has no hotkey.
 - **Recommended remediation:** on open, focus the first menu item and let the arrows move between items (the markup already says `role="menu"`); Escape closes and returns focus. Add `[` and `]` for volume.
+- **Done in wave 5:** Tab opens the menu and the first item takes the focus; the arrows move between items and the walk does not see them; Escape or Tab closes and gives the keys back to the walk. `[` and `]` change the volume.
 
 ### F-012 · Text pages lack description, canonical, hreflang, `<main>`
 - **Category:** SEO
@@ -163,6 +165,7 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 - **Rating:** Low
 - **Evidence:** at 320×640 the first screen shows the title and both blurbs; `Русский` and `English` come after a scroll.
 - **Recommended remediation:** put the two buttons right under the title, or show only the blurb that matches the browser language with the other one folded.
+- **Done in wave 5:** on a small screen the two buttons come right under the title and the blurbs follow; at 320×640 both are in view.
 
 ### F-014 · Repo and deploy carry dead weight and test switches
 - **Category:** Hygiene
