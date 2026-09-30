@@ -3,6 +3,7 @@ import { detectDevice } from './device.js';
 import { keyCode } from './input.js';
 import { t, getLang, setLang, langFromUrl, applyStatic } from './i18n.js';
 import { renderFooter } from './footer.js';
+import { calm } from './calm.js';
 
 const $ = id => document.getElementById(id);
 const wait = ms => new Promise(res => setTimeout(res, ms));
@@ -381,7 +382,25 @@ export class UI {
 
     // the menu opens on its tape and folds away after any choice or a tap elsewhere
     const menuBtn = $('btn-menu'), menu = $('hud-menu');
-    const setMenu = open => { menu.classList.toggle('hidden', !open); menuBtn.setAttribute('aria-expanded', String(open)); };
+    const items = () => [...menu.querySelectorAll('button, input')].filter(el => el.getClientRects().length);
+    // opened from the keyboard, the first item takes the focus; shut, the keys go back to the walk
+    const setMenu = (open, fromKeys = false) => {
+      menu.classList.toggle('hidden', !open);
+      menuBtn.setAttribute('aria-expanded', String(open));
+      if (open && fromKeys) items()[0]?.focus({ preventScroll: true });
+      else if (!open && toolbar.contains(document.activeElement)) document.activeElement.blur();
+    };
+    // inside the open menu the arrows move between its items, and on the
+    // slider left and right are its own: the walk gets none of them
+    addEventListener('keydown', e => {
+      const at = document.activeElement;
+      if (menu.classList.contains('hidden') || !menu.contains(at)) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        const list = items(), i = list.indexOf(at);
+        list[(i + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length]?.focus({ preventScroll: true });
+      } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && at.type === 'range') e.stopImmediatePropagation();
+    }, true);
     menuBtn.addEventListener('click', e => { e.stopPropagation(); setMenu(menu.classList.contains('hidden')); });
     menu.addEventListener('click', () => setMenu(false));
     addEventListener('pointerdown', e => { if (!toolbar.contains(e.target)) setMenu(false); });
@@ -412,7 +431,15 @@ export class UI {
       if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
       if (keyCode(e) === 'Tab') {
         e.preventDefault();
-        if (!e.repeat) setMenu(menu.classList.contains('hidden'));
+        if (!e.repeat) setMenu(menu.classList.contains('hidden'), true);
+        return;
+      }
+      if (keyCode(e) === 'BracketLeft' || keyCode(e) === 'BracketRight') {   // volume, a step at a time; holding repeats
+        const range = $('vol-range');
+        if (range && !$('vol').classList.contains('hidden')) {
+          range.value = String(+range.value + (keyCode(e) === 'BracketRight' ? 5 : -5));
+          range.dispatchEvent(new Event('input'));
+        }
         return;
       }
       if (keyCode(e) === 'KeyQ') {
@@ -426,6 +453,15 @@ export class UI {
     });
     addEventListener('keyup', e => { if (keyCode(e) === 'KeyQ') qCancel(); });
     addEventListener('blur', qCancel);
+
+    // flicker on is the piece as made; off is the calm version (calm.js)
+    const calmBtn = $('btn-calm');
+    const syncCalm = () => {
+      calmBtn.querySelector('span').textContent = t(calm.on ? 'flickerOff' : 'flickerOn');
+      calmBtn.setAttribute('aria-checked', String(!calm.on));
+    };
+    calmBtn?.addEventListener('click', () => calm.set(!calm.on));
+    if (calmBtn) { calm.onChange(syncCalm); syncCalm(); }
 
     const fsBtn = $('btn-fullscreen');
     const syncFsLabel = () => {
