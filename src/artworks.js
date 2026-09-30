@@ -461,7 +461,7 @@ export class Artworks {
     this.chunkGroups.set(key, group);
 
     for (const { slot, artIndex } of plan) {
-      const art = this.list[artIndex];
+      const art = this.swap?.(this.list[artIndex], cx, cz) ?? this.list[artIndex];   // the caller may hang another in its place
       try {
         this._placeArtwork(group, slot, art, key);
       } catch (e) {

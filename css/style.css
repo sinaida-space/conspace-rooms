@@ -569,17 +569,41 @@ body:has(#pad) #artwork-prompt { display: none; }   /* the pad's own tape says i
 #final-card.visible { opacity: 1; }
 #final-card .fc-canvas {
   height: min(74vh, calc((100vw - 32px) * 16 / 9)); width: auto; aspect-ratio: 9 / 16;
-  border: 1px solid var(--dim); box-shadow: 0 0 30px rgba(57, 255, 106, 0.15);
+  border: 1px solid var(--dim);
 }
 /* a long walk makes two cards (or more): side by side, swiped on a phone */
 #final-card .fc-pages { display: flex; gap: 16px; max-width: 100%; overflow-x: auto; scroll-snap-type: x mandatory; flex-shrink: 0; }
 #final-card .fc-pages .fc-canvas { scroll-snap-align: center; flex-shrink: 0; }
 #final-card .fc-actions { display: flex; flex-wrap: wrap; gap: 0.8em; justify-content: center; }
 #final-card .btn-enter { font-size: 1em; padding: 0.55em 1.2em; }
+#final-card .fc-canvas { box-shadow: 0 0 30px rgba(var(--fc-glow, 170, 130, 255), 0.15); }
+/* the palettes: four small squares above the card, the chosen one ringed */
+#final-card .fc-palette { display: flex; gap: 12px; }
+#final-card .fc-swatch {
+  width: 28px; height: 28px; background: var(--sw); border: 1px solid #000; outline: 1px solid transparent;
+  outline-offset: 3px; cursor: pointer; padding: 0;
+}
+#final-card .fc-swatch[aria-pressed="true"] { outline-color: var(--sw); }
+#final-card .fc-swatch:focus-visible { outline: 2px solid #fff; }
+/* Finish: the last screen, all in light violet */
+#final-card.fc-end { --lv: #dccbff; --lv-dim: #8f7cc0; color: var(--lv); }
+#final-card .fc-bye { max-width: 34ch; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 1.6em; }
+#final-card .fc-thanks { color: var(--lv-dim); letter-spacing: 0.12em; }
+#final-card .fc-line {
+  font-size: clamp(1.3rem, 3.4vw, 2rem); line-height: 1.45; color: var(--lv);
+  text-shadow: 0 0 14px rgba(170, 130, 255, 0.45); animation: fc-rise 2.4s ease both;
+}
+@keyframes fc-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+#final-card .fc-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6em 1.4em; }
+#final-card .fc-links a { color: var(--lv); text-decoration: none; border-bottom: 1px solid rgba(220, 203, 255, 0.35); }
+#final-card .fc-links a:hover, #final-card .fc-links a:focus-visible { border-bottom-color: var(--lv); }
+#final-card .fc-home-quiet { background: none; border: 0; color: var(--lv-dim); font: inherit; cursor: pointer; padding: 0.4em; }
+#final-card .fc-home-quiet:hover, #final-card .fc-home-quiet:focus-visible { color: var(--lv); }
+@media (prefers-reduced-motion: reduce) { #final-card .fc-line { animation: none; } }
 
 /* gallery mode (gallery.html): no cursor, no buttons, an attract screen */
 body.gallery { cursor: none; overflow: hidden; }
-body.gallery #final-card .fc-actions { display: none; }   /* nobody clicks in a gallery: the card leaves on its own */
+body.gallery #final-card .fc-actions, body.gallery #final-card .fc-palette { display: none; }   /* nobody clicks in a gallery: the card leaves on its own */
 #attract {
   position: fixed; inset: 0; z-index: 40; background: var(--bg);
   display: flex; align-items: center; justify-content: center; padding: 6vh 6vw;
