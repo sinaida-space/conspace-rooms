@@ -182,30 +182,48 @@ export function artworkSlots(cx, cz, slots) {
   return chunkArtworkPlan(cx, cz, slots, [0]).map(p => p.slot);
 }
 
-// ── texture loading (lazy, per file, half-res on tier 0) ───────────────────
-function loadTexture(url, halfRes) {
+// ── texture loading (lazy, per file) ───────────────────────────────────────
+// Every work lies beside its JPEG as two WebP files: NN.webp at full size and
+// NN-800.webp for tier 0, so a phone downloads the small one instead of
+// halving the large one after the fact. The JPEG stays as the way back if a
+// WebP does not load; on tier 0 it is halved on a canvas as before.
+function loadImage(url) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => {
-      let tex;
-      if (halfRes) {
-        const c = document.createElement('canvas');
-        c.width = Math.max(1, img.width >> 1);
-        c.height = Math.max(1, img.height >> 1);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        tex = new THREE.CanvasTexture(c);
-      } else {
-        tex = new THREE.Texture(img);
-        tex.needsUpdate = true;
-      }
-      tex.anisotropy = 4;
-      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-      resolve(tex);
-    };
+    img.onload = () => (img.decode ? img.decode().catch(() => {}) : Promise.resolve()).then(() => resolve(img));   // decoded off the main thread, before the GPU asks for it
     img.onerror = reject;
     img.src = url;
   });
 }
+// The WebP as a bitmap decoded off the main thread and already turned the way
+// the GPU wants it: handing it over then costs the walk no long frame.
+function loadBitmap(url) {
+  if (typeof createImageBitmap !== 'function') return Promise.reject(new Error('no createImageBitmap'));
+  return fetch(url)
+    .then(res => { if (!res.ok) throw new Error(`${res.status} ${url}`); return res.blob(); })
+    .then(blob => createImageBitmap(blob, { imageOrientation: 'flipY' }));
+}
+function loadTexture(url, halfRes) {
+  const finish = tex => { tex.anisotropy = 4; tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping; tex.needsUpdate = true; return tex; };
+  const webp = url.replace(/\.jpe?g$/i, halfRes ? '-800.webp' : '.webp');
+  return loadBitmap(webp)
+    .then(bmp => { const tex = new THREE.Texture(bmp); tex.flipY = false; return finish(tex); })   // flipped already, as it was decoded
+    .catch(() => loadImage(webp).then(img => finish(new THREE.Texture(img))))
+    .catch(() => loadImage(url).then(img => {
+      if (!halfRes) return finish(new THREE.Texture(img));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, img.width >> 1);
+      c.height = Math.max(1, img.height >> 1);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return finish(new THREE.CanvasTexture(c));
+    }));
+}
+
+// what a canvas shows until its picture has arrived: the dark of an unlit room
+let _blank = null;
+const blankTexture = () => _blank ||= Object.assign(new THREE.DataTexture(new Uint8Array([12, 14, 13, 255]), 1, 1), { needsUpdate: true });
+// a work is fetched once the visitor is this near, a little past where the fog lets it be seen
+const FETCH_NEAR = 36;
 
 function wrapText(ctx, text, cx, y, maxWidth, lineHeight) {
   const words = text.split(' ');
@@ -398,9 +416,31 @@ export class Artworks {
     for (const key of Array.from(this.chunkGroups.keys())) {
       if (!this.world.chunks.has(key)) this._disposeChunk(key);
     }
+    this._fetchNear();
   }
 
-  async _buildForChunk(cx, cz, key) {
+  // A work hangs at once, frame, placard and a dark canvas; its picture is
+  // fetched when the visitor comes near, the nearest first. A wall far off in
+  // the fog needs no file yet.
+  _fetchNear() {
+    const P = this.player.pos;
+    let due = null;
+    for (const a of this.active) {
+      if (a.wanted) continue;
+      a.dist = Math.hypot(a.centerWorld.x - P.x, a.centerWorld.z - P.y);
+      if (a.dist < FETCH_NEAR) (due ||= []).push(a);
+    }
+    if (!due) return;
+    due.sort((a, b) => a.dist - b.dist);
+    for (const a of due) {
+      a.wanted = a.sub.userData.textureWanted = true;
+      this._getTexture(a.art).then(tex => {
+        if (this.active.includes(a)) a.canvas.material.map = tex;   // else its chunk went meanwhile, and the texture was released with it
+      }).catch(e => console.warn('[artworks] failed to load', a.art.id, e));
+    }
+  }
+
+  _buildForChunk(cx, cz, key) {
     const slots = this.world.getWallSlots(cx, cz);
     const plan = chunkArtworkPlan(cx, cz, slots, this.deck);
     if (!plan.length) { this.chunkGroups.set(key, null); return; }
@@ -413,20 +453,16 @@ export class Artworks {
     for (const { slot, artIndex } of plan) {
       const art = this.list[artIndex];
       try {
-        await this._placeArtwork(group, slot, art, key);
+        this._placeArtwork(group, slot, art, key);
       } catch (e) {
         console.warn('[artworks] failed to place', art?.id, e);
       }
-      if (!this.built.has(key)) return; // chunk was disposed mid-load
     }
   }
 
-  async _placeArtwork(group, slot, art, chunkKey) {
-    const texture = await this._getTexture(art);
-    if (!this.built.has(chunkKey)) { this._releaseTexture(art.id); return; } // disposed while awaiting
-
-    const img = texture.image;
-    const aspect = img.width / img.height;
+  _placeArtwork(group, slot, art, chunkKey) {
+    // the picture's proportions come with the list (artworks.json), so the frame can hang before the file is here
+    const aspect = art.w && art.h ? art.w / art.h : (art.orientation === 'landscape' ? 1.25 : 0.8);
     const width = art.orientation === 'landscape' ? 1.35 : 1.1;
     const height = width / aspect;
 
@@ -443,7 +479,7 @@ export class Artworks {
     sub.userData.artworkId = art.id;
     group.add(sub);
 
-    const canvasMesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), thinFog(new THREE.MeshBasicMaterial({ map: texture })));
+    const canvasMesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), thinFog(new THREE.MeshBasicMaterial({ map: blankTexture() })));
     sub.add(canvasMesh);
     // its shadow on the wall, thrown down by the lamps overhead
     const shade = new THREE.Mesh(new THREE.PlaneGeometry(width + 0.5, height + 0.55), this.shadowMat);
@@ -469,6 +505,8 @@ export class Artworks {
       chunkKey,
       sub,            // the work's own group: fear hides the ones not found yet (soulpath.js)
       hidden: false,
+      canvas: canvasMesh,
+      wanted: false,  // its picture has been asked for (_fetchNear)
     });
   }
 
@@ -484,7 +522,7 @@ export class Artworks {
       if (o.geometry) o.geometry.dispose();
       if (o.material && o.material !== this.frameMat && o.material !== this.shadowMat) o.material.dispose();
       if (o.userData && o.userData.artworkId) {
-        this._releaseTexture(o.userData.artworkId);
+        if (o.userData.textureWanted) this._releaseTexture(o.userData.artworkId);
         this._releasePlacard(o.userData.artworkId);
       }
     });
