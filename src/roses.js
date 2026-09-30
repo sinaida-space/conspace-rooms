@@ -336,6 +336,48 @@ function archShape(half, postH) {
   return sh;
 }
 
+// the path: brightest down its middle and toward the far light, broken into
+// glints that ride the ripples toward the visitor
+const PATH_VERT = /* glsl */`varying vec2 vP; void main(){ vP = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const PATH_FRAG = /* glsl */`
+uniform float uK, uTime; varying vec2 vP;
+void main(){
+  float across = exp(-vP.x * vP.x / 0.09);                         // soft edges, no hard strip
+  float along = smoothstep(2.8, 0.6, vP.y) * (0.45 + 0.55 * smoothstep(0.0, -${LENGTH.toFixed(2)} - 1.0, vP.y));
+  float wave = vP.y * 7.0 + sin(vP.x * 9.0 + uTime * 1.3) * 1.2 + uTime * 1.6;
+  float glint = pow(0.5 + 0.5 * sin(wave), 6.0) * (0.6 + 0.4 * sin(vP.y * 2.3 - uTime * 0.7));
+  float k = uK * across * along * (0.22 + 0.9 * glint);
+  gl_FragColor = vec4(vec3(1.0, 0.8, 0.52) * k, 1.0);
+}`;
+
+// falling petals: each loops from the roof to the water on its own slow sway
+const FALL_VERT = /* glsl */`
+attribute float aSeed; uniform float uTime, uViewH, uFloor; varying float vA; varying float vR;
+void main(){
+  float fall = 0.16 + 0.1 * aSeed;
+  float h = fract(position.y - uTime * fall / 2.7 + aSeed);          // 0 at the water, 1 at the roof
+  vec3 p = position;
+  p.y = uFloor + 0.02 + h * 2.7;
+  p.x += sin(uTime * (0.6 + aSeed) + aSeed * 40.0) * 0.18;
+  p.z += cos(uTime * 0.5 + aSeed * 17.0) * 0.12;
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mv;
+  gl_PointSize = 0.05 * uViewH / max(0.2, -mv.z);
+  vA = smoothstep(0.0, 0.08, h) * smoothstep(1.0, 0.85, h);           // no pop at either end
+  vR = uTime * (0.8 + aSeed) + aSeed * 6.28;
+}`;
+const FALL_FRAG = /* glsl */`
+uniform float uK; varying float vA; varying float vR;
+void main(){
+  vec2 q = gl_PointCoord - 0.5;
+  float c = cos(vR), s = sin(vR);
+  q = vec2(c * q.x - s * q.y, s * q.x + c * q.y) * vec2(1.0, 1.7 + 0.8 * sin(vR * 1.3));   // it turns as it falls
+  float d = length(q);
+  if (d > 0.5) discard;
+  vec3 col = mix(vec3(0.55, 0.05, 0.12), vec3(0.95, 0.35, 0.42), smoothstep(0.5, 0.0, d));
+  gl_FragColor = vec4(col, uK * vA * smoothstep(0.5, 0.35, d));
+}`;
+
 const GLOW_VERT = /* glsl */`varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const GLOW_FRAG = /* glsl */`
 uniform float uK; varying vec2 vP;
@@ -418,6 +460,29 @@ export function buildRoseArch(text) {
   const rays = buildLightRays(LENGTH + 3.5, { nearW: HALF * 1.8, nearH: POST_H + 0.6, farW: 2.3, farH: 3.1, z0: -LENGTH - 0.25, gapK: 0 });
   g.add(rays.group);
 
+  // a path of light on the water: from a step before the entrance, through
+  // the tunnel and on into the glow, the way moonlight lies on a lake
+  const pathU = { uK: { value: 0 }, uTime: { value: 0 } };
+  const PATH_NEAR = 2.8, PATH_FAR = LENGTH + 1.2;
+  const path = new THREE.Mesh(new THREE.PlaneGeometry(1.4, PATH_NEAR + PATH_FAR, 1, 1).rotateX(-Math.PI / 2).translate(0, 0, (PATH_NEAR - PATH_FAR) / 2),
+    new THREE.ShaderMaterial({ uniforms: pathU, vertexShader: PATH_VERT, fragmentShader: PATH_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  path.renderOrder = 1;                                 // over the water, which draws first
+  g.add(path);
+
+  // petals come loose from the roof and drift down through the tunnel
+  const N_FALL = 70, fallPos = new Float32Array(N_FALL * 3), fallSeed = new Float32Array(N_FALL);
+  for (let i = 0; i < N_FALL; i++) {
+    fallPos.set([(Math.random() - 0.5) * 1.7, Math.random(), 0.6 - Math.random() * (LENGTH + 1.2)], i * 3);
+    fallSeed[i] = Math.random();
+  }
+  const fallGeo = new THREE.BufferGeometry();
+  fallGeo.setAttribute('position', new THREE.BufferAttribute(fallPos, 3));
+  fallGeo.setAttribute('aSeed', new THREE.BufferAttribute(fallSeed, 1));
+  const fallU = { uK: { value: 0 }, uTime: { value: 0 }, uViewH: { value: 800 }, uFloor: { value: 0 } };
+  const fall = new THREE.Points(fallGeo, new THREE.ShaderMaterial({ uniforms: fallU, vertexShader: FALL_VERT, fragmentShader: FALL_FRAG, transparent: true, depthWrite: false }));
+  fall.frustumCulled = false;
+  g.add(fall);
+
   // the words, on an enamel plaque hung by two chains from the entrance arch
   const plaque = new THREE.Group();
   const PW = 1.3, PH = 0.23, PY = 2.08;               // plaque size and the height of its centre
@@ -463,8 +528,13 @@ export function buildRoseArch(text) {
         p.needsUpdate = true;
       }
     },
-    update(dt, time) {
+    // waterY: the surface the path of light lies on
+    update(dt, time, waterY = 0.02) {
       grow = Math.min(1, grow + dt / 3.2);
+      const lit = Math.max(0, Math.min(1, (grow - 0.4) / 0.6));
+      pathU.uK.value = lit; pathU.uTime.value = time;
+      path.position.y = waterY + 0.006;
+      fallU.uK.value = lit; fallU.uTime.value = time; fallU.uViewH.value = innerHeight; fallU.uFloor.value = waterY;
       arches.forEach((ag, a) => {                     // the arches rise one after another
         const k = Math.max(0, Math.min(1, grow * 1.6 - a * 0.12));
         const o = 1 - (1 - k) ** 3;                   // each arch comes up out of the air where it stands: nothing crosses the way
