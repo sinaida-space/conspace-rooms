@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { calm } from './calm.js';
 import { CELL } from './world.js';
 
 // ── conspace-rooms · player.js ──────────────────────────────────────────────
@@ -248,7 +249,7 @@ export class Player {
     let bobY = 0;
     if (speed > 0.15) {
       this.bob += dt * BOB_FREQ * (speed / MAX_SPEED);
-      bobY = Math.sin(this.bob) * BOB_AMP * Math.min(1, speed / MAX_SPEED);
+      bobY = calm.on ? 0 : Math.sin(this.bob) * BOB_AMP * Math.min(1, speed / MAX_SPEED);   // the step still counts (its sound), the head keeps level
     }
 
     this._apply(bobY);

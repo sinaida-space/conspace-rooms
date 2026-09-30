@@ -8,6 +8,7 @@
 // form (a mapped cylinder and three value-noise lookups), no marching, so it
 // costs the same on every machine. Idle it draws nothing.
 import * as THREE from 'three';
+import { calm } from './calm.js';
 
 // per stage: the strands, the glow in the throat, the dark between
 const PALETTE = [
@@ -100,7 +101,6 @@ export function createTunnel(renderer) {
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
   quad.frustumCulled = false;
   scene.add(quad);
-  const calm = matchMedia('(prefers-reduced-motion: reduce)');
   const size = new THREE.Vector2();
   let t = -1, swap = null, done = null, frozen = false;
 
@@ -116,7 +116,7 @@ export function createTunnel(renderer) {
       const a = PALETTE[from] || PALETTE[0], b = PALETTE[to] || PALETTE[0];
       set('uA0', a.a); set('uB0', a.b); set('uBg0', a.bg);
       set('uA1', b.a); set('uB1', b.b); set('uBg1', b.bg);
-      uniforms.uSpeed.value = calm.matches ? 1.5 : 5.0;
+      uniforms.uSpeed.value = calm.on ? 1.5 : 5.0;
       t = 0; swap = onSwap; done = onDone;
     },
     // checks only: hold the crossing at a moment (seconds), or let it go on (null)

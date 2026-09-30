@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { calm } from './calm.js';
 import { CELL, CHUNK } from './world.js';
 
 // ── conspace-rooms · events.js ──────────────────────────────────────────────
@@ -121,8 +122,9 @@ export class EventDirector {
     for (let k = 0; k < 3; k++) setTimeout(() => this.audio?.drip(s.dx, s.dz, s.dist), k * rand(600, 900));
     return s;
   }
-  _flicker(st) { if (st === 2) return null; this.atmo.flicker(st === 0 ? 1 : 0.6); return { dist: null }; }
-  _shiver() { this.atmo.shiverCandles(rand(1.2, 2)); return { dist: null }; }
+  // calm: a creak somewhere takes the lamp's place, and the candles keep still
+  _flicker(st) { if (st === 2) return null; if (calm.on) return this._creak(st); this.atmo.flicker(st === 0 ? 1 : 0.6); return { dist: null }; }
+  _shiver() { if (calm.on) return null; this.atmo.shiverCandles(rand(1.2, 2)); return { dist: null }; }
 
   // a wall run near the visitor, long enough to walk a shadow along
   _wallNear(min, max, minLen) {
