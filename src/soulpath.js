@@ -3,7 +3,7 @@ import { keyCode } from './input.js';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, mulberry32 } from './world.js';
 import { zoneWeights, ORIGIN } from './zones.js';
 import { t, getLang } from './i18n.js';
-import { boardTexture, carpetTexture, rugTexture, runnerTexture } from './boards.js';
+import { boardTexture, carpetTexture, rugTexture, runnerTexture, prewarmBoards } from './boards.js';
 import { createChandeliers } from './chandeliers.js';
 import { EYE_HEIGHT } from './player.js';
 import { buildKitchen, createKitchenRig, buildScatter, tickCandles, shadeOf } from './kitchen.js';
@@ -456,6 +456,7 @@ export class SoulPath {
     this._lastStage = stage.stage;
     this._prevPos = { x: player.pos.x, z: player.pos.y };
     this.kitchenRig = createKitchenRig(scene, renderer, quality);
+    prewarmBoards();
     this.seen = new Set();          // art ids seen this visit
     this.asked = [];                // what the souls asked, in order, for the card
     this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
@@ -583,13 +584,21 @@ export class SoulPath {
   }
 
   // ── chunk lifecycle (mirrors World) ────────────────────────────────────
+  // New chunks of the world get their things one a frame, nearest first (a
+  // chunk takes some tens of milliseconds and the world adds a row of them at
+  // once, far off in the fog); the first build, and the visitor's own chunk,
+  // at once.
   _sync() {
+    const P = this.player.pos, span = CHUNK * CELL, first = !this.chunkStuff.size;
+    let next = null, nd = Infinity;
     for (const key of this.world.chunks.keys()) {
-      if (!this.chunkStuff.has(key)) {
-        const [cx, cz] = key.split(':').map(Number);
-        this.chunkStuff.set(key, this._buildChunk(cx, cz));
-      }
+      if (this.chunkStuff.has(key)) continue;
+      const [cx, cz] = key.split(':').map(Number);
+      const d = Math.hypot((cx + 0.5) * span - P.x, (cz + 0.5) * span - P.y);
+      if (first || d < span * 0.75) { this.chunkStuff.set(key, this._buildChunk(cx, cz)); continue; }
+      if (d < nd) { nd = d; next = [key, cx, cz]; }
     }
+    if (next) this.chunkStuff.set(next[0], this._buildChunk(next[1], next[2]));
     // the clock nook only exists in the memory stage, like the ward's islands
     // in the fear stage; re-check every frame, cheap since it is one flag
     const memStage = this.stage.stage === 1;

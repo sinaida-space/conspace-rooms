@@ -93,7 +93,29 @@ export function boardTexture(text, seed, lang) {
 // rosettes on a winding vine between thin guard stripes. Drawn in one
 // quarter and mirrored, as a weaver's cartoon would be; then the pile goes
 // soft and fibrous over all of it. Landscape, as it hung.
-export function carpetTexture(seed) {
+// Painting a carpet or a rug takes tens of milliseconds, and a chunk would
+// paint new ones every time it is built mid-walk: there are a few of each,
+// painted the first time they are wanted and shared after (a chunk's disposal
+// only frees the GPU copy, three uploads it again when it is next drawn).
+// A room's rug takes its lampshade's colours, so four patterns do for those.
+const POOL = new Map();
+const pooled = (key, make) => POOL.get(key) ?? POOL.set(key, make()).get(key);
+
+// Paint the plain ones ahead while the browser has long idle stretches, so the walk
+// seldom has to wait for a new one.
+export function prewarmBoards() {
+  const jobs = [];
+  for (let k = 0; k < 12; k++) jobs.push(() => carpetTexture(k), () => rugTexture(k));
+  for (let k = 0; k < 6; k++) jobs.push(() => runnerTexture(k));
+  const idle = globalThis.requestIdleCallback;
+  if (!idle) return;                                     // no idle callbacks (Safari): painted as wanted
+  // only in a long idle stretch (the loading screen), never squeezed between frames
+  const step = dl => { while (jobs.length && dl.timeRemaining() > 30) jobs.shift()(); if (jobs.length) idle(step); };
+  idle(step);
+}
+
+export function carpetTexture(seed) { seed %= 12; return pooled('carpetTexture|' + seed, () => drawCarpetTexture(seed)); }
+function drawCarpetTexture(seed) {
   const W = 768, H = 560, c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d'), r = rnd(seed * 104729 + 7);
   const RED = ['#a3301c', '#9a2a1d', '#b03a22'][Math.floor(r() * 3)], NAVY = '#1b2238', BLACK = '#17110f',
@@ -206,7 +228,8 @@ export function carpetTexture(seed) {
 // A woven runner (дорожка): lengthwise, burgundy with bands of green and
 // beige across, thin light stripes at the edges, a little fringe, the weave
 // in fine lines. Same canvas size as a rug, long side down the canvas.
-export function runnerTexture(seed) {
+export function runnerTexture(seed) { seed %= 6; return pooled('runnerTexture|' + seed, () => drawRunnerTexture(seed)); }
+function drawRunnerTexture(seed) {
   const W = 216, H = 720, c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d'), r = rnd(seed * 911 + 7);
   g.fillStyle = '#6e1a1f'; g.fillRect(0, 0, W, H);
@@ -223,7 +246,8 @@ export function runnerTexture(seed) {
   return tex(c);
 }
 
-export function rugTexture(seed, pal = null) {
+export function rugTexture(seed, pal = null) { seed %= pal ? 4 : 12; return pooled('rugTexture|' + seed + '|' + (pal ? pal.field + pal.dark + pal.light : ''), () => drawRugTexture(seed, pal)); }
+function drawRugTexture(seed, pal = null) {
   const W = 432, H = 720, c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d'), r = rnd(seed * 7727 + 3);
   const RED = pal?.field || '#5e0a0f', DARK = pal?.dark || '#1f0608', CREAM = pal?.light || '#c9b199';
