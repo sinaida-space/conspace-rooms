@@ -128,8 +128,8 @@ function show() {
   const say = document.createElement('p');
   say.style.margin = '0';
   say.textContent = ru
-    ? 'Сделайте скриншот этого экрана и пришлите Синаиде. Картинка также сохранена в Загрузки.'
-    : 'Take a screenshot of this screen and send it to Sinaida. The picture is also saved to Downloads.';
+    ? 'Сделайте скриншот этого экрана и пришлите Зинаиде или Алисе. Картинка также сохранена в Загрузки.'
+    : 'Take a screenshot of this screen and send it to Sinaida or Alisa. The picture is also saved to Downloads.';
   const img = new Image();
   img.src = url; img.alt = 'bug report';
   Object.assign(img.style, { maxWidth: '100%', maxHeight: 'calc(100% - 90px)', objectFit: 'contain' });
