@@ -611,6 +611,7 @@ export class SoulPath {
       if (stuff.ward) stuff.ward.group.userData.gone = true;
       if (stuff.beds) stuff.beds.group.userData.gone = true;
       this._wardCells.delete(key);
+      this._wallBusy?.delete(key);
       stuff.group.traverse(o => {
         if (o.userData.keep) return;                  // shared scatter geometry and materials
         o.geometry?.dispose();
@@ -625,7 +626,10 @@ export class SoulPath {
     const group = new THREE.Group();
     group.name = 'soul_' + cx + '_' + cz;
     this.scene.add(group);
-    const stuff = { group, writings: [], doors: [], kitchen: null, portals: [], egg: null };
+    const stuff = { group, writings: [], doors: [], kitchen: null, portals: [], egg: null, wallBusy: [] };
+    // what hangs flat on a wall and how far along it (x, z its middle on the
+    // face, nx, nz the face, hw half its width): the props keep off all of it
+    (this._wallBusy ||= new Map()).set(cx + ':' + cz, stuff.wallBusy);
 
     // ── writings: about half the chunks get one, on a deterministic wall run
     const rw = mulberry32(hash2i(SEED_WRITING, cx, cz));
@@ -646,6 +650,7 @@ export class SoulPath {
         group.add(mesh);
         mountOrDrop(mesh, { x: pos.x, z: pos.z, nx: slot.normal.x, nz: slot.normal.z, y: WRITING_Y, kind: 'writing', w: 0.75 });
         stuff.taken = [[pos.x, pos.z, 1.3]];
+        stuff.wallBusy.push({ x: pos.x, z: pos.z, nx: slot.normal.x, nz: slot.normal.z, hw: 0.75 });
         const w = { mesh, zone, seed: rw(), behindT: 0 };
         this._writeOn(w);
         stuff.writings.push(w);
@@ -682,6 +687,7 @@ export class SoulPath {
       const mesh = onWall(sl, 0.78, 1.04, 1.6, off);
       mesh.rotation.z = (rpo() - 0.5) * 0.04;              // hung a little crooked
       (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.0]);
+      stuff.wallBusy.push({ x: mesh.position.x, z: mesh.position.z, nx: sl.normal.x, nz: sl.normal.z, hw: 0.62 });
       const p = { mesh, q: Math.floor(rpo() * 1000) };
       this._printPoster(p);
       hangOrDrop(mesh, sl, 'poster', 0.62);                // after the print: the board is scaled wide by then
@@ -697,6 +703,7 @@ export class SoulPath {
       hangOrDrop(mesh, carpetWall, 'wall carpet', 1.0);
       stuff.carpets.push(mesh);
       (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.2]);
+      stuff.wallBusy.push({ x: mesh.position.x, z: mesh.position.z, nx: carpetWall.normal.x, nz: carpetWall.normal.z, hw: 1.0 });
     }
 
     // ── rugs on the parquet of the red rooms: one or two a chunk, 1.8 by
@@ -1677,8 +1684,16 @@ export class SoulPath {
       const edgeCells = 2 * (rm.x1 - rm.x0 + rm.y1 - rm.y0);
       hallWalls.push(...choose(here, Math.round(edgeCells / 5 * Math.min(1.5, Math.max(0.6, dens))), 3));
     }
-    const walls = choose(wallSpots, nWall, dens > 1.2 ? 2 : 3).concat(hallWalls).map(s => ({
-      x: centreOf(s.gi) + s.di * CELL / 2, z: centreOf(s.gj) + s.dj * CELL / 2, nx: -s.di, nz: -s.dj, r: rp(), run3: s.run3 }));
+    // never over a carpet, a notice board or a writing on the same wall: its
+    // own half width hw along the face, plus a hand's gap
+    const busy = this._wallBusy?.get(cx + ':' + cz) || [];
+    const onBusy = (x, z, nx, nz, hw) => busy.some(b => Math.abs(b.nx - nx) < 0.1 && Math.abs(b.nz - nz) < 0.1
+      && Math.abs((x - b.x) * nx + (z - b.z) * nz) < 0.3 && Math.abs((x - b.x) * nz - (z - b.z) * nx) < b.hw + hw + 0.2);
+    const faceOf = s => ({ x: centreOf(s.gi) + s.di * CELL / 2, z: centreOf(s.gj) + s.dj * CELL / 2, nx: -s.di, nz: -s.dj });
+    const clearWall = (s, hw) => { const f = faceOf(s); return !onBusy(f.x, f.z, f.nx, f.nz, hw); };
+    const walls = choose(wallSpots.filter(s => clearWall(s, 0.8)), nWall, dens > 1.2 ? 2 : 3).concat(hallWalls.filter(s => clearWall(s, 0.8))).map(s => ({
+      ...faceOf(s), r: rp(), run3: s.run3 }))
+      .filter((w, i, all) => all.findIndex(o => o.nx === w.nx && o.nz === w.nz && Math.hypot(o.x - w.x, o.z - w.z) < 1.8) === i);   // a hall's pick and a corridor's may meet on one face: one of them
     const air = st === 2 ? choose(airSpots, Math.round(4 * dens), dens > 1.2 ? 3 : 4).map(s => ({ x: centreOf(s.gi), z: centreOf(s.gj), r: rp() })) : [];
     const sp = this.stairwellPlan, clearOf = q => Object.values(this.summonedPortals || {}).every(p => !p || Math.hypot(p.x - q.x, p.z - q.z) > 2.6)
       && (!sp || Math.hypot(sp.x - q.x, sp.z - q.z) > 3);
@@ -1688,7 +1703,7 @@ export class SoulPath {
     const built = this.props.build(group, st, walls, air);
     // ivy up the corridor walls of fear and memory (#43; none in the light): a
     // few patches a chunk, on wall spots the props left, two cells clear of them
-    const ivySpots = choose(wallSpots.filter(w => !solidAtGlobal(w.gi - w.di, w.gj - w.dj) && free(w.gi - w.di, w.gj - w.dj) && walls.every(o => Math.hypot(o.x - (centreOf(w.gi) + w.di * CELL / 2), o.z - (centreOf(w.gj) + w.dj * CELL / 2)) > 2 * CELL)), Math.round(2.5 * Math.max(0.6, dens)), 3)
+    const ivySpots = choose(wallSpots.filter(w => clearWall(w, 0.6) && !solidAtGlobal(w.gi - w.di, w.gj - w.dj) && free(w.gi - w.di, w.gj - w.dj) && walls.every(o => Math.hypot(o.x - (centreOf(w.gi) + w.di * CELL / 2), o.z - (centreOf(w.gj) + w.dj * CELL / 2)) > 2 * CELL)), Math.round(2.5 * Math.max(0.6, dens)), 3)
       .map(w => ({ x: centreOf(w.gi) + w.di * CELL / 2, z: centreOf(w.gj) + w.dj * CELL / 2, nx: -w.di, nz: -w.dj })).filter(clearOf);
     const ivy = buildIvy(group, st, ivySpots, hash2i(SEED_PROPS ^ 0x1717, cx, cz), this.atmo);
     if (ivy) {                                           // the pots stand in the way like any other thing; candles keep off
@@ -1706,7 +1721,7 @@ export class SoulPath {
     const rh = mulberry32(hash2i(SEED_PROPS ^ 0x3c1, cx, cz)), hangSpots = [];
     const far = (x, z, list, d) => list.every(o => Math.hypot(o.x - x, o.z - z) > d);
     const hangCand = st === 2 ? [] : wallSpots.map(w => ({ x: centreOf(w.gi) + w.di * CELL / 2, z: centreOf(w.gj) + w.dj * CELL / 2, nx: -w.di, nz: -w.dj }))
-      .filter(q => far(q.x, q.z, walls, 1.4) && far(q.x, q.z, ivySpots, 1.6) && clearOf(q));
+      .filter(q => far(q.x, q.z, walls, 1.4) && far(q.x, q.z, ivySpots, 1.6) && clearOf(q) && !onBusy(q.x, q.z, q.nx, q.nz, 0.3));
     const nHang = hangCand.length ? Math.round((1 + rh() * 2) * Math.min(1.3, Math.max(0.6, dens))) : 0;
     for (let tries = 0; tries < 40 && hangSpots.length < nHang; tries++) {
       const q = hangCand[Math.floor(rh() * hangCand.length)];
@@ -2367,7 +2382,8 @@ export class SoulPath {
   }
 
   // Where the guide leads: in fear to the nearest portal into the red rooms,
-  // in the red rooms to the nearest grandmother's room, then to the way on.
+  // in the red rooms to the nearest grandmother's room, then to the way on;
+  // wherever the portal is not there yet, to the nearest work not yet seen.
   _guideTarget() {
     const P = this.player, cx = Math.floor(P.pos.x / (CHUNK * CELL)), cz = Math.floor(P.pos.y / (CHUNK * CELL));
     let best = null, bd = Infinity;
@@ -2377,6 +2393,9 @@ export class SoulPath {
     } else {
       const p = this.summonedPortals[this.stage.stage + 1];
       if (p) consider(p.x, p.z);
+      // no portal yet (it comes only once enough works are seen): to the
+      // nearest work not seen, which is what brings it
+      else for (const a of this.artworks.active) if (!a.hidden && !this.seen.has(a.art.id)) consider(a.centerWorld.x, a.centerWorld.z);
     }
     return best;
   }
