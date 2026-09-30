@@ -125,7 +125,7 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 - **Rating:** Low
 - **Evidence:** live response for `/` carries `strict-transport-security` and no `content-security-policy`, `x-content-type-options`, `referrer-policy`, `permissions-policy` or frame rule.
 - **Recommended remediation:** in `vercel.json` for `/(.*)`: `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), microphone=(), geolocation=()`, `Content-Security-Policy` with `frame-ancestors 'none'` and, after F-006, `default-src 'self'` with hashes for the inline mirror script, the import map and the JSON-LD. Test in report-only first.
-- **Done in waves 1 and 6:** `nosniff`, `Referrer-Policy`, `Permissions-Policy` and the frame ban came in wave 1. Wave 6 adds the full policy: `default-src 'self'`, scripts from the site plus the hashes of the inline ones and `'wasm-unsafe-eval'` for the hand tracker, no other host anywhere. `tools/csp.mjs` builds it from the pages, a test fails when an inline script changes without it, and the smoke run serves every page under it.
+- **Done in waves 1 and 6:** `nosniff`, `Referrer-Policy`, `Permissions-Policy` and the frame ban came in wave 1. Wave 6 adds the full policy: `default-src 'self'`, scripts from the site plus the hashes of the inline ones and `'wasm-unsafe-eval'` for the hand tracker, no other host anywhere. `tools/csp.mjs` builds it from the pages, a test fails when an inline script changes without it, and the smoke run serves every page under that policy.
 
 ### F-009 · Zoom locked on the home page and the gallery page
 - **Category:** Accessibility
@@ -193,5 +193,21 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 F-001 and F-002 decide how the piece feels on a stranger’s machine and are the two I would settle before the piece is shown further. F-004, F-008, F-009, F-012 and F-014 are small edits that fit one short session. F-003 and F-006 are investments that pay back in the gallery version (issue #22). F-007 is settled by a playtest with people; code follows the results.
 
 **This report is a diagnosis. Say which findings (by number) should become fixes, and in what order.**
+
+## Round 11: the review of what was done
+
+Waves 1 to 6 answered twelve of the fourteen findings (F-007 and F-010 were left out by choice). The whole diff from `98432d5` was then read again for bugs, leaks, conflicts between waves and security. Tests, the smoke run in three modes and the typography check passed before the reading began.
+
+| # | Found in the review | Wave it came from | What was done |
+|---|---|---|---|
+| R-1 | A work could be counted as seen, or opened, while its canvas was still dark: on a slow network the picture arrives after the visitor does | 4 | Fixed: a work has to be `ready` to be opened or counted; a failed download is tried again after five seconds |
+| R-2 | The decoded bitmaps of the pictures were left to the garbage collector, and a failed download left an unhandled rejection on release | 4 | Fixed: the bitmap is closed when its texture is released, the rejection is caught |
+| R-3 | At the change into grandmother’s stage the rooms were built in the order of the chunk list, so the nearest could come last | 3 | Fixed: the nearest first |
+| R-4 | The smoke run answered a missing path with an empty 404, so the site’s own 404 page was never loaded under the policy | 6 | Fixed: it serves `404.html` and checks that the page comes up whole |
+| R-5 | Works hidden in the hospital (all but the next one) are fetched when near, though nobody sees them yet | 4 | Left as it is: it keeps a revealed work from appearing dark |
+| R-6 | A room in grandmother’s stage is still one frame of about 45 ms, and the first room costs a shader compile of about 200 ms | 3 | Left for later, noted under F-001 |
+| R-7 | The headers, the Markdown middleware and the address are bound to Vercel | 1, 6 | Left: a move to Cloudflare is planned, and they travel with the site |
+
+On the live site after wave 6 the home page, the specs, the privacy page and the 404 page load under the policy with nothing refused. Still unchecked by hand: a full walk through both portals to the arch, real hands in front of a real camera, a phone, Safari and Firefox.
 
 <!-- Je suis le spectre d'une rose que tu portais hier au bal. -->
