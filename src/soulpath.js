@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { sketchParam } from './device.js';
 import { keyCode } from './input.js';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, mulberry32 } from './world.js';
 import { zoneWeights, ORIGIN } from './zones.js';
@@ -93,7 +94,7 @@ const PORTAL_SEEN_MEMORY = 5;    // works seen in memory (past the room) before 
 const PORTAL_NEAR = 8;           // metres: a summoned portal never lands closer than this
 const PORTAL_FAR = 24;           // metres: nor further than this
 const FINALE_VANISH = 6;         // seconds the walls take to dissolve before the rose tunnel rises
-const DREAM_PREVIEW = new URLSearchParams(location.search).has('dream');
+const DREAM_PREVIEW = sketchParam('dream') !== null;
 const STAIR_NIGHTMARE = true;     // false: the calm version, only the door, fog and light, no zoom, no sound, no blackout
 const STAIR_NEAR = 3.2;          // metres: this close, the metal door gives way, each time the visitor passes
 const STAIR_OPEN = 1.3;          // seconds: it swings open

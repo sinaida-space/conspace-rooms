@@ -2,6 +2,7 @@
 // bursts on demand. Init-only — not auto-started; call render() from the
 // app loop once wired up.
 import * as THREE from 'three';
+import { sketchParam } from './device.js';
 
 const FRAG = /* glsl */`
 precision highp float;
@@ -119,7 +120,7 @@ export function createPost(renderer, quality) {
     uTime: { value: 0 }, uShift: { value: 0 }, uGlitch: { value: 0 }, uCrt: { value: 1 },
     uBloom: { value: new THREE.Vector3(0.25, 0.85, 0.45) },
     uBlack: { value: 0 },
-    uEdge: { value: { off: 0, a: 1, b: 2, c: 3, abc: 4 }[new URLSearchParams(location.search).get('edge')] ?? 2 },   // B, the dream periphery, is the house style
+    uEdge: { value: { off: 0, a: 1, b: 2, c: 3, abc: 4 }[sketchParam('edge')] ?? 2 },   // B, the dream periphery, is the house style
     tDepth: { value: null }, uNearFar: { value: new THREE.Vector2(0.1, 100) },
     uFogCol: { value: new THREE.Color() }, uFogFar: { value: 50 },
   };

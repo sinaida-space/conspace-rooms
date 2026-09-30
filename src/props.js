@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { sketchParam } from './device.js';
 import { mergeGeometries, mergeVertices } from '../vendor/addons/BufferGeometryUtils.js';
 import { roundedBox } from './geom.js';
 import { contactShadows } from './shadows.js';
@@ -317,7 +318,7 @@ const LIGHT = {
 //   1 real colour (deep green, glossy, terracotta)
 //   2 white haze  (the plant is sheeted like the furniture, read by shape)
 //   3 fading into light (green at the base, the top leaves nearly SHEET white)
-const PLANT_LOOK = +(new URLSearchParams(location.search).get('plants') || 1);   // 1|2|3
+const PLANT_LOOK = +(sketchParam('plants') || 1);   // 1|2|3
 
 // colours of the current look; `fade` paints leaves by height toward SHEET
 export function plantLook(look = PLANT_LOOK) {

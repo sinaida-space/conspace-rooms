@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { sketchParam } from './device.js';
 import { Quality } from './quality.js';
 import { InputRouter, keyCode } from './input.js';
 import { UI, detectCapabilities } from './ui.js';
@@ -361,8 +362,8 @@ async function boot() {
     window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo });
     const { EventDirector } = await import('./events.js');
     window.__app.events = new EventDirector({ scene, world, player, audio, atmo, stage, soul: window.__app.soul });   // one event every 20-40 s (#43)
-    if (['clouds', 'fogtop', 'plants'].some(k => new URLSearchParams(location.search).has(k))) stage.set(2);   // a ceiling sketch: straight into the light to judge it
-    const plantDraft = new URLSearchParams(location.search).get('plantdraft');   // fear|room|accept|strelitzia|alocasia|fiddle|calathea: one draft plant in front of the visitor (#39)
+    if (['clouds', 'fogtop', 'plants'].some(k => sketchParam(k) !== null)) stage.set(2);   // a ceiling sketch: straight into the light to judge it
+    const plantDraft = sketchParam('plantdraft');   // fear|room|accept|strelitzia|alocasia|fiddle|calathea: one draft plant in front of the visitor (#39)
     if (plantDraft && !['fear', 'room'].includes(plantDraft)) stage.set(2);
     if (plantDraft) import('./plants.js').then(m => m.placePlantDraft(plantDraft, { scene, player, atmo, renderer }));
     if (new URLSearchParams(location.search).has('dbg')) import('./debug.js').then(m => m.openDebug({ renderer, quality, post, atmo }));   // phone debugging

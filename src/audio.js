@@ -1,4 +1,5 @@
 import { startAmbience } from './ambience.js';
+import { sketchParam } from './device.js';
 import { Music } from './music.js';
 import { WaterSound } from './waterSound.js';
 // Generative audio, zero files: the music (music.js), crackle, footsteps,
@@ -90,7 +91,7 @@ export class AudioEngine {
   // what is underfoot: a rug, grandmother's parquet, the light's softness, or tile
   _surface() {
     if (this._forceSurface === undefined) {   // ?steps=tile|parquet|rug|soft, read once
-      const f = new URLSearchParams(location.search).get('steps');
+      const f = sketchParam('steps');
       this._forceSurface = ['tile', 'parquet', 'rug', 'soft'].includes(f) ? f : null;
     }
     if (this._forceSurface) return this._forceSurface;

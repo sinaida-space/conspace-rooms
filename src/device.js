@@ -22,4 +22,10 @@ export function detectDevice() {
   return { isTouch, isIOS, isIPadOS, isPhone, isTablet, isMobile, hasCamera, secureContext, coarsePointer };
 }
 
+// Sketch switches (?clouds, ?edge, ?plantdraft and the like) are for the authors:
+// they work on localhost, and on the live site only next to ?dbg.
+const _query = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+const _dev = !!_query && (_query.has('dbg') || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname));
+export const sketchParam = key => (_dev ? _query.get(key) : null);
+
 // Je suis le spectre d'une rose que tu portais hier au bal.
