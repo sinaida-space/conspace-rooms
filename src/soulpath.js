@@ -469,6 +469,15 @@ export class SoulPath {
     this.seen = new Set();          // art ids seen this visit
     this.asked = [];                // what the souls asked, in order, for the card
     this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
+    // in the light, a wall that would take a work already seen takes one
+    // still unseen instead: the last few come to meet the walk wherever it
+    // wanders, rather than hanging only in their own far chunks
+    artworks.swap = (art, cx, cz) => {
+      if (this.stage.stage !== 2 || !this.seen.has(art.id)) return art;
+      const unseen = artworks.list.filter(a => !this.seen.has(a.id));
+      if (!unseen.length) return art;
+      return unseen[hash2i(SEED_STAIR ^ 0x7e11, cx, cz) % unseen.length];
+    };
     this.roses = createRoseCounter(this.total);
     this.petals = createPetals(scene, camera, quality);
     this.glowPetals = createGlowPetals(scene);   // the light's way-marks: petals on the water
