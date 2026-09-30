@@ -73,6 +73,14 @@ body::after {
 #lang-gate .btn-enter[data-lang="ru"]:focus-visible { outline-color: var(--tri-violet); }
 .lang-actions { display: flex; flex-wrap: wrap; gap: 1em; }
 .lang-actions .btn-enter { flex: 1 1 10em; }
+/* a small screen: the two buttons come right under the title, the blurbs after them */
+@media (max-width: 600px), (max-height: 700px) {
+  #lang-gate .consent-panel { display: flex; flex-direction: column; }
+  #lang-gate .gate-intro { display: contents; }
+  #lang-gate .gate-title { order: 0; }
+  #lang-gate .lang-actions { order: 1; margin-bottom: 1.6em; }
+  #lang-gate .gate-lang, #lang-gate #lang-boot { order: 2; }
+}
 #lang-boot {
   font-size: 0.85em; color: var(--dim); margin-bottom: 1.2em;
   min-height: 1.6em; white-space: pre-wrap;
