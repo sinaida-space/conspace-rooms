@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { viewMaterial, nextView, paneAttributes } from './views.js';
 import { sketchParam } from './device.js';
 import { mergeGeometries, mergeVertices } from '../vendor/addons/BufferGeometryUtils.js';
 import { roundedBox } from './geom.js';
@@ -9,17 +10,19 @@ import { wallBehind, record } from './placement.js';
 // Things left along the corridors, so that hardly a corridor is quite empty.
 // Each stage leaves its own:
 //   FEAR       a tube chair, a bucket and mop, bottles, a cardboard box, an
-//              oxygen cylinder
+//              oxygen cylinder, now and then a window of grey, dirty glass
+//              onto a night block of flats, its tulle cut off at the sill
 //   MEMORY     the toys every Soviet child had (неваляшка, пирамидка, юла,
 //              матрёшки, a two-colour ball), slippers, a
 //              stool, jars of preserves, a tied stack of newspapers
-//   ACCEPTANCE furniture under white sheets, windows with nothing but light
-//              behind a breathing tulle, lace napkins adrift on the water and
+//   ACCEPTANCE furniture under white sheets, windows onto flowers behind frosted
+//              glass (views.js), a breathing tulle before them, lace napkins adrift on the water and
 //              paper cranes circling under the ceiling, shy of the visitor
 // Every shape is built once from primitives (no downloads) and baked with
 // vertex colours (rgb + gloss in alpha, as in ward.js and eggs.js). A chunk
 // merges all of its grounded things into one mesh lit by atmo.prop(), plus
-// at most three more draw calls in the light: windows, tulle, floaters.
+// at most three more draw calls: windows, tulle (both in fear and the
+// light), floaters (the light).
 // Where they stand is decided in soulpath.js (_buildProps).
 
 const SHEET = 0xeeeee8, STEEL = 0xa9adab, WOOD = 0x6a4424, WOOD_PALE = 0xd8b070;
@@ -464,6 +467,50 @@ LIGHT.monstera = { depth: 0.8, w: 1.0, solid: true, build: put => {
 } };
 
 // ── materials of the light ──────────────────────────────────────────────────
+// Vertical blinds, BLIND_COLS slats side by side, bottom of the canvas the
+// top of a slat: pale hospital mint gone yellow, grey dust thick along the
+// top and in the weave, and where hands have pushed them aside for years,
+// greasy smudges of palms and fingers at chest height; a weight at the hem.
+const BLIND_COLS = 8;
+function blindsTexture() {
+  const W = 64, H = 512, c = document.createElement('canvas');
+  c.width = W * BLIND_COLS; c.height = H;
+  const g = c.getContext('2d');
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < BLIND_COLS; k++) {
+    const x0 = k * W;
+    const tone = 196 + rnd() * 18;
+    g.fillStyle = `rgb(${tone - 12},${tone + 10},${tone - 20})`; g.fillRect(x0, 0, W, H);
+    for (let x = 0; x < W; x += 3) { g.fillStyle = `rgba(90,100,80,${0.04 + rnd() * 0.05})`; g.fillRect(x0 + x, 0, 1, H); }   // the weave
+    const top = g.createLinearGradient(0, H, 0, H * 0.55);                            // dust settles thickest on top
+    top.addColorStop(0, 'rgba(110,100,82,0.55)'); top.addColorStop(1, 'rgba(110,100,82,0)');
+    g.fillStyle = top; g.fillRect(x0, 0, W, H);
+    for (let i = 0; i < 140; i++) { g.fillStyle = `rgba(95,88,72,${0.1 + rnd() * 0.25})`; g.fillRect(x0 + rnd() * W, H * (0.3 + 0.7 * Math.pow(rnd(), 0.5)), 1 + rnd() * 2, 1 + rnd() * 2); }
+    g.fillStyle = 'rgba(160,150,100,0.18)';                                          // a yellow tidemark or two
+    for (let i = 0; i < 2; i++) { g.beginPath(); g.ellipse(x0 + W * (0.2 + rnd() * 0.6), H * rnd(), 6 + rnd() * 12, 14 + rnd() * 30, 0, 0, 6.3); g.fill(); }
+    g.save(); g.beginPath(); g.rect(x0, 0, W, H); g.clip();
+    g.filter = 'blur(2px)';
+    const hands = rnd() < 0.8 ? 1 + (rnd() < 0.4) : 0;                               // palms and fingers, pushed aside at chest height
+    for (let n = 0; n < hands; n++) {
+      const cx = x0 + W * (0.3 + rnd() * 0.4), cy = H * (0.15 + rnd() * 0.25), a = (rnd() - 0.5) * 0.6;
+      g.save(); g.translate(cx, cy); g.rotate(a);
+      g.fillStyle = 'rgba(70,62,48,0.32)'; g.beginPath(); g.ellipse(0, 0, 11, 14, 0, 0, 6.3); g.fill();
+      g.strokeStyle = 'rgba(70,62,48,0.28)'; g.lineWidth = 5; g.lineCap = 'round';
+      for (const [fx, len] of [[-8, 20], [-3, 25], [3, 24], [8, 19]]) { g.beginPath(); g.moveTo(fx, 10); g.lineTo(fx * 1.2, 10 + len); g.stroke(); }
+      g.beginPath(); g.moveTo(-11, -2); g.lineTo(-20, 12); g.stroke();                // the thumb
+      g.restore();
+    }
+    g.filter = 'none'; g.restore();
+    g.fillStyle = 'rgba(60,60,55,0.7)'; g.fillRect(x0 + 4, 0, W - 8, 10);          // the weight in the hem
+    g.fillStyle = 'rgba(40,40,36,0.5)'; g.fillRect(x0, 0, 1, H); g.fillRect(x0 + W - 1, 0, 1, H);   // the slat's edges
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.flipY = false;                                  // canvas row 0 is the hem
+  t.anisotropy = 4;
+  return t;
+}
+
 function laceTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const g = c.getContext('2d');
@@ -592,52 +639,6 @@ void main(){
   #include <fog_fragment>
 }`;
 
-const WINDOW_VERT = /* glsl */`
-#include <common>
-#include <fog_pars_vertex>
-varying vec2 vUv;
-void main(){
-  vUv = uv;
-  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-  gl_Position = projectionMatrix * mvPosition;
-  #include <fog_vertex>
-}`;
-// Petersburg out the glass: the Neva under a white night, low silver-grey
-// water below a thin dark horizon, straw-to-lilac sky above, rain running
-// down. uRain is 0 on tier 0: the drops sit still, nothing streams.
-const WINDOW_FRAG = /* glsl */`
-#include <common>
-#include <fog_pars_fragment>
-uniform float uTime;
-uniform float uRain;
-varying vec2 vUv;
-float hash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
-void main(){
-  vec2 uv = vUv;
-  // a low horizon; the water mirrors the same white-night sky, only a little
-  // dimmer and greyer, so the pane reads as one light, not dark below / bright above
-  float horizon = 0.3;
-  float ts = clamp((uv.y - horizon) / (1.0 - horizon), 0.0, 1.0);
-  vec3 sky = mix(vec3(0.93, 0.85, 0.68), vec3(0.86, 0.84, 0.93), ts);   // warm straw near the water, pale lilac above
-  float tw = clamp((horizon - uv.y) / horizon, 0.0, 1.0);
-  vec3 skyM = mix(vec3(0.93, 0.85, 0.68), vec3(0.86, 0.84, 0.93), tw);  // the sky upside down in the water
-  vec3 water = mix(skyM, vec3(0.62, 0.64, 0.68), 0.35) * 0.9;
-  float glint = pow(max(0.0, sin(uv.x * 46.0 + uTime * uRain * 0.5 + tw * 9.0)), 24.0);
-  water += glint * 0.12 * (1.0 - tw);                                    // slow moving glints near the far shore
-  vec3 col = mix(water, sky, smoothstep(horizon - 0.015, horizon + 0.015, uv.y));
-  col *= 1.0 - 0.12 * exp(-pow((uv.y - horizon) / 0.01, 2.0));           // the far embankment, a thin soft line
-  // rain: streaks that run, drops that sit still on tier 0 (uRain = 0)
-  vec2 ruv = uv * vec2(9.0, 13.0);
-  float col1 = floor(ruv.x);
-  float speed = 0.5 + hash(vec2(col1, 0.0)) * 0.7;
-  float fall = uTime * uRain * 1.5 * speed;
-  float y = fract(ruv.y + fall - hash(vec2(col1, 1.0)) * 11.0);   // + fall: the pattern slides down the pane
-  float streak = smoothstep(0.08, 0.0, abs(fract(ruv.x) - 0.5)) * smoothstep(0.85, 0.55, y);
-  col = mix(col, min(vec3(1.0), col * 1.3 + 0.04), streak * 0.5);
-  gl_FragColor = vec4(col, 1.0);
-  #include <fog_fragment>
-}`;
-
 // a paper crane, nose along +x: body, two wings (tips flagged), neck, tail
 function craneGeometry() {
   const P = [], W = [];
@@ -683,11 +684,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
   const sheetMat = atmo.prop({ vertexColors: true, rust: 0, cloth: { map: linenTex('linen_detail.webp'), normal: linenTex('linen_normal.webp') } });
   const uniforms = { uTime: { value: 0 }, uPlayer: { value: new THREE.Vector3() }, uWaterLevel: { value: 0 } };
   const fogU = THREE.UniformsLib.fog;
-  // the Neva out the glass, white night, rain: static drops on tier 0
-  const windowMat = new THREE.ShaderMaterial({
-    uniforms: THREE.UniformsUtils.merge([fogU, { uRain: { value: quality.tier === 0 ? 0 : 1 } }]),
-    vertexShader: WINDOW_VERT, fragmentShader: WINDOW_FRAG, fog: true });
-  windowMat.uniforms.uTime = uniforms.uTime;
+  const blindMat = atmo.prop({ map: blindsTexture(), rust: 0.1 });   // the hospital's blinds, lit as the corridor is
   const floatMat = new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([fogU, { uMap: { value: laceTexture() } }]),
     vertexShader: FLOAT_VERT, fragmentShader: FLOAT_FRAG, side: THREE.DoubleSide, fog: true });
@@ -698,7 +695,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
 
   // kinds a stage can leave on the floor, with weights
   const KINDS = [
-    [['chair', 1.2], ['bucket', 1.5], ['bottles', 1.5], ['box', 1.2], ['oxygen', 1], ['drip', 2], ['wheelchair', 1.5], ['gurney', 1], ['screen', 1.3], ['cabinet', 1.8], ['scales', 1]],
+    [['chair', 1.2], ['bucket', 1.5], ['bottles', 1.5], ['box', 1.2], ['oxygen', 1], ['drip', 2], ['wheelchair', 1.5], ['gurney', 1], ['screen', 1.3], ['cabinet', 1.8], ['scales', 1], ['window', 0.8]],
     [['nevalyashka', 3], ['pyramid', 3], ['yula', 2], ['matryoshki', 3], ['ball', 2], ['slippers', 2], ['stool', 1.5], ['jars', 1.5], ['newspapers', 1]],
     [['armchair', 2], ['mirror', 1.5], ['piano', 1], ['window', 3]],   // no sheeted chair: it read as anything but; plants wait for the drafts (#39)
   ];
@@ -726,7 +723,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
     // the wall keeps going at least 3 cells, so a window fits) · air:
     // [{ x, z, r }] cell centres for things that float (light only)
     build(group, stage, walls, air) {
-      const parts = [], windows = [], tulles = [], floats = [], boxes = [], feet = [], sheets = [];
+      const parts = [], windows = [], blinds = [], tulles = [], floats = [], boxes = [], feet = [], sheets = [];
       for (const s of walls) {
         const name = pick(stage, s.r, s.run3 !== false);
         const rot = Math.atan2(s.nx, s.nz);
@@ -736,10 +733,25 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
           record({ kind: 'window', x: s.x, z: s.z, y: 1.7, mount: 'wall', ok: held, why: held ? undefined : 'no wall behind, window skipped', parent: group });
           if (!held) continue;
           const wm = M(s.x + s.nx * 0.012, 1.7, s.z + s.nz * 0.012, 0, rot);
-          windows.push(new THREE.PlaneGeometry(0.9, 1.3).applyMatrix4(wm));
+          windows.push(paneAttributes(new THREE.PlaneGeometry(0.9, 1.3).applyMatrix4(wm), s.nz, -s.nx, s.r * 7.31 % 1));   // each pane its own part of the chunk's view
           for (const [bw, bh, by] of [[0.95, 0.05, 2.37], [0.95, 0.05, 1.03], [0.04, 1.3, 1.7]]) {
-            const g = shape(put => put(new THREE.BoxGeometry(bw, bh, 0.03), 0xd8d2c4, 0.1));
+            const g = shape(put => put(new THREE.BoxGeometry(bw, bh, 0.03), stage === 0 ? 0x7d7f78 : 0xd8d2c4, 0.1));   // the hospital's frames gone grey
             parts.push(g.applyMatrix4(M(s.x + s.nx * 0.03, by, s.z + s.nz * 0.03, 0, rot)));
+          }
+          if (stage === 0) {                          // the hospital: vertical blinds from a plain rail, down to the sill
+            parts.push(shape(put => put(new THREE.BoxGeometry(1.24, 0.028, 0.03), 0xbfc2b8, 0.25)).applyMatrix4(M(s.x + s.nx * 0.1, 2.47, s.z + s.nz * 0.1, 0, rot)));
+            const N = 13, turn = 0.75 + (s.r * 13.7 % 1) * 0.3;   // half open, each window its own way
+            for (let k = 0; k < N; k++) {
+              const h = s.r * 91.3 + k * 7.1, j = (Math.sin(h) * 0.5 + 0.5);
+              const twist = turn + (j - 0.5) * 0.35 + (k === (s.r * 31 | 0) % N ? 0.9 : 0);   // one hangs crooked
+              const len = 1.4 - (k % 5 === 3 ? 0.04 : 0), col = (h * 3.3 | 0) % BLIND_COLS;
+              const g = new THREE.PlaneGeometry(0.089, len).translate(0, -len / 2, 0);
+              const uv = g.attributes.uv;
+              for (let i = 0; i < uv.count; i++) uv.setX(i, (col + uv.getX(i)) / BLIND_COLS);
+              const along = (k - (N - 1) / 2) * 0.092;
+              blinds.push(g.applyMatrix4(M(0, 0, 0, 0, twist)).applyMatrix4(M(s.x + s.nx * 0.1 - s.nz * along, 2.455, s.z + s.nz * 0.1 + s.nx * along, 0, rot)));
+            }
+            continue;
           }
           // the rod the tulle hangs from: a brass-coloured pole on two
           // brackets, a knob at each end, and small rings along it
@@ -791,12 +803,14 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
         m.frustumCulled = material !== floatMat;    // floaters move in the shader, away from their bounds
         group.add(m); meshes.push(m);
       };
-      add(parts, mat); add(sheets, sheetMat); add(windows, windowMat); add(tulles, tulleMat); add(floats, floatMat);
+      // one view out of all the chunk's windows, each pane showing its own part of it
+      const viewMat = windows.length ? viewMaterial(nextView(stage === 0 ? 'fear' : 'light'), { dirt: stage === 0 ? 1 : 0, time: uniforms.uTime }) : null;
+      add(parts, mat); add(sheets, sheetMat); add(windows, viewMat); add(blinds, blindMat); add(tulles, tulleMat); add(floats, floatMat);
       const shade = contactShadows(feet);
       if (shade) { group.add(shade); meshes.push(shade); }
       return {
         boxes, walls, air, count: walls.length + air.length,
-        dispose() { for (const m of meshes) { group.remove(m); m.geometry.dispose(); } },
+        dispose() { for (const m of meshes) { group.remove(m); m.geometry.dispose(); } viewMat?.userData.release(); },
       };
     },
     // A child's corner in the red rooms: toys left on and round a rug.

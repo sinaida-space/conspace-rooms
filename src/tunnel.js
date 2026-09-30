@@ -4,9 +4,10 @@
 // strands; the flight goes on for a couple of seconds while the colours turn
 // from the place being left to the place ahead (the far throat changes first),
 // then the throat opens wide and the new stage is standing there.
-// One full-screen quad drawn over the finished frame; the shader is closed
-// form (a mapped cylinder and three value-noise lookups), no marching, so it
-// costs the same on every machine. Idle it draws nothing.
+// Drawn at half size (a quarter of the pixels) and stretched over the finished
+// frame: a mapped cylinder and two 2D value-noise lookups, no marching. While
+// it covers the whole view the world under it is not drawn at all (covering,
+// main.js), which is most of what a crossing saves. Idle it draws nothing.
 import * as THREE from 'three';
 import { calm } from './calm.js';
 
@@ -22,7 +23,7 @@ export const TUNNEL_SWAP = IN + 0.05;
 export const TUNNEL_TIMES = { inT: IN, hold: HOLD, out: OUT };   // for the crossing's sound (audio.js)                    // the world underneath changes once it is fully hidden
 
 const FRAG = /* glsl */`
-precision highp float;
+precision mediump float;
 varying vec2 vUv;
 uniform vec2  uRes;
 uniform float uTime;     // seconds since the crossing began
@@ -32,17 +33,15 @@ uniform float uMix;      // 0..1: from the old stage's colours to the new one's
 uniform float uSpeed;    // flight speed (lower with reduced motion)
 uniform vec3  uA0, uB0, uBg0, uA1, uB1, uBg1;
 
-// a small 3D value noise: hashed lattice corners, smooth blend
-float hash(vec3 p) {
-  p = fract(p * vec3(0.1031, 0.1030, 0.0973));
-  p += dot(p, p.yxz + 33.33);
-  return fract((p.x + p.y) * p.z);
-}
-float noise(vec3 p) {
-  vec3 i = floor(p), f = fract(p);
+// a small 2D value noise, periodic in x over ROUND cells so it closes
+// seamlessly round the tunnel (x is the angle)
+const float ROUND = 16.0;
+float hash(vec2 p) { p = fract(p * vec2(0.1031, 0.1030)); p += dot(p, p.yx + 33.33); return fract((p.x + p.y) * p.x); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(mix(hash(i), hash(i + vec3(1, 0, 0)), f.x), mix(hash(i + vec3(0, 1, 0)), hash(i + vec3(1, 1, 0)), f.x), f.y),
-             mix(mix(hash(i + vec3(0, 0, 1)), hash(i + vec3(1, 0, 1)), f.x), mix(hash(i + vec3(0, 1, 1)), hash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+  float x0 = mod(i.x, ROUND), x1 = mod(i.x + 1.0, ROUND);
+  return mix(mix(hash(vec2(x0, i.y)), hash(vec2(x1, i.y)), f.x), mix(hash(vec2(x0, i.y + 1.0)), hash(vec2(x1, i.y + 1.0)), f.x), f.y);
 }
 
 void main() {
@@ -50,33 +49,28 @@ void main() {
   // the throat drifts a little, so the tunnel bends as it is flown
   vec2 axis = vec2(sin(uTime * 0.9) * 0.06, cos(uTime * 0.7) * 0.04) * (1.0 - uOpen);
   vec2 q = p - axis;
-  float r = length(q), ang = atan(q.y, q.x);
+  float r = length(q), turn = atan(q.y, q.x) / 6.2832 + 0.5;   // 0..1 round the tunnel
 
   // a cylinder seen from inside: depth goes as 1 / radius; the walk moves along it
   float depth = 0.32 / max(r, 0.015);
   float z = depth + uTime * uSpeed;
 
   // strands: a thin bright band where warped noise crosses its middle,
-  // stretched along the tunnel, sampled seamlessly round it by (cos, sin)
-  vec3 s = vec3(cos(ang) * 2.2, sin(ang) * 2.2, z * 0.16);
-  float warp = noise(s * 1.2 + vec3(0.0, 0.0, uTime * 0.25));
-  s.xy += (warp - 0.5) * 0.9;
-  float v = noise(s * 2.3) * 0.7 + warp * 0.3;
+  // stretched along the tunnel; two lookups, the second bent by the first
+  float warp = noise(vec2(turn * ROUND, z * 0.12 + uTime * 0.25));
+  float v = noise(vec2(turn * ROUND + (warp - 0.5) * 2.0, z * 0.22)) * 0.7 + warp * 0.3;
   float strand = exp(-abs(v - 0.5) * 30.0);
-  float fine = exp(-abs(noise(s * 5.1 + 7.0) - 0.5) * 42.0) * 0.5;
 
   // the colours: the far throat turns to the new stage first, then the walls
   float far = smoothstep(0.9, 5.0, depth);
   float k = clamp(uMix * 1.6 - 0.6 + far * 0.6, 0.0, 1.0);
-  vec3 A = mix(uA0, uA1, k), B = mix(uB0, uB1, k), bg = mix(uBg0, uBg1, k);
+  vec3 A = mix(uA0, uA1, k), bg = mix(uBg0, uBg1, k);
 
   float fog = exp(-depth * 0.32);                       // strands dim with depth
-  vec3 col = bg + (A * strand + B * fine) * fog * 1.6;
+  vec3 col = bg + A * strand * fog * 1.8;
   // the throat's glow: the place ahead, seen at the end
   float throat = exp(-r * 7.0);
   col += mix(uB0, uB1, clamp(uMix * 1.4, 0.0, 1.0)) * throat * 1.4;
-  // faint scanlines, so the crossing keeps the television of the rest
-  col *= 0.94 + 0.06 * sin(vUv.y * uRes.y * 1.5);
 
   // coverage: closing in from the rim, then a hole opening from the middle
   float rim = length(p) / (0.5 * length(vec2(uRes.x / uRes.y, 1.0)));   // 1 at the corners
@@ -86,17 +80,15 @@ void main() {
   gl_FragColor = vec4(col, cover);
 }`;
 
+
 export function createTunnel(renderer) {
   const uniforms = {
     uRes: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 },
     uClose: { value: 0 }, uOpen: { value: 0 }, uMix: { value: 0 }, uSpeed: { value: 1.6 },
   };
   for (const n of ['uA0', 'uB0', 'uBg0', 'uA1', 'uB1', 'uBg1']) uniforms[n] = { value: new THREE.Vector3() };
-  const mat = new THREE.ShaderMaterial({
-    fragmentShader: FRAG,
-    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-    uniforms, transparent: true, depthTest: false, depthWrite: false,
-  });
+  const vertexShader = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+  const mat = new THREE.ShaderMaterial({ fragmentShader: FRAG, vertexShader, uniforms, transparent: true, depthTest: false, depthWrite: false });
   const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
   quad.frustumCulled = false;
@@ -109,6 +101,8 @@ export function createTunnel(renderer) {
 
   return {
     get active() { return t >= 0; },
+    // the view is fully hidden (the flight): the world need not be drawn
+    get covering() { return t >= IN && t < IN + HOLD - 0.1; },   // a frame's step (≤ 0.1 s) short, so the throat never opens on an undrawn frame
     // from, to: stage numbers · onSwap: called once the view is fully covered
     // (change the world there) · onDone: after it has opened again
     start(from, to, onSwap, onDone) {

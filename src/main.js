@@ -159,9 +159,11 @@ async function boot() {
     }
     post = post ?? window.__app.post;
     if (audio) audio.motion(speed);
-    window.__app.water?.beforeRender();   // the mirror pass, tier 2 only (the refraction split happens inside post.render)
-    if (post) post.render(scene, camera, dt, elapsed, speed);
-    else renderer.render(scene, camera);
+    if (!window.__app.tunnel?.covering) {   // in the portal's flight the tunnel hides it all: nothing under it is drawn
+      window.__app.water?.beforeRender();   // the mirror pass, tier 2 only (the refraction split happens inside post.render)
+      if (post) post.render(scene, camera, dt, elapsed, speed);
+      else renderer.render(scene, camera);
+    }
     window.__app.tunnel?.render(dt);
     window.__app.clip?.frame();   // copy the frame while the drawing buffer still holds it
     bugFrame();

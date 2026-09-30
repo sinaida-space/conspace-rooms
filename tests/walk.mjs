@@ -148,7 +148,7 @@ try {
       if (++n % 4 === 0) await new Promise(r => setTimeout(r, 0));   // fetches, decodes and timers get their turn
     }
     note('end');
-    return { mode, reached: ok(), minutes: +((fake - t0) / 60000).toFixed(1), metres: +metres.toFixed(0), log };
+    return { mode, reached: ok(), minutes: +((fake - t0) / 60000).toFixed(1), metres: +metres.toFixed(0), log, shadows: window.__app.events?.shadows ?? [] };
   }, { mode: MODE, minutes: MINUTES, until: UNTIL, base });
   await page.keyboard.up('KeyW');
   if (process.env.SHOT) {                               // SHOT=file.png: the view at the end, looking back the way the walk came
@@ -164,6 +164,8 @@ try {
 
 if (result) {
   for (const l of result.log) console.log(`${String(l.t).padStart(5)} s ${String(l.m).padStart(5)} m  stage ${l.stage}  seen ${l.seen} (${l.stageSeen})  ${l.fear}  stairs ${l.stairs}${l.portal1 ? '  portal→home' : ''}${l.room ? '  room' : ''}${l.portal2 ? '  portal→light' : ''}${l.finale ? '  finale' : ''}${l.card ? '  card' : ''}${l.note ? '  [' + l.note + ']' : ''}`);
+  const per = [0, 1, 2].map(st => result.shadows.filter(e => e.stage === st));
+  console.log(`\nshadows: ${per.map((l, st) => `stage ${st}: ${l.length} (${l.map(e => `${e.kind} ${e.dist} m`).join(', ')})`).join(' · ')}`);
   console.log(`\n${result.mode}: ${result.reached ? 'reached' : 'did NOT reach'} ${UNTIL} in ${result.minutes} min, ${result.metres} m`);
 }
 if (errors.length) console.error(`\nerrors:\n- ${[...new Set(errors)].join('\n- ')}`);

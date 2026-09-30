@@ -460,6 +460,7 @@ function blotMesh(scene) {
 export class SoulPath {
   constructor({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo }) {
     Object.assign(this, { scene, world, player, camera, artworks, audio, post, quality, stage, atmo });
+    this._renderer = renderer;                    // for compiling the next stage's shaders under the tunnel (_warmShaders)
     this.ward = createWardKit(atmo, quality);   // what the hospital left behind (fear stage only)
     this._wardCells = new Map();                // chunk key -> cells the island owns
     this._lastStage = stage.stage;
@@ -932,6 +933,26 @@ export class SoulPath {
     if (this._deferPaint) this._paint.push(paint); else paint();
   }
 
+  // The new stage's things are built in the portal's flight but first drawn
+  // as the throat opens: their shaders would compile in that frame (150 ms
+  // and more). Under cover they are compiled off the main thread where the
+  // browser can: the scene once, the frame after the swap, and each of
+  // grandmother's rooms as it is built (shown for the call: only what is
+  // visible is compiled).
+  _warmShaders() {
+    if (!this._warmPending || !window.__app?.tunnel?.covering) return;
+    this._warmPending = false;
+    this._warm(this.scene);
+  }
+  _warm(obj) {
+    const r = this._renderer;
+    if (!r?.compileAsync) return;
+    const was = obj.visible;
+    obj.visible = true;
+    r.compileAsync(obj, this.camera, this.scene).catch(() => {});
+    obj.visible = was;
+  }
+
   // ── painting on canvases, a little a frame ─────────────────────────────
   // A notice board, a carpet or a rug is a canvas painted in JavaScript, ten
   // to twenty milliseconds each: painted as a chunk was dressed, they were
@@ -940,7 +961,7 @@ export class SoulPath {
   // just dressed a chunk; the chunk is still far off in the fog by then.
   _stepPaint() {
     if (this._dressed) { this._dressed = false; return; }
-    const until = performance.now() + 4;
+    const until = performance.now() + (window.__app?.tunnel?.covering ? 12 : 4);   // in the portal's flight nothing is drawn: paint more
     while (this._paint.length && performance.now() < until) this._paint.shift()();
   }
 
@@ -950,7 +971,7 @@ export class SoulPath {
     if (this.stage.stage !== 1 || k.room || k.queued) return;
     if (!this._deferPaint) { k.build(); return; }
     k.queued = true;
-    this._paint.push(k.build);
+    this._paint.push(() => { k.build(); if (k.room) this._warm(k.group); });
   }
 
   // A thing of grandmother's stage whose canvas is painted only when that
@@ -3119,7 +3140,11 @@ export class SoulPath {
     if (this.stage.stage !== this._lastStage) { // the world changed: rewrite the walls in its hand
       this._lastStage = this.stage.stage;
       const target = { fear: +(this.stage.stage === 0), memory: +(this.stage.stage === 1), accept: +(this.stage.stage === 2) };
-      for (const st of this.chunkStuff.values()) for (const w of st.writings) { w.zone = target; this._writeOn(w); }
+      // every scrawl is a canvas: painted in turn, in the portal's flight, not all in the frame of the swap
+      for (const st of this.chunkStuff.values()) for (const w of st.writings) {
+        w.zone = target;
+        if (this._deferPaint) this._paint.push(() => { if (w.mesh.parent) this._writeOn(w); }); else this._writeOn(w);
+      }
       for (const st of this.chunkStuff.values()) for (const p of st.posters || []) this._printPoster(p);
       // the rooms first, the nearest first: they are what the stage is for
       const rooms = [...this.chunkStuff.values()].map(st => st.kitchen).filter(Boolean)
@@ -3135,7 +3160,9 @@ export class SoulPath {
       for (const st of this.chunkStuff.values()) if (st.ward) st.ward.group.visible = this.stage.stage === 0;
       for (const st of this.chunkStuff.values()) if (st.beds) st.beds.group.visible = this.stage.stage === 0;
       for (const st of this.chunkStuff.values()) for (const d of st.doors) d.group.visible = this.stage.stage === 0;
+      this._warmPending = true;
     }
+    this._warmShaders();
 
     // grandmother's room: light the nearest one, let candles and picture breathe
     let room = null, nook = null, rd = 14;

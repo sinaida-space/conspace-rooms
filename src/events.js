@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { calm } from './calm.js';
-import { CELL, CHUNK } from './world.js';
+import { CELL, CHUNK, solidAtGlobal } from './world.js';
 
 // ── conspace-rooms · events.js ──────────────────────────────────────────────
 // The event director (#43, C4): once every 20-40 s the labyrinth does one
@@ -13,22 +13,36 @@ import { CELL, CHUNK } from './world.js';
 //           or a calendar falls (wallthings.js)
 //   LIGHT   quiet only: a bird's shadow crosses a wall, the candles shudder
 //           in a draught, a drop falls into the water
+// Shadows keep their own clock (SHADOW_GAP, the first soon after a zone
+// begins) and are thrown only on a wall ahead, inside the view, so a zone
+// shows several. FEAR also has someone standing at the end of a corridor who
+// is gone as the visitor comes near; MEMORY a hand drawn along the wall.
 // ?debug=events logs every event; window.__app.events.fire(kind) stages one
 // now; window.__app.events.log keeps them all ({ t, kind, stage, dist }).
 
 const GAP = [20, 40];
 const WEIGHTS = [
-  { shadow: 3, flicker: 3, creak: 2, knock: 2, drip: 1, fall: 2 },
-  { shadow: 2, flicker: 1, creak: 2, knock: 1, drip: 1, fall: 2 },
-  { shadow: 2, shiver: 3, drip: 3 },
+  { flicker: 3, creak: 2, knock: 2, drip: 1, fall: 2 },
+  { flicker: 1, creak: 2, knock: 1, drip: 1, fall: 2 },
+  { shiver: 3, drip: 3 },
 ];
+const SHADOW_GAP = [30, 50], SHADOW_FIRST = [8, 15];   // seconds; the first after a zone begins
+const SHADOWS = [{ figure: 2, stander: 1 }, { cat: 1, hand: 1 }, { bird: 1 }];
+const LOOK = Math.cos(0.6);                             // inside ~35° of where the visitor looks
 const DEBUG = /(^|[?&])debug=events/.test(location.search);
 const rand = (a, b) => a + Math.random() * (b - a);
+
+// nothing solid on the floor between two points (0.3 m steps on the cell grid)
+function clear(x0, z0, x1, z1) {
+  const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.3);
+  for (let i = 1; i < n; i++) if (solidAtGlobal(Math.floor((x0 + (x1 - x0) * i / n) / CELL), Math.floor((z0 + (z1 - z0) * i / n) / CELL))) return false;
+  return true;
+}
 
 // ── silhouettes, drawn once, soft-edged as a shadow thrown from far off ──
 function silhouette(kind) {
   const W = kind === 'figure' ? 128 : 256, H = kind === 'figure' ? 256 : 128;
-  const frames = kind === 'figure' ? 1 : 2;
+  const frames = kind === 'cat' || kind === 'bird' ? 2 : 1;
   const c = document.createElement('canvas'); c.width = W * frames; c.height = H;
   const g = c.getContext('2d');
   g.filter = 'blur(5px)'; g.fillStyle = '#000';
@@ -47,6 +61,14 @@ function silhouette(kind) {
       g.beginPath(); g.moveTo(62, 64); g.quadraticCurveTo(30, 50, 34, 14); g.stroke();
       const s = f ? 1 : -1;
       for (const [x, k] of [[80, 1], [96, -1], [150, 1], [166, -1]]) { g.beginPath(); g.moveTo(x, 84); g.lineTo(x + s * k * 8, 120); g.stroke(); }
+    } else if (kind === 'hand') {                    // a hand laid flat to the wall, long fingers ahead, the arm trailing off
+      g.fillRect(0, 58, 120, 26);
+      g.beginPath(); g.ellipse(142, 70, 30, 22, 0, 0, Math.PI * 2); g.fill();
+      g.lineWidth = 9; g.lineCap = 'round'; g.strokeStyle = '#000';
+      for (const [y, len, bend] of [[54, 78, -6], [64, 90, -2], [74, 86, 2], [84, 70, 6]]) {
+        g.beginPath(); g.moveTo(160, y); g.quadraticCurveTo(160 + len * 0.6, y + bend, 160 + len, y + bend * 2.2); g.stroke();
+      }
+      g.beginPath(); g.moveTo(140, 50); g.quadraticCurveTo(160, 24, 186, 22); g.stroke();   // the thumb
     } else {                                         // a bird, wings up and wings down
       g.beginPath(); g.ellipse(128, 66, 34, 10, 0, 0, Math.PI * 2); g.fill();
       g.beginPath(); g.moveTo(160, 60); g.lineTo(178, 64); g.lineTo(160, 70); g.fill();
@@ -70,6 +92,8 @@ export class EventDirector {
     this.t = 0;
     this.running = [];                                // animations still playing: shadows, falls
     this.sil = {};
+    this.shadowWait = rand(...SHADOW_FIRST);
+    this.shadows = [];                               // { t, kind, stage, dist } of every shadow thrown (checks)
   }
 
   update(dt) {
@@ -78,6 +102,8 @@ export class EventDirector {
     const step = this.hold ? 0 : dt;                  // hold: animations stand still (checks)
     for (let i = this.running.length - 1; i >= 0; i--) if (!this.running[i](step)) this.running.splice(i, 1);
     if (this.soul?.finale || document.hidden) return;
+    if (this.stage.stage !== this._shadowStage) { this._shadowStage = this.stage.stage; this.shadowWait = rand(...SHADOW_FIRST); }
+    if ((this.shadowWait -= dt) <= 0) this.shadowWait = this.throwShadow() ? rand(...SHADOW_GAP) : 2;   // nowhere ahead: look again soon
     this.wait -= dt;
     if (this.wait > 0) return;
     const st = this.stage.stage, w = WEIGHTS[st] || WEIGHTS[0];
@@ -107,7 +133,24 @@ export class EventDirector {
     return true;
   }
 
+  // one of the zone's shadows, on a wall ahead; false if there is none in view
+  throwShadow(kind) {
+    const st = this.stage.stage;
+    if (!kind) {
+      const w = SHADOWS[st] || SHADOWS[0], ks = Object.keys(w);
+      let x = Math.random() * ks.reduce((u, k) => u + w[k], 0);
+      kind = ks.find(k => (x -= w[k]) <= 0) || ks[0];
+    }
+    const r = kind === 'stander' ? this._stander() : this._shadow(st, kind);
+    if (!r) return false;
+    const e = { t: +this.t.toFixed(1), kind, stage: st, dist: +r.dist.toFixed(1) };
+    this.shadows.push(e);
+    if (DEBUG) console.info('[events] shadow', e);
+    return true;
+  }
+
   _here() { return { x: this.player.pos.x, z: this.player.pos.y }; }
+  _ahead() { const d = (window.__app?.camera ?? this.player.camera)?.getWorldDirection(new THREE.Vector3()); return d ? { x: d.x / (Math.hypot(d.x, d.z) || 1), z: d.z / (Math.hypot(d.x, d.z) || 1) } : null; }
 
   // somewhere a few metres off, for a sound
   _somewhere(min = 3, max = 12) {
@@ -126,27 +169,33 @@ export class EventDirector {
   _flicker(st) { if (st === 2) return null; if (calm.on) return this._creak(st); this.atmo.flicker(st === 0 ? 1 : 0.6); return { dist: null }; }
   _shiver() { if (calm.on) return null; this.atmo.shiverCandles(rand(1.2, 2)); return { dist: null }; }
 
-  // a wall run near the visitor, long enough to walk a shadow along
-  _wallNear(min, max, minLen) {
-    const p = this._here(), cx = Math.floor(p.x / (CELL * CHUNK)), cz = Math.floor(p.z / (CELL * CHUNK));
+  // a wall run near the visitor, long enough to walk a shadow along, whose
+  // middle is inside the view; facing: it must face the visitor head-on
+  // (the wall that closes a corridor ahead)
+  _wallNear(min, max, minLen, facing = false) {
+    const p = this._here(), f = this._ahead(), cx = Math.floor(p.x / (CELL * CHUNK)), cz = Math.floor(p.z / (CELL * CHUNK));
     const cand = [];
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++)
       for (const sl of this.world.getWallSlots(cx + i, cz + j)) {
         if (sl.length < minLen) continue;
-        const d = Math.hypot(sl.position.x - p.x, sl.position.z - p.z);
-        // the visitor must be on the lit side of it
-        const side = (p.x - sl.position.x) * sl.normal.x + (p.z - sl.position.z) * sl.normal.z;
-        if (d > min && d < max && side > 0) cand.push({ sl, d });
+        const dx = sl.position.x - p.x, dz = sl.position.z - p.z, d = Math.hypot(dx, dz);
+        if (d < min || d > max) continue;
+        // the visitor must be on the lit side of it, and looking its way
+        if (-dx * sl.normal.x - dz * sl.normal.z <= 0) continue;
+        if (f && (dx * f.x + dz * f.z) / d < LOOK) continue;
+        // seen from the side a corridor wall is a sliver and a shadow on it a black line:
+        // only walls seen more or less face-on (head-on for `facing`)
+        if (-(sl.normal.x * dx + sl.normal.z * dz) / d < (facing ? 0.8 : 0.5)) continue;
+        if (clear(p.x, p.z, sl.position.x + sl.normal.x * 0.3, sl.position.z + sl.normal.z * 0.3)) cand.push({ sl, d });
       }
     return cand.length ? cand[Math.floor(Math.random() * cand.length)] : null;
   }
 
-  _shadow(st) {
-    const kind = ['figure', 'cat', 'bird'][st];
-    const w = this._wallNear(2.5, 12, kind === 'figure' ? 4 : 3);
+  _shadow(st, kind = ['figure', 'cat', 'bird'][st]) {
+    const w = this._wallNear(3, st === 2 ? 8 : 12, kind === 'figure' ? 4 : 3);
     if (!w) return null;
     const sil = this.sil[kind] ||= silhouette(kind);
-    const h = kind === 'figure' ? 2.1 : kind === 'cat' ? 0.55 : 0.5;
+    const h = kind === 'figure' ? 2.2 : kind === 'cat' ? 0.6 : kind === 'hand' ? 0.34 : 0.55;
     const mat = new THREE.MeshBasicMaterial({ map: sil.tex.clone(), transparent: true, opacity: 0, depthWrite: false, fog: true,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     mat.map.needsUpdate = true;
@@ -155,24 +204,53 @@ export class EventDirector {
     const half = sl.length * CELL / 2 - 0.3, dir = Math.random() < 0.5 ? 1 : -1;
     mesh.rotation.y = Math.atan2(n.x, n.z);
     if (dir < 0) { mat.map.repeat.x = -1 / sil.frames; mat.map.offset.x = 1 / sil.frames; }   // facing the way it goes
-    const y0 = kind === 'figure' ? h / 2 + 0.02 : kind === 'cat' ? h / 2 + 0.05 : rand(1.7, 2.3);
-    const speed = kind === 'figure' ? 1.1 : kind === 'cat' ? 0.9 : 3.2, dur = (2 * half) / speed;
+    const y0 = kind === 'figure' ? h / 2 + 0.02 : kind === 'cat' ? h / 2 + 0.05 : kind === 'hand' ? rand(1.15, 1.45) : rand(1.7, 2.3);
+    const speed = kind === 'figure' ? 1.1 : kind === 'cat' ? 0.9 : kind === 'hand' ? 0.45 : 3.2, dur = (2 * half) / speed;
     this.scene.add(mesh);
     this.lastShadow = mesh;                          // for checks
     let t = 0;
     this.running.push(dt => {
       t += dt;
       const k = Math.min(1, t / dur), s = (k - 0.5) * 2 * half * dir;
-      const bob = kind === 'figure' ? Math.abs(Math.sin(t * 5.2)) * 0.03 : kind === 'bird' ? Math.sin(t * 2) * 0.12 : 0;
+      const bob = kind === 'figure' ? Math.abs(Math.sin(t * 5.2)) * 0.03 : kind === 'bird' ? Math.sin(t * 2) * 0.12 : kind === 'hand' ? Math.sin(t * 0.9) * 0.05 : 0;
       mesh.position.set(sl.position.x + n.x * 0.03 + along.x * s, y0 + bob, sl.position.z + n.z * 0.03 + along.z * s);
       if (sil.frames > 1) {                          // two frames: steps or wingbeats
         const f = Math.floor(t * (kind === 'bird' ? 7 : 5)) % 2;
         mat.map.offset.x = (dir < 0 ? 1 : 0) / sil.frames + f / sil.frames;
       }
       const fade = Math.min(1, t / 0.5, (dur - t) / 0.5);
-      mat.opacity = Math.max(0, fade) * (kind === 'figure' ? 0.55 : kind === 'cat' ? 0.62 : 0.45);
+      mat.opacity = Math.max(0, fade) * (kind === 'figure' ? 0.8 : kind === 'cat' ? 0.78 : kind === 'hand' ? 0.72 : 0.6);
       if (k < 1) return true;
       this.scene.remove(mesh); mesh.geometry.dispose(); mat.map.dispose(); mat.dispose();
+      return false;
+    });
+    return { dist: w.d };
+  }
+
+  // Someone standing at the end of the corridor ahead, still; gone in a
+  // breath when the visitor comes within a few metres, or after a while
+  _stander() {
+    const w = this._wallNear(6, 20, 2, true);
+    if (!w) return null;
+    const sil = this.sil.figure ||= silhouette('figure');
+    const h = 2.15, mat = new THREE.MeshBasicMaterial({ map: sil.tex, transparent: true, opacity: 0, depthWrite: false, fog: true,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(h * sil.aspect, h), mat);
+    const { sl } = w, n = sl.normal, along = new THREE.Vector3(-n.z, 0, n.x), off = rand(-0.4, 0.4);
+    mesh.rotation.y = Math.atan2(n.x, n.z);
+    mesh.position.set(sl.position.x + n.x * 0.03 + along.x * off, h / 2 + 0.02, sl.position.z + n.z * 0.03 + along.z * off);
+    this.scene.add(mesh);
+    this.lastShadow = mesh;
+    let t = 0, going = -1;
+    this.running.push(dt => {
+      t += dt;
+      const d = Math.hypot(mesh.position.x - this.player.pos.x, mesh.position.z - this.player.pos.y);
+      if (going < 0 && (d < 5 || t > 10)) going = t;
+      const k = going < 0 ? Math.min(1, t / 1.2) : 1 - (t - going) / 0.25;
+      mat.opacity = Math.max(0, k) * 0.82;
+      mesh.scale.x = 1 + Math.sin(t * 0.7) * 0.015;  // it breathes
+      if (going < 0 || k > 0) return true;
+      this.scene.remove(mesh); mesh.geometry.dispose(); mat.dispose();
       return false;
     });
     return { dist: w.d };
