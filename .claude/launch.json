@@ -12,30 +12,10 @@
       "port": 4804
     },
     {
-      "name": "conspace-fresh",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": [
-        "-m",
-        "http.server",
-        "4819"
-      ],
-      "port": 4819
-    },
-    {
-      "name": "conspace-4821",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": [
-        "-m",
-        "http.server",
-        "4821"
-      ],
-      "port": 4821
-    },
-    {
       "name": "conspace-nocache",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
-        "/private/tmp/claude-501/-Users-air-sinaida-dev-conspace-rooms/cb701f7c-ca0d-4f0d-b74d-a12b8370675f/scratchpad/nocache.py",
+        "tools/nocache.py",
         "4830"
       ],
       "port": 4830
