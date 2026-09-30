@@ -603,7 +603,7 @@ body:has(#pad) #artwork-prompt { display: none; }   /* the pad's own tape says i
 
 /* gallery mode (gallery.html): no cursor, no buttons, an attract screen */
 body.gallery { cursor: none; overflow: hidden; }
-body.gallery #final-card .fc-actions { display: none; }   /* nobody clicks in a gallery: the card leaves on its own */
+body.gallery #final-card .fc-actions, body.gallery #final-card .fc-palette { display: none; }   /* nobody clicks in a gallery: the card leaves on its own */
 #attract {
   position: fixed; inset: 0; z-index: 40; background: var(--bg);
   display: flex; align-items: center; justify-content: center; padding: 6vh 6vw;
