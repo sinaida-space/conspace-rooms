@@ -467,6 +467,50 @@ LIGHT.monstera = { depth: 0.8, w: 1.0, solid: true, build: put => {
 } };
 
 // ── materials of the light ──────────────────────────────────────────────────
+// Vertical blinds, BLIND_COLS slats side by side, bottom of the canvas the
+// top of a slat: pale hospital mint gone yellow, grey dust thick along the
+// top and in the weave, and where hands have pushed them aside for years,
+// greasy smudges of palms and fingers at chest height; a weight at the hem.
+const BLIND_COLS = 8;
+function blindsTexture() {
+  const W = 64, H = 512, c = document.createElement('canvas');
+  c.width = W * BLIND_COLS; c.height = H;
+  const g = c.getContext('2d');
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < BLIND_COLS; k++) {
+    const x0 = k * W;
+    const tone = 196 + rnd() * 18;
+    g.fillStyle = `rgb(${tone - 12},${tone + 10},${tone - 20})`; g.fillRect(x0, 0, W, H);
+    for (let x = 0; x < W; x += 3) { g.fillStyle = `rgba(90,100,80,${0.04 + rnd() * 0.05})`; g.fillRect(x0 + x, 0, 1, H); }   // the weave
+    const top = g.createLinearGradient(0, H, 0, H * 0.55);                            // dust settles thickest on top
+    top.addColorStop(0, 'rgba(110,100,82,0.55)'); top.addColorStop(1, 'rgba(110,100,82,0)');
+    g.fillStyle = top; g.fillRect(x0, 0, W, H);
+    for (let i = 0; i < 140; i++) { g.fillStyle = `rgba(95,88,72,${0.1 + rnd() * 0.25})`; g.fillRect(x0 + rnd() * W, H * (0.3 + 0.7 * Math.pow(rnd(), 0.5)), 1 + rnd() * 2, 1 + rnd() * 2); }
+    g.fillStyle = 'rgba(160,150,100,0.18)';                                          // a yellow tidemark or two
+    for (let i = 0; i < 2; i++) { g.beginPath(); g.ellipse(x0 + W * (0.2 + rnd() * 0.6), H * rnd(), 6 + rnd() * 12, 14 + rnd() * 30, 0, 0, 6.3); g.fill(); }
+    g.save(); g.beginPath(); g.rect(x0, 0, W, H); g.clip();
+    g.filter = 'blur(2px)';
+    const hands = rnd() < 0.8 ? 1 + (rnd() < 0.4) : 0;                               // palms and fingers, pushed aside at chest height
+    for (let n = 0; n < hands; n++) {
+      const cx = x0 + W * (0.3 + rnd() * 0.4), cy = H * (0.15 + rnd() * 0.25), a = (rnd() - 0.5) * 0.6;
+      g.save(); g.translate(cx, cy); g.rotate(a);
+      g.fillStyle = 'rgba(70,62,48,0.32)'; g.beginPath(); g.ellipse(0, 0, 11, 14, 0, 0, 6.3); g.fill();
+      g.strokeStyle = 'rgba(70,62,48,0.28)'; g.lineWidth = 5; g.lineCap = 'round';
+      for (const [fx, len] of [[-8, 20], [-3, 25], [3, 24], [8, 19]]) { g.beginPath(); g.moveTo(fx, 10); g.lineTo(fx * 1.2, 10 + len); g.stroke(); }
+      g.beginPath(); g.moveTo(-11, -2); g.lineTo(-20, 12); g.stroke();                // the thumb
+      g.restore();
+    }
+    g.filter = 'none'; g.restore();
+    g.fillStyle = 'rgba(60,60,55,0.7)'; g.fillRect(x0 + 4, 0, W - 8, 10);          // the weight in the hem
+    g.fillStyle = 'rgba(40,40,36,0.5)'; g.fillRect(x0, 0, 1, H); g.fillRect(x0 + W - 1, 0, 1, H);   // the slat's edges
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.flipY = false;                                  // canvas row 0 is the hem
+  t.anisotropy = 4;
+  return t;
+}
+
 function laceTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const g = c.getContext('2d');
@@ -640,6 +684,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
   const sheetMat = atmo.prop({ vertexColors: true, rust: 0, cloth: { map: linenTex('linen_detail.webp'), normal: linenTex('linen_normal.webp') } });
   const uniforms = { uTime: { value: 0 }, uPlayer: { value: new THREE.Vector3() }, uWaterLevel: { value: 0 } };
   const fogU = THREE.UniformsLib.fog;
+  const blindMat = atmo.prop({ map: blindsTexture(), rust: 0.1 });   // the hospital's blinds, lit as the corridor is
   const floatMat = new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([fogU, { uMap: { value: laceTexture() } }]),
     vertexShader: FLOAT_VERT, fragmentShader: FLOAT_FRAG, side: THREE.DoubleSide, fog: true });
@@ -678,7 +723,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
     // the wall keeps going at least 3 cells, so a window fits) · air:
     // [{ x, z, r }] cell centres for things that float (light only)
     build(group, stage, walls, air) {
-      const parts = [], windows = [], tulles = [], floats = [], boxes = [], feet = [], sheets = [];
+      const parts = [], windows = [], blinds = [], tulles = [], floats = [], boxes = [], feet = [], sheets = [];
       for (const s of walls) {
         const name = pick(stage, s.r, s.run3 !== false);
         const rot = Math.atan2(s.nx, s.nz);
@@ -693,6 +738,21 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
             const g = shape(put => put(new THREE.BoxGeometry(bw, bh, 0.03), stage === 0 ? 0x7d7f78 : 0xd8d2c4, 0.1));   // the hospital's frames gone grey
             parts.push(g.applyMatrix4(M(s.x + s.nx * 0.03, by, s.z + s.nz * 0.03, 0, rot)));
           }
+          if (stage === 0) {                          // the hospital: vertical blinds from a plain rail, down to the sill
+            parts.push(shape(put => put(new THREE.BoxGeometry(1.24, 0.028, 0.03), 0xbfc2b8, 0.25)).applyMatrix4(M(s.x + s.nx * 0.1, 2.47, s.z + s.nz * 0.1, 0, rot)));
+            const N = 13, turn = 0.75 + (s.r * 13.7 % 1) * 0.3;   // half open, each window its own way
+            for (let k = 0; k < N; k++) {
+              const h = s.r * 91.3 + k * 7.1, j = (Math.sin(h) * 0.5 + 0.5);
+              const twist = turn + (j - 0.5) * 0.35 + (k === (s.r * 31 | 0) % N ? 0.9 : 0);   // one hangs crooked
+              const len = 1.4 - (k % 5 === 3 ? 0.04 : 0), col = (h * 3.3 | 0) % BLIND_COLS;
+              const g = new THREE.PlaneGeometry(0.089, len).translate(0, -len / 2, 0);
+              const uv = g.attributes.uv;
+              for (let i = 0; i < uv.count; i++) uv.setX(i, (col + uv.getX(i)) / BLIND_COLS);
+              const along = (k - (N - 1) / 2) * 0.092;
+              blinds.push(g.applyMatrix4(M(0, 0, 0, 0, twist)).applyMatrix4(M(s.x + s.nx * 0.1 - s.nz * along, 2.455, s.z + s.nz * 0.1 + s.nx * along, 0, rot)));
+            }
+            continue;
+          }
           // the rod the tulle hangs from: a brass-coloured pole on two
           // brackets, a knob at each end, and small rings along it
           parts.push(shape(put => {
@@ -701,9 +761,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
             for (const x of [-0.62, 0.62]) put(new THREE.BoxGeometry(0.018, 0.018, 0.16), 0x8a7440, 0.5, M(x, 0, -0.08));
             for (let k = 0; k < 11; k++) put(new THREE.TorusGeometry(0.02, 0.004, 4, 10), 0xb89a5a, 0.6, M(-0.55 + k * 0.11, -0.005, 0, 0, Math.PI / 2));
           }).applyMatrix4(M(s.x + s.nx * 0.16, 2.6, s.z + s.nz * 0.16, 0, rot)));
-          // the light's tulle falls to the floor; the hospital's is cut off at the sill
-          const tg = (stage === 0 ? new THREE.PlaneGeometry(1.2, 1.6, 12, 15).translate(0, 1.8, 0) : new THREE.PlaneGeometry(1.2, 2.58, 12, 24).translate(0, 1.29, 0))
-            .applyMatrix4(M(s.x + s.nx * 0.14, 0, s.z + s.nz * 0.14, 0, rot));
+          const tg = new THREE.PlaneGeometry(1.2, 2.58, 12, 24).applyMatrix4(M(s.x + s.nx * 0.14, 1.29, s.z + s.nz * 0.14, 0, rot));
           tg.setAttribute('aPhase', new THREE.Float32BufferAttribute(new Array(tg.attributes.position.count).fill(s.r * 40), 1));
           tulles.push(tg);
           continue;
@@ -747,7 +805,7 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
       };
       // one view out of all the chunk's windows, each pane showing its own part of it
       const viewMat = windows.length ? viewMaterial(nextView(stage === 0 ? 'fear' : 'light'), { dirt: stage === 0 ? 1 : 0, time: uniforms.uTime }) : null;
-      add(parts, mat); add(sheets, sheetMat); add(windows, viewMat); add(tulles, tulleMat); add(floats, floatMat);
+      add(parts, mat); add(sheets, sheetMat); add(windows, viewMat); add(blinds, blindMat); add(tulles, tulleMat); add(floats, floatMat);
       const shade = contactShadows(feet);
       if (shade) { group.add(shade); meshes.push(shade); }
       return {
