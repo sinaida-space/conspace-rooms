@@ -17,7 +17,6 @@ import { createRoseCounter, buildRoseArch, findArchSpot, GRAIN_OPEN_MS } from '.
 import { showCard } from './card.js';
 import { createPetals } from './petals.js';
 import { createGlowPetals } from './glowPetals.js';
-import { createFootDust } from './footdust.js';
 import { setShadowLight } from './shadows.js';
 import { createPropKit } from './props.js';
 import { buildHallPlants, ROOM_PLANTS, footBox } from './plants.js';
@@ -468,7 +467,6 @@ export class SoulPath {
     this.roses = createRoseCounter(this.total);
     this.petals = createPetals(scene, camera, quality);
     this.glowPetals = createGlowPetals(scene);   // the light's way-marks: petals on the water
-    this.footDust = createFootDust(atmo, CELL);   // dust on the things the walk has already passed (#53)
     this.props = createPropKit(atmo, quality);
     this.wallThings = createWallThings(atmo);
     this.drowned = createDrowned(atmo, quality);   // what the water on the floor uncovers, acceptance stage only
@@ -2849,8 +2847,6 @@ export class SoulPath {
     this._time = time;
     this._tickMarks(time);
     this.glowPetals.update(dt, time, this.marks, this._water(), this.stage.stage === 2 && !this.finale, this.player.pos, this._petalObstacles());
-    if (this._dustStage !== this.stage.stage) { this._dustStage = this.stage.stage; this.footDust.clear(); }   // a new stage, a clean floor
-    this.footDust.update(this.player.pos, time, this.stage.stage < 2 && !this._crossing);
     this._shadowLight = (this._shadowLight ?? 0) + ((this.stage.stage === 2 ? 1 : 0) - (this._shadowLight ?? 0)) * Math.min(1, dt);
     setShadowLight(this._shadowLight);
     this._tickCandles(time);

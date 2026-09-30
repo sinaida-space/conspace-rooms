@@ -931,8 +931,6 @@ uniform float uGlow;       // light of its own (a lamp lens), trembling
 uniform float uSeed;
 uniform float uRust;       // how much time has eaten it: rust, streaks, scratches, grime
 uniform float uCloth;      // 1: a linen dust sheet (the light's furniture), lit like cloth
-uniform sampler2D uDust;   // where the walk has already been (footdust.js): 0..1 per cell
-uniform vec3 uDustO;       // the dust map's corner in the world (x, z) and its size, metres
 uniform sampler2D uClothMap, uClothNor;   // Poly Haven rough_linen (CC0): the weave, and its normals
 varying vec2 vUv0;
 varying vec4 vCol;
@@ -976,17 +974,6 @@ void main(){
     float scratch = smoothstep(0.93, 0.99, vnoise(vec2(q.x * 60.0 + q.y * 8.0, q.y * 3.0)));   // worn bright
     base += vec3(0.1) * scratch * uRust * (1.0 - rusted);
     base *= 1.0 - 0.28 * uRust * smoothstep(0.4, 0.8, fbm(q * 2.3 + 7.0, 3));                  // grime
-  }
-  // Dust on what the walk has passed (#53): a pale grey fur settling on
-  // whatever faces up, thinner down the sides, mottled, as on fear's ficus.
-  vec2 du = (vWorldPos.xz - uDustO.xy) / uDustO.z;
-  if (uCloth < 0.5 && du.x > 0.0 && du.y > 0.0 && du.x < 1.0 && du.y < 1.0) {
-    float dv = texture2D(uDust, du).r;
-    if (dv > 0.0) {
-      float face = mix(0.3, 1.0, smoothstep(0.1, 0.8, N.y));
-      float mott = smoothstep(0.2, 0.8, vnoise(vWorldPos.xz * 11.0 + vWorldPos.y * 3.0));   // one octave: the props are many
-      base = mix(base, vec3(0.64, 0.63, 0.6), dv * face * mix(0.45, 0.85, mott));
-    }
   }
   vec3 V = normalize(cameraPosition - vWorldPos);
   vec3 d, s;
@@ -1094,8 +1081,6 @@ export function createMaterials(quality) {
     uClouds: { value: +(sketchParam('clouds') || 0) },   // sketches: ?clouds=1|2|3
     uDbg: { value: new THREE.Vector2() },
     uWaveTex: { value: blankWaves },   // water.js bakes the real ripples on tiers 1-2
-    uDust: { value: blankWaves },      // footdust.js hands in the real map
-    uDustO: { value: new THREE.Vector3(1e6, 1e6, 1) },   // off in nowhere until there is a map
   };
   const hazeSeen = new Map();   // lamp cell key -> smoothed visibility, so a glow fades in as a corner opens
 
@@ -1143,7 +1128,6 @@ export function createMaterials(quality) {
     // water.js, every frame: level (m), accept weight, caustic time, calm, progress
     setWater(level, accept, time, calm, progress = 0) { shared.uWater.value.set(level, accept, time, calm); shared.uProgress.value = progress; },
     setWaveTex(tex) { shared.uWaveTex.value = tex; },
-    dust: { map: shared.uDust, origin: shared.uDustO },   // footdust.js
     setVanish(v) { shared.uVanish.value = v; },
     // the event director (events.js): a fixture near the visitor stutters (strength ~1), the candles shudder (seconds)
     flicker(strength = 1) { pending = strength; },
