@@ -304,6 +304,66 @@ export class AudioEngine {
     }
   }
 
+  // The crossing through a portal (tunnel.js, SoulPath._cross): an inhale as
+  // the tunnel closes in, two slow heartbeats in the flight, an exhale as it
+  // opens, and there the new place answers: a singing bowl struck softly into
+  // grandmother's zone, a drop into still water into the light. All of it
+  // rings in one large empty room. to: the stage entered · times: the
+  // tunnel's own (seconds).
+  crossing(to, { inT = 0.75, hold = 1.6, out = 0.9 } = {}) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime + 0.02, open = t + inT + hold;
+    if (!this._room) {                                   // a stereo tail of darkening, decaying noise, built once
+      const n = Math.ceil(ctx.sampleRate * 3.2), ir = ctx.createBuffer(2, n, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = ir.getChannelData(ch); let lp = 0;
+        for (let i = 0; i < n; i++) { const k = i / n; lp += (Math.random() * 2 - 1 - lp) * (0.08 + 0.9 * (1 - k)); d[i] = lp * Math.pow(1 - k, 2.4); }
+      }
+      this._room = ctx.createConvolver(); this._room.buffer = ir;
+      const wet = ctx.createGain(); wet.gain.value = 0.55;
+      this._room.connect(wet); wet.connect(this.master);
+      const nb = this._breath = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = nb.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const bus = ctx.createGain(); bus.gain.value = 0.9;
+    bus.connect(this.master); bus.connect(this._room);
+    const env = (g, pts) => { g.gain.setValueAtTime(0.0001, pts[0][0]); for (const [tt, v] of pts.slice(1)) g.gain.exponentialRampToValueAtTime(Math.max(v, 0.0001), tt); };
+    const noise = (t0, dur) => { const s = ctx.createBufferSource(); s.buffer = this._breath; s.start(t0); s.stop(t0 + dur); return s; };
+    const breath = (t0, dur, f0, f1, v) => {
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9;
+      bp.frequency.setValueAtTime(f0, t0); bp.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+      const g = ctx.createGain(); env(g, [[t0, 0], [t0 + dur * 0.55, v], [t0 + dur, 0]]);
+      noise(t0, dur).connect(bp); bp.connect(g); g.connect(bus);
+    };
+    const tone = (t0, f, v, dec, type = 'sine', f1 = null, rise = 0.004) => {
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type;
+      o.frequency.setValueAtTime(f, t0); if (f1) o.frequency.exponentialRampToValueAtTime(f1, t0 + Math.min(dec, 0.18));
+      env(g, [[t0, 0], [t0 + rise, v], [t0 + dec, 0]]); o.connect(g); g.connect(bus); o.start(t0); o.stop(t0 + dec + 0.05);
+    };
+    breath(t, inT + 0.3, 700, 1700, 0.35);                                   // the inhale
+    for (const b0 of [t + inT + 0.25, t + inT + 1.05]) { tone(b0, 90, 0.7, 0.25, 'sine', 40, 0.015); tone(b0 + 0.22, 90, 0.45, 0.25, 'sine', 40, 0.015); }   // lub-dub, twice
+    breath(open, out + 0.6, 1400, 350, 0.3);                                 // the exhale
+    if (to === 2) {
+      // a drop into still water: the bubble's chirp upward and a tick of splash, two smaller ones after
+      const drop = (t0, f, v) => {
+        tone(t0, f, v, 0.09, 'sine', f * 2.6);
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3000;
+        const g = ctx.createGain(); env(g, [[t0, 0], [t0 + 0.002, v * 0.25], [t0 + 0.03, 0]]);
+        noise(t0, 0.03).connect(hp); hp.connect(g); g.connect(bus);
+      };
+      drop(open, 980, 0.5); drop(open + 0.42, 980 * 1.35, 0.14); drop(open + 0.71, 980 * 1.1, 0.06);
+    } else {
+      // a singing bowl struck softly: a felt knock, then paired inharmonic partials that beat and fade
+      const f = (to === 1 ? 87.31 : 73.42) * 4;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1200;
+      const kg = ctx.createGain(); env(kg, [[open, 0], [open + 0.004, 0.25], [open + 0.05, 0]]);
+      noise(open, 0.05).connect(lp); lp.connect(kg); kg.connect(bus);
+      for (const [r, v, dec] of [[1, 0.16, 7], [2.76, 0.07, 5], [5.4, 0.035, 3.2], [8.9, 0.015, 2]])
+        for (const det of [-0.6, 0.6]) tone(open, f * r + det * r, v / 2, dec, 'sine', null, 0.02);
+    }
+    setTimeout(() => bus.disconnect(), (inT + hold + out + 8) * 1000);
+  }
+
   // ── voices of the works ──────────────────────────────────────────────────
   // Each SOULS piece near the visitor hums its own note (D minor pentatonic,
   // index = artwork number), placed in 3D with a panner. Through a wall the

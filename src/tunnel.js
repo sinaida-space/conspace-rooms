@@ -17,7 +17,8 @@ const PALETTE = [
 ];
 
 const IN = 0.75, HOLD = 1.6, OUT = 0.9;                 // seconds: closing in, the flight, opening out
-export const TUNNEL_SWAP = IN + 0.05;                    // the world underneath changes once it is fully hidden
+export const TUNNEL_SWAP = IN + 0.05;
+export const TUNNEL_TIMES = { inT: IN, hold: HOLD, out: OUT };   // for the crossing's sound (audio.js)                    // the world underneath changes once it is fully hidden
 
 const FRAG = /* glsl */`
 precision highp float;

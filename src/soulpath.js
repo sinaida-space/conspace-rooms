@@ -27,6 +27,7 @@ import { AlisaVoices, VOICED } from './alisa.js';
 import { createDrowned } from './drowned.js';
 import { mountOrDrop } from './placement.js';
 import { buildStairwell } from './stairwell.js';
+import { TUNNEL_TIMES } from './tunnel.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
 // Everything that makes the labyrinth respond to the visitor on the way from
@@ -1162,8 +1163,8 @@ export class SoulPath {
   // opens onto the new stage. Without the tunnel (no WebGL extras) at once.
   _cross(target) {
     const tunnel = window.__app?.tunnel, P = this.player;
-    this.audio?.chime();
-    if (!tunnel) { if (this.stage.go(target)) this.post?.burst(1.6); return; }
+    if (!tunnel) { this.audio?.chime(); if (this.stage.go(target)) this.post?.burst(1.6); return; }
+    this.audio?.crossing(target, TUNNEL_TIMES);           // inhale, heartbeats, exhale, and the new place answers
     this._crossing = true;
     if (this.artworks.inspecting) this.artworks._closeInspect();
     const held = !P.locked;
