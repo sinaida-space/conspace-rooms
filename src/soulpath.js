@@ -2982,7 +2982,7 @@ export class SoulPath {
     if (room) {
       const tv = this._tvTexture();
       for (const sc of room.screens) if (sc.material.map !== tv.tex) { sc.material.map = tv.tex; sc.material.needsUpdate = true; }
-      const talking = this._drawTV();
+      const talking = nook.group.visible ? this._drawTV() : false;   // no painting a screen nobody can see
       const tvPos = room.tv;
       const dTv = tvPos ? Math.hypot(tvPos.x - P.pos.x, tvPos.z - P.pos.y) : 99;
       this.audio?.tvStatic?.(talking ? 0 : Math.max(0, 1 - dTv / 7));
