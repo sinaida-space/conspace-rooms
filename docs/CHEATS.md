@@ -60,3 +60,10 @@ any keyboard layout; the presses must come within three seconds.
 
 `window.__app` exposes the scene, player, world and the rest; `window.__app.frame()`
 steps one frame by hand, which is how the piece is tested in hidden browser tabs.
+
+Crossing a portal draws the world into a tunnel of light for about three
+seconds (src/tunnel.js): `window.__app.soul._cross(1)` or `_cross(2)` plays a
+crossing on the spot, and `window.__app.tunnel.seek(1.6)` holds it at that
+second to look at (`seek(null)` lets it go on). `?debug=events` logs the
+ambient events; `window.__app.events.fire('fall')` stages one. The metal door
+onto the stairwell belongs to fear alone and is gone once you leave it.
