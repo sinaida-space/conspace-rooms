@@ -17,6 +17,7 @@ import { createRoseCounter, buildRoseArch, findArchSpot, GRAIN_OPEN_MS } from '.
 import { showCard } from './card.js';
 import { createPetals } from './petals.js';
 import { createGlowPetals } from './glowPetals.js';
+import { createFootDust } from './footdust.js';
 import { setShadowLight } from './shadows.js';
 import { createPropKit } from './props.js';
 import { buildHallPlants, ROOM_PLANTS, footBox } from './plants.js';
@@ -93,6 +94,8 @@ const FIND_NEAR = 3.0;           // metres: passing this close, looking its way,
 const PORTAL_SEEN_MEMORY = 5;    // works seen in memory (past the room) before the way into the light
 const PORTAL_NEAR = 8;           // metres: a summoned portal never lands closer than this
 const PORTAL_FAR = 24;           // metres: nor further than this
+const LOST_FAR = 30;             // metres: a way on (a portal, a work of fear) further than this, out of sight...
+const LOST_FOR = 20;             // seconds: ...for this long, goes out and comes again near the walk
 const FINALE_VANISH = 6;         // seconds the walls take to dissolve before the rose tunnel rises
 const DREAM_PREVIEW = sketchParam('dream') !== null;
 const STAIR_NIGHTMARE = true;     // false: the calm version, only the door, fog and light, no zoom, no sound, no blackout
@@ -465,6 +468,7 @@ export class SoulPath {
     this.roses = createRoseCounter(this.total);
     this.petals = createPetals(scene, camera, quality);
     this.glowPetals = createGlowPetals(scene);   // the light's way-marks: petals on the water
+    this.footDust = createFootDust(scene, CELL);  // grey dust where the walk has already been (#53)
     this.props = createPropKit(atmo, quality);
     this.wallThings = createWallThings(atmo);
     this.drowned = createDrowned(atmo, quality);   // what the water on the floor uncovers, acceptance stage only
@@ -1371,6 +1375,27 @@ export class SoulPath {
     return true;
   }
 
+  // A portal the walk has left far behind, out of sight for a while, is not
+  // lost for good: it goes out and is summoned again at a crossing near
+  // wherever the visitor is now, with the same whisper (#53).
+  _keepPortalNear(time) {
+    const target = this.stage.stage + 1, plan = this.summonedPortals[target], P = this.player;
+    if (!plan || this._crossing || this.finale || P.locked) { this._portalLostAt = null; return; }
+    if (Math.hypot(plan.x - P.pos.x, plan.z - P.pos.y) < LOST_FAR || this._lineOfSight(P.pos.x, P.pos.y, plan.x, plan.z)) { this._portalLostAt = null; return; }
+    this._portalLostAt ??= time;
+    if (time - this._portalLostAt < LOST_FOR) return;
+    this._portalLostAt = null;
+    delete this.summonedPortals[target];
+    if (!this._summonPortal(target, time)) { this.summonedPortals[target] = plan; return; }   // nowhere near yet: it stays where it was
+    const stuff = this.chunkStuff.get(plan.cx + ':' + plan.cz);
+    if (!stuff) return;
+    stuff.portals = stuff.portals.filter(p => {
+      if (p.target !== target || p.x !== plan.x || p.z !== plan.z) return true;   // the new one may share the chunk
+      p.group.parent?.remove(p.group); p.veil.geometry.dispose(); p.veil.material.dispose();
+      return false;
+    });
+  }
+
   // Breadth-first: every open cell the visitor can reach without crossing a
   // shut presence door, as a Set of "gi,gj" keys.
   _reachableSet(gi0, gj0, maxNodes = 4000) {
@@ -1572,6 +1597,25 @@ export class SoulPath {
       }
     }
 
+    // A work shown and walked away from, far and out of sight for a while (or
+    // its chunk gone), is hidden again, so the pacing above hangs it anew
+    // near the walk: nobody is left looking for a picture a hundred metres back (#53).
+    const now = this._time ?? 0;
+    f.lost ??= new Map();
+    for (const key of f.shown) {
+      const id = key.slice(0, key.indexOf('@'));
+      if ([...this.seen].some(s => String(s) === id)) { f.lost.delete(key); continue; }
+      const w = act.find(a => keyOf(a) === key);
+      const far = !w || (Math.hypot(w.centerWorld.x - P.pos.x, w.centerWorld.z - P.pos.y) > LOST_FAR
+        && !this._lineOfSight(P.pos.x, P.pos.y, w.centerWorld.x + w.normal.x * 0.3, w.centerWorld.z + w.normal.z * 0.3));
+      if (!far) { f.lost.delete(key); continue; }
+      if (!f.lost.has(key)) f.lost.set(key, now);
+      if (now - f.lost.get(key) < LOST_FOR) continue;
+      f.lost.delete(key); f.shown.delete(key);
+      for (const i of f.ids) if (String(i) === id) f.ids.delete(i);
+      if (w) { w.hidden = true; if (w.sub) w.sub.visible = false; }
+    }
+
     // The metal door onto the stairwell (#43, _preplaceStairwell) stands down
     // the corridor ahead from the start and again, once the first is out of
     // sight, between the second work and the third. After the third work turns
@@ -1624,6 +1668,7 @@ export class SoulPath {
       this._summonStairwell(this.summonedPortals[1], cellOf(this.player.pos.x), cellOf(this.player.pos.y));
     }
     else if (st === 1 && !this.summonedPortals[2] && this.visitedRoom && this.stageSeen[1] >= PORTAL_SEEN_MEMORY) this._summonPortal(2, time);
+    this._keepPortalNear(time);
   }
 
   // Candles along the walls are the map. Their colour tells how close you are:
@@ -1641,7 +1686,7 @@ export class SoulPath {
     const near = (list, x, z) => { let d = Infinity; for (const p of list) d = Math.min(d, Math.hypot(p.x - x, p.z - z)); return d; };
     const arts = this.artworks.active.filter(a => !a.hidden).map(a => ({ x: a.centerWorld.x, z: a.centerWorld.z, seen: this.seen.has(a.art.id) }));
     const unseen = arts.filter(a => !a.seen);
-    const prox = d => { const k = Math.max(0, Math.min(1, 1 - d / 45)); return k * k * (3 - 2 * k); };
+    const prox = d => { const k = Math.max(0, Math.min(1, 1 - d / 65)); return k * k * (3 - 2 * k); };   // felt from further off (#53)
     const YELLOW = new THREE.Color(0xffd27a), RED = new THREE.Color(0xff2a14), PALE_WAX = new THREE.Color(0xe6dac0), RED_WAX = new THREE.Color(0x8e1216);
     const items = [], wallAt = [];
     const wardCells = this._wardCells.get(cx + ':' + cz);
@@ -1662,14 +1707,14 @@ export class SoulPath {
       // unseen works draw candles to them; around works already seen they are embers
       const du = near(unseen, x, z), spent = du > CANDLE_NEAR && near(arts, x, z) < CANDLE_NEAR;
       const pa = du < CANDLE_NEAR ? 1 - du / CANDLE_NEAR : 0;
-      if (r > ((st === 0 ? 0.06 : 0.035) + 0.05 * Math.max(pp, pk) + 0.08 * pa) * Math.max(1, this.quality.p.density) * (st === 2 ? 1.7 : 1)) continue;   // the light loses many to its cloth: set out more   // fear is lit more often: the candles are its map
+      if (r > ((st === 0 ? 0.06 : 0.035) + 0.09 * Math.max(pp, pk) + 0.12 * pa) * Math.max(1, this.quality.p.density) * (st === 2 ? 1.7 : 1)) continue;   // the light loses many to its cloth: set out more   // fear is lit more often: the candles are its map
       const flame = st === 0 ? YELLOW.clone().lerp(RED, pp)
         : seekRoom ? YELLOW.clone().lerp(RED, pk)        // before the room: everything reddens toward it
           : st === 1 ? RED.clone().lerp(YELLOW, pp)      // after: the flame yellows toward the way into the light
             : new THREE.Color(0xfff4dc);
       const wax = st === 1 ? PALE_WAX.clone().lerp(RED_WAX, pk) : PALE_WAX.clone();
       if (spent) flame.copy(EMBER);
-      else if (pa > 0) flame.multiplyScalar(1 + 0.35 * pa);   // brighter the closer the unseen work
+      else if (pa > 0) flame.multiplyScalar(1 + 0.8 * pa);    // brighter the closer the unseen work
       // the map's own direction: the nearest thing this candle points toward
       // (a portal, or an unseen work), for stage 2's floating candles to
       // drift along without recomputing it every frame
@@ -2803,7 +2848,9 @@ export class SoulPath {
     this.petals.update(dt, time);
     this._time = time;
     this._tickMarks(time);
-    this.glowPetals.update(dt, time, this.marks, this._water(), this.stage.stage === 2 && !this.finale, this.player.pos, this._petalObstacles());
+    this.glowPetals.update(dt, time, this.marks, this._water(), this.stage.stage === 2 && !this.finale, this.player.pos, this._petalObstacles(), this.stage.stage < 2);
+    if (this._dustStage !== this.stage.stage) { this._dustStage = this.stage.stage; this.footDust.clear(); }   // a new stage, a clean floor
+    this.footDust.update(this.player.pos, time, this.stage.stage < 2 && !this._crossing);
     this._shadowLight = (this._shadowLight ?? 0) + ((this.stage.stage === 2 ? 1 : 0) - (this._shadowLight ?? 0)) * Math.min(1, dt);
     setShadowLight(this._shadowLight);
     this._tickCandles(time);
