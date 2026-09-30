@@ -1105,10 +1105,11 @@ export class SoulPath {
       questions: this.asked,
       strings: {
         heading: t('cardHeading'), empty: t('cardEmpty'), boot: t('cardBoot'),
-        save: t('cardSave'), back: t('cardBack'), again: t('walkAgain'),
+        save: t('cardSave'), home: t('cardHome'), finish: t('cardFinish'),
+        palette: t('cardPalette'), palettes: t('cardPalettes'),
+        thanks: t('finThanks'), farewells: t('finLines'), links: t('finLinks'),
       },
-      onBack: () => { this.player.locked = false; this._carded = false; this.audio?.unsilence?.(); },
-      onAgain: () => location.reload(),
+      onHome: () => { location.href = `index.html?lang=${getLang()}`; },   // the title screen, in the same language
     });
   }
 
