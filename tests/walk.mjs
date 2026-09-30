@@ -154,6 +154,7 @@ try {
   if (process.env.SHOT) {                               // SHOT=file.png: the view at the end, looking back the way the walk came
     await page.evaluate(() => { const a = window.__app; a.player.yaw += Math.PI; if ("pitch" in a.player) a.player.pitch = -0.45; for (let i = 0; i < 3; i++) a.frame(); });
     await page.screenshot({ path: process.env.SHOT });
+    if (process.env.SHOT_NODUST) { await page.evaluate(() => { const a = window.__app; a.soul.footDust.mesh.visible = false; a.soul.footDust.update = () => {}; a.frame(); }); await page.screenshot({ path: process.env.SHOT_NODUST }); }
   }
 } catch (e) {
   errors.push(`walk: ${e.message.split('\n')[0]}`);

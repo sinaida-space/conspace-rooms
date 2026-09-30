@@ -14,12 +14,15 @@ const SIZE = 1.25;             // metres across, about one cell
 function dustTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const g = c.getContext('2d');
-  const r = g.createRadialGradient(64, 64, 6, 64, 64, 62);
-  r.addColorStop(0, 'rgba(255,255,255,0.55)'); r.addColorStop(0.6, 'rgba(255,255,255,0.25)'); r.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = r; g.fillRect(0, 0, 128, 128);
+  for (let k = 0; k < 7; k++) {                        // a few puffs, not one disc: a ragged drift
+    const x = 64 + (Math.random() - 0.5) * 50, y = 64 + (Math.random() - 0.5) * 50, rad = 18 + Math.random() * 22;
+    const r = g.createRadialGradient(x, y, 2, x, y, rad);
+    r.addColorStop(0, 'rgba(255,255,255,0.5)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = r; g.fillRect(0, 0, 128, 128);
+  }
   for (let i = 0; i < 900; i++) {                      // grit: the dust is grains, not a stain
     const a = Math.random() * 6.28, d = Math.sqrt(Math.random()) * 58;
-    g.fillStyle = `rgba(255,255,255,${Math.random() * 0.35})`;
+    g.fillStyle = `rgba(255,255,255,${0.15 + Math.random() * 0.45})`;
     g.fillRect(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, 1.5, 1.5);
   }
   const t = new THREE.CanvasTexture(c);
@@ -28,8 +31,8 @@ function dustTexture() {
 }
 
 export function createFootDust(scene, cell) {
-  const mat = new THREE.MeshBasicMaterial({ map: dustTexture(), color: 0xcfcabd, transparent: true, opacity: 0.75,   // pale as ash: the floors are grey already depthWrite: false, fog: true,
-    polygonOffset: true, polygonOffsetFactor: -1 });
+  const mat = new THREE.MeshBasicMaterial({ map: dustTexture(), color: 0xe6dfcf, transparent: true, opacity: 0.6, depthWrite: false, fog: true,
+    polygonOffset: true, polygonOffsetFactor: -1 });   // pale as ash: the floors are grey already
   const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat, POOL);
   mesh.count = 0; mesh.frustumCulled = false; mesh.renderOrder = 1;
   scene.add(mesh);
@@ -46,6 +49,7 @@ export function createFootDust(scene, cell) {
   };
 
   return {
+    mesh,
     // pos: the visitor on the floor plan ({x, y}); time: seconds
     update(pos, time, on = true) {
       mesh.visible = on;
