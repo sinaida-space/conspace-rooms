@@ -107,6 +107,7 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 - **Evidence:** `src/hands.js:31` loads `@mediapipe/tasks-vision@0.10.14` from `cdn.jsdelivr.net` and two models from `storage.googleapis.com`. A dynamic import carries no integrity check. The README notes that the mirror still needs jsDelivr and Google.
 - **Why it matters:** besides the supply chain, the gallery installation depends on three hosts at the venue, and the privacy page has to name two processors only because of this.
 - **Recommended remediation:** vendor the library, its WASM and both models into `vendor/mediapipe/` (about 15 to 20 MB, loaded only in gesture mode). That removes both outside hosts from the privacy page, makes `script-src 'self'` possible in a CSP, and is the first step of the offline gallery in issue #22.
+- **Done in wave 6:** `@mediapipe/tasks-vision` 0.10.14, its WebAssembly and both models live in `vendor/mediapipe/0.10.14/` (26 MB, fetched only in gesture and gallery mode, cached for a year). `src/hands.js` loads them from the site; the smoke run enters on gestures with a fake camera and fails if any other host is asked for anything. The privacy page, the specs and the rider no longer name jsDelivr or Google.
 
 ### F-007 · No evidence that visitors reach the second and third zone
 - **Category:** Scope
@@ -124,6 +125,7 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 - **Rating:** Low
 - **Evidence:** live response for `/` carries `strict-transport-security` and no `content-security-policy`, `x-content-type-options`, `referrer-policy`, `permissions-policy` or frame rule.
 - **Recommended remediation:** in `vercel.json` for `/(.*)`: `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), microphone=(), geolocation=()`, `Content-Security-Policy` with `frame-ancestors 'none'` and, after F-006, `default-src 'self'` with hashes for the inline mirror script, the import map and the JSON-LD. Test in report-only first.
+- **Done in waves 1 and 6:** `nosniff`, `Referrer-Policy`, `Permissions-Policy` and the frame ban came in wave 1. Wave 6 adds the full policy: `default-src 'self'`, scripts from the site plus the hashes of the inline ones and `'wasm-unsafe-eval'` for the hand tracker, no other host anywhere. `tools/csp.mjs` builds it from the pages, a test fails when an inline script changes without it, and the smoke run serves every page under it.
 
 ### F-009 · Zoom locked on the home page and the gallery page
 - **Category:** Accessibility
