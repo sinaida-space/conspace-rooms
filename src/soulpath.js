@@ -516,13 +516,26 @@ export class SoulPath {
     this._inKitchen = false;
     this._soulIdx = [0, 0, 0];            // next question per soul
     this._soulAt = -1e9; this._walked = SOUL_WALK; this._lastPos = null; // gate between souls
-    // guide: five presses of the M key (any layout: physical key) toggles it
+    // MMMMM (any layout, any case: the physical key), the authors' way on:
+    // in fear and in grandmother's zone the next portal is summoned now if it
+    // is not there yet (grandmother's room counts as found) and chevrons on
+    // the floor lead to it; again, they go out. In the light the whole of its
+    // ending plays: every work counts as seen, the roses in the corner shed,
+    // the walls part and the way out rises.
     this.guide = null; this._mTimes = [];
     addEventListener('keydown', e => {
       if (keyCode(e) !== 'KeyM' || e.repeat) return;
       const now = performance.now();
       this._mTimes = this._mTimes.filter(tm => now - tm < 2500).concat(now);
-      if (this._mTimes.length >= 5) { this._mTimes = []; this._toggleGuide(); }
+      if (this._mTimes.length < 5) return;
+      this._mTimes = [];
+      if (this.stage.stage === 2) { if (!this.guide) this._cheatFinale(); return; }
+      if (!this.guide) {
+        if (this.stage.stage === 1) this.visitedRoom = true;
+        const next = this.stage.stage + 1;
+        if (!this.summonedPortals[next]) this._summonPortal(next, this._time ?? 0);
+      }
+      this._toggleGuide();
     });
     // five presses of one digit within 3 s: 1 fear, 2 the grandmother's
     // zone, 3 acceptance, 0 acceptance and straight into the finale. Each
@@ -966,7 +979,7 @@ export class SoulPath {
       const e = f.vanish * f.vanish * (3 - 2 * f.vanish);
       this.atmo.setVanish?.(e);
       window.__app.vanish = f.vanish;                   // main.js thickens the fog while it happens
-      for (const g of this.artworks.chunkGroups?.values() || []) g.visible = e < 0.55;   // the works go with the walls they hung on
+      for (const g of this.artworks.chunkGroups?.values() || []) if (g) g.visible = e < 0.55;   // the works go with the walls they hung on
       if (f.vanish < 1) return;
       f.arch.group.visible = true;
       this.petals.stream({ x: f.spot.x, z: f.spot.z, dir: f.spot.dir, length: f.arch.length });
@@ -2382,8 +2395,7 @@ export class SoulPath {
   }
 
   // Where the guide leads: in fear to the nearest portal into the red rooms,
-  // in the red rooms to the nearest grandmother's room, then to the way on;
-  // wherever the portal is not there yet, to the nearest work not yet seen.
+  // in the red rooms to the nearest grandmother's room, then to the way on.
   _guideTarget() {
     const P = this.player, cx = Math.floor(P.pos.x / (CHUNK * CELL)), cz = Math.floor(P.pos.y / (CHUNK * CELL));
     let best = null, bd = Infinity;
@@ -2393,9 +2405,6 @@ export class SoulPath {
     } else {
       const p = this.summonedPortals[this.stage.stage + 1];
       if (p) consider(p.x, p.z);
-      // no portal yet (it comes only once enough works are seen): to the
-      // nearest work not seen, which is what brings it
-      else for (const a of this.artworks.active) if (!a.hidden && !this.seen.has(a.art.id)) consider(a.centerWorld.x, a.centerWorld.z);
     }
     return best;
   }
@@ -2406,6 +2415,8 @@ export class SoulPath {
     g.mesh.material.opacity = 0.6 + 0.35 * Math.sin(time * 4);
     if (g.t > 0) return;
     g.t = 1;
+    const st = this.stage.stage;                        // no crossing in reach for the portal yet: try again from here
+    if (st < 2 && !this.summonedPortals[st + 1] && (st === 0 || this.visitedRoom)) this._summonPortal(st + 1, time);
     const target = this._guideTarget();
     if (!target) { g.mesh.count = 0; return; }
     const tx = cellOf(target.x - 0.01), tz = cellOf(target.z - 0.01);

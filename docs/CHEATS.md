@@ -12,7 +12,7 @@ any keyboard layout; the presses must come within three seconds.
 | `2` × 5 | Grandmother's zone (the red rooms). |
 | `3` × 5 | Acceptance (the light). |
 | `0` × 5 | Acceptance, then straight into the finale: every work counts as seen and the arch of roses rises. |
-| `M` × 5 | Toggle a guide chevron on the floor toward the next goal. Press again five times to hide it. |
+| `M` × 5 | The way on, for the authors. In fear and in grandmother's zone the next portal is summoned at once if it is not there yet (grandmother's room counts as found) and chevrons on the floor lead to it; five more presses put them out. In the light the whole ending plays: every work counts as seen, the roses in the corner shed, the walls part and the arch of roses rises as the way out. |
 | `Shift` | Run. |
 
 Digits work from the top row and the numpad, with or without Shift; M works in
