@@ -962,6 +962,23 @@ export class SoulPath {
     arch.group.rotation.y = Math.atan2(-spot.dir[0], -spot.dir[1]);   // its face toward the visitor
     this.scene.add(arch.group);
     arch.fitToWalls((x, z) => solidAtGlobal(cellOf(x), cellOf(z)));
+    // nothing floats through the roses: candles and boats and drowned things
+    // along the tunnel, either way from its mouth, are put out and taken away
+    {
+      const [dx, dz] = spot.dir, L = arch.length + 0.6, R = arch.halfWidth + 0.7;
+      const inArch = (x, z) => { const u = (x - spot.x) * dx + (z - spot.z) * dz, v = (x - spot.x) * dz - (z - spot.z) * dx; return Math.abs(u) < L && Math.abs(v) < R; };
+      const zero = new THREE.Matrix4().makeScale(0, 0, 0), dark = new THREE.Color(0);
+      for (const st of this.chunkStuff.values()) {
+        const sc = st.scatter;
+        sc?.items?.forEach((it, i) => {
+          if (it.gone || !inArch(it.x, it.z)) return;
+          it.gone = true;
+          for (const name in sc.meshes) { sc.meshes[name].setMatrixAt(i, zero); sc.meshes[name].instanceMatrix.needsUpdate = true; }
+          if (sc.lights?.[i]) sc.lights[i].col = dark;
+        });
+        for (const m of st.drown?.meshes || []) if (inArch(m.position.x, m.position.z)) m.visible = false;
+      }
+    }
     // first the walls go: a pearl haze rises off the water, the walls, the
     // ceiling and every thing come apart in it, and only the water is left
     // to the horizon. Then, out of nothing, the tunnel of roses rises.
