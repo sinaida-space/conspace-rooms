@@ -8,12 +8,18 @@ any keyboard layout; the presses must come within three seconds.
 
 | Keys | What happens |
 |------|--------------|
-| `7` × 5 | The nearest hanging work becomes the last one: every other work counts as seen (the rose shows 17 of 18) and you stand in front of it. Look at it and the arch of roses opens. |
-| `5` × 5 | Jump to the nearest grandmother's room (the red rooms stage). |
-| `B` × 5 | Chevrons on the floor lead to the nearest grandmother's room, the one with the television and the lampshade (the world turns to the red rooms first if you are still in the hospital). Once you are in it they go out, and the souls begin to wander the corridors. |
-| `0` × 5 | Straight into the light: the world turns to the acceptance stage where you stand. |
-| `M` × 5 | Toggle a guide chevron on the floor: in the hospital it points to the nearest portal into the red rooms, there to grandmother's room, then onward into the light. Press again to hide it. |
+| `1` × 5 | Fear (the hospital). |
+| `2` × 5 | Grandmother's zone (the red rooms). |
+| `3` × 5 | Acceptance (the light). |
+| `0` × 5 | Acceptance, then straight into the finale: every work counts as seen and the arch of roses rises. |
+| `M` × 5 | Toggle a guide chevron on the floor toward the next goal. Press again five times to hide it. |
 | `Shift` | Run. |
+
+Digits work from the top row and the numpad, with or without Shift; M works in
+any layout (`Ь` on the Russian one) and either case. The presses must be the
+same key, within three seconds; any other key in between starts the count
+again. Each code answers with a flash even when you are already there. The
+older codes `7`, `5` and `B` are gone.
 
 ## Secrets in the walk
 
@@ -35,11 +41,10 @@ any keyboard layout; the presses must come within three seconds.
   roughly facing it and it swings open by itself: a ruined stairwell behind
   it, smoke, a picture of the stairs. It holds a couple of seconds, then
   slams for good — once only, per visit.
-- `7` × 5, `5` × 5, `B` × 5, `0` × 5 and `1` × 5 all still work exactly as
-  below. Setting the stage directly with a cheat does not touch the counts:
+- The codes above still work as described. Setting the stage directly with a cheat does not touch the counts:
   if you cheat into fear with 3 works already seen, the portal is summoned
   as soon as the threshold check next runs. Adding ids straight into
-  `soul.seen` (or the `7` × 5 cheat, which adds several at once) counts them
+  `soul.seen` (or the `0` × 5 cheat, which adds them all at once) counts them
   into whichever stage you are in at that moment too.
 
 ## On the welcome screen
