@@ -65,7 +65,7 @@ export class Player {
     this.intent = 0;       // last walk intent: 1 forward, -1 backward, 0 still
 
     this.keys = Object.create(null);
-    this.auto = null;      // { kind, yaw }: something else holds the walk (a question board) and turns the view
+    this.auto = null;      // { kind, yaw, vel?, hold? }: something else holds the walk (a question board, the finale's carry) and turns the view
     this._yawVel = 0;      // eased turn speed on hands
     this.hand = {
       present: false, anyFist: false, bothFists: false, pointLeft: false, pointRight: false,
@@ -142,14 +142,14 @@ export class Player {
 
     // keys always work, on hands too: any walking key takes over from the hands
     const keyMove = MOVE_KEYS.some(k => this.keys[k]);
-    if (keyMove && this.auto) this.auto = null;
+    if (keyMove && this.auto && !this.auto.hold) this.auto = null;   // a hold (the finale) is not let go
     const onHands = this.hand.present && !keyMove;
 
     // ── yaw ──
     if (this.auto) {
       // something holds the walk and turns the view toward it, gently
       this.yaw += wrapAngle(this.auto.yaw - this.yaw) * Math.min(1, dt * 2.2);
-      this.pitch += (0 - this.pitch) * Math.min(1, dt * 2.2);
+      if (!this.auto.hold) this.pitch += (0 - this.pitch) * Math.min(1, dt * 2.2);   // carried, the eyes may go up to the roses
       this._yawVel = 0;
     } else if (onHands) {
       // one fist carried sideways turns that way (running never turns); without
@@ -212,6 +212,7 @@ export class Player {
       ((this.keys.Pad || (this.drive && this.drive.y < -0.9)) && this._walkT > 1.5);
     const top = running ? RUN_SPEED : MAX_SPEED;
     const target = new THREE.Vector2(tx * top, tz * top);
+    if (this.auto?.vel) target.copy(this.auto.vel);   // carried: the finale sets the pace
 
     // soft accel toward target velocity
     const k = Math.min(1, ACCEL * dt);
@@ -341,6 +342,7 @@ export class Player {
   // corridor (or out of a wall, if the walk ever ended in one), looking
   // straight along it, level, unzoomed; a held board or painting lets go.
   recenter() {
+    if (this.auto?.hold) return;                   // the finale holds the walk: nothing to put right
     window.__app?.artworks?.inspecting && window.__app.artworks._closeInspect();
     this.auto = null;
     if (!this.world.isWalkable(this.pos.x, this.pos.y)) {

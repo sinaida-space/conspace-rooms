@@ -96,6 +96,10 @@ const PORTAL_FAR = 24;           // metres: nor further than this
 const LOST_FAR = 30;             // metres: a way on (a portal, a work of fear) further than this, out of sight...
 const LOST_FOR = 20;             // seconds: ...for this long, goes out and comes again near the walk
 const FINALE_VANISH = 6;         // seconds the walls take to dissolve before the rose tunnel rises
+const FINALE_PULL_AT = 1.8;       // seconds after the tunnel shows before it starts drawing the visitor in
+const FINALE_PULL_IN = 3;         // seconds the pull takes to reach its pace
+const FINALE_CARRY = 0.55;        // m/s through the tunnel: slow enough to look up at the roses
+const FINALE_LEAD = 1.4;          // m ahead on the middle line the carry aims for
 const DREAM_PREVIEW = sketchParam('dream') !== null;
 const STAIR_NIGHTMARE = true;     // false: the calm version, only the door, fog and light, no zoom, no sound, no blackout
 const STAIR_NEAR = 3.2;          // metres: this close, the metal door gives way, each time the visitor passes
@@ -1046,9 +1050,13 @@ export class SoulPath {
     // ceiling and every thing come apart in it, and only the water is left
     // to the horizon. Then, out of nothing, the tunnel of roses rises.
     arch.group.visible = false;
-    // the view turns to the entrance itself (_updateFinale): the tunnel
-    // keeps to the middle of the corridor, the visitor may not
-    this.finale = { arch, spot, from: P.yaw, t: 0, side: null, vanish: 0 };
+    // the visitor is held where they stand while the walls go (keys and
+    // hands let go of the walk); then the view turns to the entrance and the
+    // tunnel draws them in by itself (_updateFinale)
+    if (this.artworks.inspecting) this.artworks._closeInspect();
+    this._board = null;
+    P.auto = { kind: 'finale', yaw: P.yaw, vel: new THREE.Vector2(), hold: true };
+    this.finale = { arch, spot, side: null, vanish: 0, shown: 0 };
     this.post?.burst?.(0.4);
   }
 
@@ -1064,15 +1072,21 @@ export class SoulPath {
       f.arch.group.visible = true;
       this.petals.stream({ x: f.spot.x, z: f.spot.z, dir: f.spot.dir, length: f.arch.length });
     }
-    if (f.t < 1) {
-      f.t = Math.min(1, f.t + dt / 1.6);
-      const e = f.t * f.t * (3 - 2 * f.t);
-      // aim from where the visitor is now: collision may have nudged them
-      let turn = Math.atan2(-(f.spot.x - P.pos.x), -(f.spot.z - P.pos.y)) - f.from;
-      turn = Math.atan2(Math.sin(turn), Math.cos(turn));
-      P.yaw = f.from + turn * e;
-    }
-    f.arch.update(dt, time);
+    if (f.done) { f.arch.update(dt, time, this._water().level ?? 0.02); return; }   // through and carded: the walk is theirs again
+    // the carry: aim at a point on the tunnel's middle line a little ahead
+    // of the visitor, so they come onto the line softly and then ride it
+    // through to the light. The view turns first, then the pull eases in
+    f.shown += dt;
+    const [ax, az] = f.spot.dir;
+    const u = (P.pos.x - f.spot.x) * ax + (P.pos.y - f.spot.z) * az;          // along the tunnel, 0 at its mouth
+    const aim = Math.max(u, -FINALE_LEAD) + FINALE_LEAD;
+    const tx = f.spot.x + ax * aim - P.pos.x, tz = f.spot.z + az * aim - P.pos.y, tl = Math.hypot(tx, tz) || 1;
+    const auto = P.auto?.kind === 'finale' ? P.auto : (P.auto = { kind: 'finale', yaw: P.yaw, vel: new THREE.Vector2(), hold: true });
+    auto.yaw = P.yaw + Math.atan2(Math.sin(Math.atan2(-tx, -tz) - P.yaw), Math.cos(Math.atan2(-tx, -tz) - P.yaw));
+    const pull = Math.max(0, Math.min(1, (f.shown - FINALE_PULL_AT) / FINALE_PULL_IN));
+    const facing = Math.max(0, Math.cos(auto.yaw - P.yaw));                     // no walking sideways into it
+    auto.vel.set(tx / tl, tz / tl).multiplyScalar(FINALE_CARRY * pull * pull * (3 - 2 * pull) * facing);
+    f.arch.update(dt, time, this._water().level ?? 0.02);
     // walking through: the visitor's side of the far arch flips while inside its span
     // through the far end of the tunnel, not just its entrance
     const [dx, dz] = f.spot.dir, rx = P.pos.x - (f.spot.x + dx * f.arch.length), rz = P.pos.y - (f.spot.z + dz * f.arch.length);
@@ -1083,6 +1097,8 @@ export class SoulPath {
 
   _endWalk() {
     this._carded = true;
+    if (this.finale) this.finale.done = true;
+    if (this.player.auto?.kind === 'finale') this.player.auto = null;
     this.player.locked = true;
     this.audio?.silence?.();
     showCard({
