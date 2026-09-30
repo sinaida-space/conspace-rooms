@@ -8,3 +8,6 @@ dist/
 assets/stairs/*.png
 .claude/worktrees/
 .claude/plans/
+
+# the smoke run's one dependency
+tests/node_modules/
