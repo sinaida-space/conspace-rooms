@@ -111,6 +111,7 @@ export function createTunnel(renderer) {
     // from, to: stage numbers · onSwap: called once the view is fully covered
     // (change the world there) · onDone: after it has opened again
     start(from, to, onSwap, onDone) {
+      if (t >= 0) { const f = swap, g = done; swap = done = null; f?.(); g?.(); }   // one still running ends first
       const a = PALETTE[from] || PALETTE[0], b = PALETTE[to] || PALETTE[0];
       set('uA0', a.a); set('uB0', a.b); set('uBg0', a.bg);
       set('uA1', b.a); set('uB1', b.b); set('uBg1', b.bg);
