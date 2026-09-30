@@ -69,6 +69,7 @@ Not checked: a real phone, a real Intel laptop, a screen reader pass, Lightho
 - **Evidence:** at the first frame of the walk 15 of 18 files from `assets/artworks/` were fetched (180 to 630 KB each, 1280×1600). `loadTexture` in `src/artworks.js:186` downloads the full file on tier 0 and halves it on a canvas afterwards, so the phone pays for the pixels it throws away. `cwebp -q 82` on `08.jpg` gives 313 KB against 646 KB.
 - **Why it matters:** total at entry is 76 requests and 10.7 MB decoded, 8.3 MB of it images and models.
 - **Recommended remediation:** ship two WebP sizes per work (1600 px and 800 px), pick by tier before the request, keep JPEG as the source in the repo only. Load the texture of a work when its chunk comes within one ring of the visitor, nearest first. Expected entry weight: about 4 MB on desktop, about 1.5 MB on a phone.
+- **Done in wave 4:** every work has a WebP at full size and one at 800 px (8.3 MB of JPEG became 3.9 MB and 0.9 MB); tier 0 asks for the small file; the JPEG is the way back if a WebP fails. A work hangs at once with its frame and placard, and its picture is fetched when the visitor comes within 36 m, the nearest first, decoded off the main thread. At entry (seed 1224): 8 files and 1.3 MB on desktop where there were 15 files and 7.2 MB; 7 files and 0.24 MB on tier 0.
 
 ### F-003 · One 3 165-line class, global wiring, no tests, no CI
 - **Category:** Code health
