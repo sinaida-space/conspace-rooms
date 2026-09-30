@@ -265,7 +265,13 @@ function roomRand(x, z) {
   return () => { h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d); h = Math.imul(h ^ (h >>> 12), 0x297a2d39); h ^= h >>> 15; return (h >>> 0) / 4294967296; };
 }
 
+// One velvet per palette, painted once and shared by every lampshade of that
+// colour: sixteen thousand strokes of pile are some forty milliseconds, and a
+// room's disposal only frees the GPU copy (three uploads it again when drawn).
+const VELVET = new Map();
 function velvetTexture(pal = SHADES[0].v) {
+  const key = pal.join('|');
+  if (VELVET.has(key)) return VELVET.get(key);
   const c = document.createElement('canvas'); c.width = 1024; c.height = 256;
   const g = c.getContext('2d');
   const pleats = 24, w = c.width / pleats;
@@ -283,6 +289,7 @@ function velvetTexture(pal = SHADES[0].v) {
     g.fillRect(Math.random() * c.width, Math.random() * c.height, 1.5, 1.5);
   }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 4;
+  VELVET.set(key, t);
   return t;
 }
 function liningTexture() {

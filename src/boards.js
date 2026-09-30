@@ -33,18 +33,29 @@ const NOTICES = {
   ru: ['ГРАФИК ПОСЕЩЕНИЙ', 'ПРОЦЕДУРНАЯ · 8:00', 'СОБЛЮДАЙТЕ ТИШИНУ', 'ФЛЮОРОГРАФИЯ · КАБ. 12', 'ПОСТ МЕДСЕСТРЫ'],
   en: ['VISITING HOURS', 'TREATMENT ROOM · 8:00', 'KEEP SILENCE', 'X-RAY · ROOM 12', 'NURSES’ STATION'],
 };
-export function boardTexture(text, seed, lang) {
-  const W = 822, H = 600, c = document.createElement('canvas'); c.width = W; c.height = H;
-  const g = c.getContext('2d'), r = rnd(seed * 7919 + 13);
-  // the frame, then cork
+// The frame and its cork: nine thousand crumbs, close to half of what a board
+// costs to paint. Four corks are painted once, and every board takes one.
+const BOARD_W = 822, BOARD_H = 600, CRUMBS = 9000, CORKS = [];
+function cork(k) {
+  if (CORKS[k]) return CORKS[k];
+  const W = BOARD_W, H = BOARD_H, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), r = rnd(k * 7919 + 13);
   g.fillStyle = '#5b4128'; g.fillRect(0, 0, W, H);
   g.fillStyle = 'rgba(255,230,190,0.12)'; g.fillRect(0, 0, W, 6); g.fillRect(0, 0, 6, H);
   g.fillStyle = '#9c7446'; g.fillRect(26, 26, W - 52, H - 52);
-  for (let i = 0; i < 9000; i++) {                       // cork crumbs
+  for (let i = 0; i < CRUMBS; i++) {                     // cork crumbs
     g.fillStyle = `rgba(${r() < 0.5 ? '70,44,20' : '190,150,100'},${0.15 + r() * 0.35})`;
     g.fillRect(26 + r() * (W - 52), 26 + r() * (H - 52), 1 + r() * 3, 1 + r() * 3);
   }
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(26, 26, W - 52, 8); g.fillRect(26, 26, 8, H - 52);   // the frame's shadow on the cork
+  return (CORKS[k] = c);
+}
+
+export function boardTexture(text, seed, lang) {
+  const W = BOARD_W, H = BOARD_H, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), r = rnd(seed * 7919 + 13);
+  g.drawImage(cork(Math.abs(seed) % 4), 0, 0);
+  for (let i = 0; i < CRUMBS * 6; i++) r();              // the draws the crumbs took: every sheet and pin stays where it was
   const pin = (x, y) => {
     const col = ['#c0282d', '#2c5fa8', '#e0b030', '#2f8a4a'][Math.floor(r() * 4)];
     g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.arc(x + 3, y + 4, 9, 0, 7); g.fill();
@@ -101,17 +112,15 @@ export function boardTexture(text, seed, lang) {
 const POOL = new Map();
 const pooled = (key, make) => POOL.get(key) ?? POOL.set(key, make()).get(key);
 
-// Paint the plain ones ahead while the browser has long idle stretches, so the walk
-// seldom has to wait for a new one.
-export function prewarmBoards() {
+// The plain ones, as jobs for whoever paints ahead: soulpath.js runs them one
+// a frame once grandmother's stage begins, so the walk there seldom waits for
+// a new one. (They used to wait for a long idle stretch of the browser, which
+// never comes while the render loop runs.)
+export function boardPaintJobs() {
   const jobs = [];
   for (let k = 0; k < 12; k++) jobs.push(() => carpetTexture(k), () => rugTexture(k));
   for (let k = 0; k < 6; k++) jobs.push(() => runnerTexture(k));
-  const idle = globalThis.requestIdleCallback;
-  if (!idle) return;                                     // no idle callbacks (Safari): painted as wanted
-  // only in a long idle stretch (the loading screen), never squeezed between frames
-  const step = dl => { while (jobs.length && dl.timeRemaining() > 30) jobs.shift()(); if (jobs.length) idle(step); };
-  idle(step);
+  return jobs;
 }
 
 export function carpetTexture(seed) { seed %= 12; return pooled('carpetTexture|' + seed, () => drawCarpetTexture(seed)); }
