@@ -2848,7 +2848,7 @@ export class SoulPath {
     this.petals.update(dt, time);
     this._time = time;
     this._tickMarks(time);
-    this.glowPetals.update(dt, time, this.marks, this._water(), this.stage.stage === 2 && !this.finale, this.player.pos, this._petalObstacles(), this.stage.stage < 2);
+    this.glowPetals.update(dt, time, this.marks, this._water(), this.stage.stage === 2 && !this.finale, this.player.pos, this._petalObstacles());
     if (this._dustStage !== this.stage.stage) { this._dustStage = this.stage.stage; this.footDust.clear(); }   // a new stage, a clean floor
     this.footDust.update(this.player.pos, time, this.stage.stage < 2 && !this._crossing);
     this._shadowLight = (this._shadowLight ?? 0) + ((this.stage.stage === 2 ? 1 : 0) - (this._shadowLight ?? 0)) * Math.min(1, dt);

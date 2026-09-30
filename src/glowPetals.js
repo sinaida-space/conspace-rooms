@@ -179,12 +179,10 @@ export function createGlowPetals(scene) {
     // marks: the soul path's pool; on: acceptance; player: {x, y} on the floor plan
     // obstacles: [{ x, z, r }] things standing in the water; a petal that
     // would ride into one is carried round its edge instead
-    // trail: the petals without the smoke, on the dry floor of fear and of
-    // grandmother's rooms, riding the same way the marks point (#53)
-    update(dt, time, marks, water, on, player, obstacles = [], trail = false) {
+    update(dt, time, marks, water, on, player, obstacles = []) {
       petalMat.uniforms.uTime.value = time;
       haloMat.uniforms.uTime.value = time;
-      petals.visible = halos.visible = on || trail;
+      petals.visible = halos.visible = on;
       smokeOn += ((on ? 1 : 0) - smokeOn) * Math.min(1, dt * 0.5);   // the smoke gathers and clears slowly
       for (const s of smoke) {
         s.visible = smokeOn > 0.01;
@@ -194,7 +192,7 @@ export function createGlowPetals(scene) {
         s.position.set(player.x, (water.level ?? 0.1) + s.userData.h, player.y);
         u.uCenter.value.copy(s.position);
       }
-      if (!on && !trail) return;
+      if (!on) return;
       let n = 0;
       for (const m of marks) {
         if (!m.visible) continue;
@@ -214,7 +212,7 @@ export function createGlowPetals(scene) {
             const ex = x - o.x, ez = z - o.z, d = Math.hypot(ex, ez), keep = o.r + PETAL * 0.9;
             if (d < keep) { const k = keep / (d || 1e-3); x = o.x + (d ? ex : nx) * k; z = o.z + (d ? ez : nz) * k; }
           }
-          const wy = on ? water.heightAt(x, z) : 0;                          // no water yet: the floor
+          const wy = water.heightAt(x, z);
           if (wy == null) continue;                                         // no water under it here
           const f = o * Math.sin(u * Math.PI);
           const bob = Math.sin(time * 1.6 + seed.array[i] * 20) * 0.004;
