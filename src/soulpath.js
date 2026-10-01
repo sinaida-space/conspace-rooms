@@ -93,6 +93,7 @@ const FIND_NEAR = 3.0;           // metres: passing this close, looking its way,
 const PORTAL_SEEN_MEMORY = 5;    // works seen in memory (past the room) before the way into the light
 const PORTAL_NEAR = 8;           // metres: a summoned portal never lands closer than this
 const PORTAL_FAR = 24;           // metres: nor further than this
+const APPEAR = 2.6;              // seconds: a portal coming out of the dark the first time it is seen
 const LOST_FAR = 30;             // metres: a way on (a portal, a work of fear) further than this, out of sight...
 const LOST_FOR = 20;             // seconds: ...for this long, goes out and comes again near the walk
 const FINALE_VANISH = 6;         // seconds the walls take to dissolve before the rose tunnel rises
@@ -1291,7 +1292,42 @@ export class SoulPath {
     veil.position.set(0, 0.06 + openH / 2, 0);
     g.add(veil);
     group.add(g);
-    return { x, z, west, span: openW, target, veil, group: g };
+    const frameMats = [];
+    g.traverse(o => { if (o.isMesh && o !== veil) { o.material.transparent = true; frameMats.push(o.material); } });
+    const p = { x, z, west, span: openW, target, veil, group: g, frameMats };
+    this._portalLight(p, this.summonedPortals[target]?.appear ?? 1);
+    return p;
+  }
+
+  // How far a portal has come out of the dark, 0..1: the frame first, from
+  // black to its gilt, then the veil kindles. At 1 the frame is opaque again.
+  _portalLight(p, k) {
+    const f = Math.min(1, k / 0.75), frame = f * f * (3 - 2 * f);
+    const v = Math.max(0, Math.min(1, (k - 0.35) / 0.65)), veil = v * v * (3 - 2 * v);
+    for (const m of p.frameMats) {
+      m.color.setScalar(frame);
+      m.opacity = Math.min(1, frame * 1.6);
+      const solid = k >= 1;
+      if (m.transparent === solid && !m.alphaTest) { m.transparent = !solid; m.needsUpdate = true; }
+    }
+    p.veil.material.uniforms.uFade.value = veil;
+  }
+
+  // A portal comes out of the dark the first time it is in view, never
+  // before (it is summoned out of sight when it can be): the whisper and a
+  // breath of the post then, the frame and the veil over APPEAR seconds.
+  _portalAppear(dt) {
+    const plan = this.summonedPortals[this.stage.stage + 1], P = this.player;
+    if (!plan || plan.appear >= 1) return;
+    if (!plan.appear) {
+      const dx = plan.x - P.pos.x, dz = plan.z - P.pos.y, d = Math.hypot(dx, dz) || 1;
+      const ahead = (-Math.sin(P.yaw) * dx - Math.cos(P.yaw) * dz) / d;
+      if (ahead < 0.45 || d > PORTAL_FAR + 6 || !this._lineOfSight(P.pos.x, P.pos.y, plan.x, plan.z)) return;
+      this.post?.burst(0.4);
+      this.audio?.whisper?.();
+    }
+    plan.appear = Math.min(1, (plan.appear || 0) + dt / APPEAR);
+    for (const st of this.chunkStuff.values()) for (const p of st.portals) if (p.target === plan.target) this._portalLight(p, plan.appear);
   }
 
   // Walking through a portal: the side of its plane the visitor is on flips
@@ -1421,17 +1457,18 @@ export class SoulPath {
     const reach = this._reachableSet(gi0, gj0);
     const cands = this._latticeCrossings(gi0, gj0, PORTAL_NEAR, PORTAL_FAR, reach);
     if (!cands.length) return false;                     // nothing in reach yet: try again next frame
-    for (const c of cands) c.ahead = (fx * (c.x - P.pos.x) + fz * (c.z - P.pos.y)) / (c.d || 1);
-    cands.sort((a, b) => b.ahead - a.ahead || a.d - b.d);
+    for (const c of cands) {
+      c.ahead = (fx * (c.x - P.pos.x) + fz * (c.z - P.pos.y)) / (c.d || 1);
+      c.hidden = !this._lineOfSight(P.pos.x, P.pos.y, c.x, c.z);   // round a corner: it is not seen being made
+    }
+    cands.sort((a, b) => b.hidden - a.hidden || b.ahead - a.ahead || a.d - b.d);
     const c = cands[0];
-    const plan = { x: c.x, z: c.z, west: c.west, target, cx: Math.floor(c.gi / CHUNK), cz: Math.floor(c.gj / CHUNK) };
+    const plan = { x: c.x, z: c.z, west: c.west, target, cx: Math.floor(c.gi / CHUNK), cz: Math.floor(c.gj / CHUNK), appear: 0 };
     this.summonedPortals[target] = plan;
     const stuff = this.chunkStuff.get(plan.cx + ':' + plan.cz);
     this._clearAround(plan.x, plan.z, 2.4);
     if (stuff) { stuff.portals.push(this._makePortal(stuff.group, plan.x, plan.z, plan.west, target)); this._rebuildChunkProps(plan.cx, plan.cz, stuff); }
     this._rebuildScatter();                              // no candle left standing in its way, in any chunk
-    this.post?.burst(0.4);
-    this.audio?.whisper?.();
     if (target === 1) this._summonStairwell(plan, gi0, gj0);
     return true;
   }
@@ -3127,6 +3164,7 @@ export class SoulPath {
     }
 
     // portals: cross-check, animate the veils, dim the ones already used
+    this._portalAppear(dt);
     const cur = { x: P.pos.x, z: P.pos.y };
     this._checkPortals(this._prevPos, cur);
     this._prevPos = cur;
