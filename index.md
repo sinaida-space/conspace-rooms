@@ -26,6 +26,7 @@ No analytics, no accounts, no cookies beyond two local settings. In gesture mode
 
 - Experience design and code: Sinaida Krivchenko, [sinaida.eu](https://sinaida.eu), Instagram [@sin.ai.da](https://www.instagram.com/sin.ai.da)
 - Artworks (the SOULS series): UVALISS, the artist Alisa Feer, [uvaliss.ru](https://uvaliss.ru/), Instagram [@uvaliss](https://www.instagram.com/uvaliss/)
+- Window views and stairwell pictures: Sinaida Krivchenko, made in Midjourney
 - The artworks are © UVALISS, all rights reserved.
 
 ## More
