@@ -724,6 +724,11 @@ body.can-inspect #pad .pad-inspect:active, body.inspecting #pad .pad-inspect:act
   text-shadow: 0 0 18px rgba(200, 255, 215, 0.45), 0 0 2px rgba(0, 0, 0, 0.6);
   opacity: 0;
 }
+/* a soft dark smudge behind the word, so it reads on a pale wall too ("страх" lost its first letter) */
+#zone-title::before {
+  content: ''; position: absolute; inset: -1.1em -1.4em; z-index: -1; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.45) 55%, transparent);
+}
 #zone-title.show { animation: zone-title 6s ease forwards; }
 body.inspecting #zone-title { display: none; }
 @keyframes zone-title {

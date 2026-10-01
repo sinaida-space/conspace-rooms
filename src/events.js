@@ -39,15 +39,23 @@ function clear(x0, z0, x1, z1) {
   return true;
 }
 
-// ── silhouettes, drawn once, soft-edged as a shadow thrown from far off ──
+// ── silhouettes, drawn once: a penumbra thrown by a low lamp far off ──
+// The shape is drawn crisp on a scratch canvas, slanted and drawn up a little
+// from its foot (the lamp is low), then laid down twice as a canvas shadow:
+// a wide pale blur and a narrower, denser one. Canvas shadows blur in every
+// browser (ctx.filter does not in older Safari, where the figures came out
+// flat black). PAD leaves room round each frame for the blur to fade out.
+const PAD = 28, OFF = 4096;
 function silhouette(kind) {
   const W = kind === 'figure' ? 128 : 256, H = kind === 'figure' ? 256 : 128;
+  const CW = W + 2 * PAD, CH = H + 2 * PAD;
   const frames = kind === 'cat' || kind === 'bird' ? 2 : 1;
-  const c = document.createElement('canvas'); c.width = W * frames; c.height = H;
-  const g = c.getContext('2d');
-  g.filter = 'blur(5px)'; g.fillStyle = '#000';
+  const shape = document.createElement('canvas'); shape.width = CW * frames; shape.height = CH;
+  const g = shape.getContext('2d');
+  g.fillStyle = '#000';
   for (let f = 0; f < frames; f++) {
-    g.save(); g.translate(f * W, 0);
+    g.save(); g.translate(f * CW + PAD, PAD);
+    g.translate(W / 2, H); g.transform(1, 0, -0.08, 1.07, 0, 0); g.translate(-W / 2, -H);   // slant and stretch from the foot
     if (kind === 'figure') {                         // someone walking past, a coat to the knees
       g.beginPath(); g.ellipse(64, 30, 13, 16, 0, 0, Math.PI * 2); g.fill();
       g.beginPath(); g.moveTo(58, 44); g.lineTo(70, 44); g.lineTo(88, 62); g.lineTo(84, 160); g.lineTo(44, 160); g.lineTo(40, 62); g.closePath(); g.fill();
@@ -78,10 +86,17 @@ function silhouette(kind) {
     }
     g.restore();
   }
+  const c = document.createElement('canvas'); c.width = shape.width; c.height = CH;
+  const s = c.getContext('2d');
+  s.shadowOffsetX = OFF;                              // the shape itself lands off the canvas; only its shadow is seen
+  for (const [blur, a] of [[22, 0.5], [8, 0.45]]) {   // penumbra, then the denser middle
+    s.shadowBlur = blur; s.shadowColor = `rgba(0,0,0,${a})`;
+    s.drawImage(shape, -OFF, 0);
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.repeat.set(1 / frames, 1);
-  return { tex, frames, aspect: W / H };
+  return { tex, frames, aspect: CW / CH, scale: CH / H };   // scale: the plane's height over the figure's
 }
 
 export class EventDirector {
@@ -199,7 +214,7 @@ export class EventDirector {
     const mat = new THREE.MeshBasicMaterial({ map: sil.tex.clone(), transparent: true, opacity: 0, depthWrite: false, fog: true,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     mat.map.needsUpdate = true;
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(h * sil.aspect, h), mat);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(h * sil.scale * sil.aspect, h * sil.scale), mat);
     const { sl } = w, n = sl.normal, along = new THREE.Vector3(-n.z, 0, n.x);   // along the wall, to the right as it faces the visitor
     const half = sl.length * CELL / 2 - 0.3, dir = Math.random() < 0.5 ? 1 : -1;
     mesh.rotation.y = Math.atan2(n.x, n.z);
@@ -219,7 +234,7 @@ export class EventDirector {
         mat.map.offset.x = (dir < 0 ? 1 : 0) / sil.frames + f / sil.frames;
       }
       const fade = Math.min(1, t / 0.5, (dur - t) / 0.5);
-      mat.opacity = Math.max(0, fade) * (kind === 'figure' ? 0.8 : kind === 'cat' ? 0.78 : kind === 'hand' ? 0.72 : 0.6);
+      mat.opacity = Math.max(0, fade) * (kind === 'bird' ? 0.5 : 0.65);   // the texture is a penumbra already: under 0.5 at its middle
       if (k < 1) return true;
       this.scene.remove(mesh); mesh.geometry.dispose(); mat.map.dispose(); mat.dispose();
       return false;
@@ -235,7 +250,7 @@ export class EventDirector {
     const sil = this.sil.figure ||= silhouette('figure');
     const h = 2.15, mat = new THREE.MeshBasicMaterial({ map: sil.tex, transparent: true, opacity: 0, depthWrite: false, fog: true,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(h * sil.aspect, h), mat);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(h * sil.scale * sil.aspect, h * sil.scale), mat);
     const { sl } = w, n = sl.normal, along = new THREE.Vector3(-n.z, 0, n.x), off = rand(-0.4, 0.4);
     mesh.rotation.y = Math.atan2(n.x, n.z);
     mesh.position.set(sl.position.x + n.x * 0.03 + along.x * off, h / 2 + 0.02, sl.position.z + n.z * 0.03 + along.z * off);
@@ -247,7 +262,7 @@ export class EventDirector {
       const d = Math.hypot(mesh.position.x - this.player.pos.x, mesh.position.z - this.player.pos.y);
       if (going < 0 && (d < 5 || t > 10)) going = t;
       const k = going < 0 ? Math.min(1, t / 1.2) : 1 - (t - going) / 0.25;
-      mat.opacity = Math.max(0, k) * 0.82;
+      mat.opacity = Math.max(0, k) * 0.65;
       mesh.scale.x = 1 + Math.sin(t * 0.7) * 0.015;  // it breathes
       if (going < 0 || k > 0) return true;
       this.scene.remove(mesh); mesh.geometry.dispose(); mat.dispose();
