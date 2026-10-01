@@ -4,10 +4,10 @@
 // strands; the flight goes on for a couple of seconds while the colours turn
 // from the place being left to the place ahead (the far throat changes first),
 // then the throat opens wide and the new stage is standing there.
-// Drawn at half size (a quarter of the pixels) and stretched over the finished
-// frame: a mapped cylinder and two 2D value-noise lookups, no marching. While
-// it covers the whole view the world under it is not drawn at all (covering,
-// main.js), which is most of what a crossing saves. Idle it draws nothing.
+// Drawn over the finished frame: a mapped cylinder whose strands are one hash
+// per sector of the round, no noise lookups, no marching. While it covers
+// the whole view the world under it is not drawn at all (covering, main.js),
+// which is most of what a crossing saves. Idle it draws nothing.
 import * as THREE from 'three';
 import { calm } from './calm.js';
 
@@ -33,16 +33,9 @@ uniform float uMix;      // 0..1: from the old stage's colours to the new one's
 uniform float uSpeed;    // flight speed (lower with reduced motion)
 uniform vec3  uA0, uB0, uBg0, uA1, uB1, uBg1;
 
-// a small 2D value noise, periodic in x over ROUND cells so it closes
-// seamlessly round the tunnel (x is the angle)
-const float ROUND = 16.0;
-float hash(vec2 p) { p = fract(p * vec2(0.1031, 0.1030)); p += dot(p, p.yx + 33.33); return fract((p.x + p.y) * p.x); }
-float noise(vec2 p) {
-  vec2 i = floor(p), f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  float x0 = mod(i.x, ROUND), x1 = mod(i.x + 1.0, ROUND);
-  return mix(mix(hash(vec2(x0, i.y)), hash(vec2(x1, i.y)), f.x), mix(hash(vec2(x0, i.y + 1.0)), hash(vec2(x1, i.y + 1.0)), f.x), f.y);
-}
+// one hash per strand, safe in mediump (a sin() hash is noise there on phones)
+float hash(float n) { return fract(n * 0.618034 + fract(n * 0.1031) * 3.7); }
+const float STRANDS = 40.0;   // light strands round the tunnel
 
 void main() {
   vec2 p = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
@@ -55,11 +48,12 @@ void main() {
   float depth = 0.32 / max(r, 0.015);
   float z = depth + uTime * uSpeed;
 
-  // strands: a thin bright band where warped noise crosses its middle,
-  // stretched along the tunnel; two lookups, the second bent by the first
-  float warp = noise(vec2(turn * ROUND, z * 0.12 + uTime * 0.25));
-  float v = noise(vec2(turn * ROUND + (warp - 0.5) * 2.0, z * 0.22)) * 0.7 + warp * 0.3;
-  float strand = exp(-abs(v - 0.5) * 30.0);
+  // strands: thin radial lines, one per sector of the round, each broken into
+  // dashes of its own length and pace that stream past toward the viewer
+  float a = turn * STRANDS, id = floor(a), h = hash(id);
+  float line = 1.0 - smoothstep(0.04, 0.22, abs(fract(a) - 0.5));
+  float dash = smoothstep(0.35, 0.9, fract(z * (0.08 + 0.1 * h) + h * 7.0));
+  float strand = line * dash * (0.35 + 0.65 * h);
 
   // the colours: the far throat turns to the new stage first, then the walls
   float far = smoothstep(0.9, 5.0, depth);

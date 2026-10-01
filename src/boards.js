@@ -116,6 +116,11 @@ const pooled = (key, make) => POOL.get(key) ?? POOL.set(key, make()).get(key);
 // a frame once grandmother's stage begins, so the walk there seldom waits for
 // a new one. (They used to wait for a long idle stretch of the browser, which
 // never comes while the render loop runs.)
+// the wool pile is thousands of single strokes, most of a carpet's cost; the
+// low tier (phones) draws a third of them, else each carpet stalls a phone
+// for a third of a second, and in the portal's flight the tunnel froze on it
+const pile = n => Math.round(n * (window.__app?.quality?.tier === 0 ? 0.3 : 1));
+
 export function boardPaintJobs() {
   const jobs = [];
   for (let k = 0; k < 12; k++) jobs.push(() => carpetTexture(k), () => rugTexture(k));
@@ -212,7 +217,7 @@ function drawCarpetTexture(seed) {
   g.filter = 'blur(1.3px)'; g.drawImage(c, 0, 0); g.filter = 'none';
   const px = g.getImageData(0, 0, W, H).data;
   g.lineCap = 'round';
-  for (let i = 0; i < 50000; i++) {
+  for (let i = 0, n = pile(50000); i < n; i++) {
     const x = r() * W, y = r() * H, k = (Math.floor(y) * W + Math.floor(x)) * 4;
     const sh = r() < 0.5 ? 0.72 + r() * 0.2 : 1.1 + r() * 0.25;
     g.strokeStyle = `rgba(${Math.min(255, px[k] * sh) | 0},${Math.min(255, px[k + 1] * sh) | 0},${Math.min(255, px[k + 2] * sh) | 0},0.5)`;
@@ -284,7 +289,7 @@ function drawRugTexture(seed, pal = null) {
   // pile, as on the wall carpets
   g.filter = 'blur(1.1px)'; g.drawImage(c, 0, 0); g.filter = 'none';
   const px = g.getImageData(0, 0, W, H).data;
-  for (let i = 0; i < 26000; i++) {
+  for (let i = 0, n = pile(26000); i < n; i++) {
     const x = r() * W, y = r() * H, k = (Math.floor(y) * W + Math.floor(x)) * 4, sh = r() < 0.5 ? 0.75 : 1.2;
     g.strokeStyle = `rgba(${Math.min(255, px[k] * sh) | 0},${Math.min(255, px[k + 1] * sh) | 0},${Math.min(255, px[k + 2] * sh) | 0},0.5)`;
     g.lineWidth = 1; const a = r() * 6.283, l = 1.5 + r() * 2.5;
