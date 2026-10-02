@@ -420,6 +420,11 @@ body::after {
 }
 
 body.inspecting #control-hud, body.inspecting #hand-legend, body.inspecting #pad .pad-arrows { opacity: 0 !important; pointer-events: none; }
+/* after a while of walking the hints step back (ui.js hintsTick); the arrows only where there is a keyboard */
+#pad .pad-arrows { transition: opacity 1.2s ease; }
+body.hints-away #control-hud, body.hints-away #hand-legend { opacity: 0; transition-duration: 1.2s; }
+body.pad-away #pad .pad-arrows { opacity: 0; }
+body.tw-read #welcome .tw { display: none; }
 
 /* on-screen pad for the buttons mode: arrows bottom-left, LOOK CLOSER bottom-right above mute */
 #pad {
