@@ -26,7 +26,10 @@ older codes `7`, `5` and `B` are gone.
 - **Walk backwards for 30 seconds** and you shrink to a child's height. Walk forwards for 25 seconds to grow back.
 - **Turn around** in front of a wall writing: some of them change behind your back.
 - **Stand still near a door** (up to 4.5 m away) for two seconds: it creaks open for a moment, then slams.
-- **All 18 works seen:** the arch of roses; walking through it opens the card of every question the souls asked.
+- **Stand still for 3 seconds while a question is on the screen** and it turns red and stays: it is kept. The card at the end holds the kept questions; with none kept, the last three asked.
+- **Stand still in grandmother's room for 6 seconds:** the wall clock strikes twelve, then the kettle boils. Once a visit.
+- **Once the fear portal is summoned,** the shadows come more often and lead to it: a figure walks the way the route goes, its steps heard going off that way, and someone standing at the end of a corridor stands on the side where it turns.
+- **All 18 works seen:** the arch of roses; walking through it opens the card of the questions you kept.
 
 ## Portals now follow what you find, not chance
 

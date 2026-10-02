@@ -3175,8 +3175,9 @@ export class SoulPath {
     // and it warms and stays a while longer to say so
     const q = this._onScreen;
     if (q) {
-      if (!q.el.isConnected || !q.el.classList.contains('visible')) this._onScreen = null;
-      else if ((q.still = P.vel.length() < 0.15 ? q.still + dt : 0) >= KEEP_STILL) {
+      const up = q.el.classList.contains('visible');    // set a frame after it is typed, taken off as it fades
+      if (!q.el.isConnected || (q.up && !up)) this._onScreen = null;
+      else if ((q.up = up) && (q.still = P.vel.length() < 0.15 ? q.still + dt : 0) >= KEEP_STILL) {
         this.kept.push(q.text);
         q.el.classList.add('kept');
         q.el.style.setProperty('--q', '#ff1a1a');      // the design system's one red, as small text on the dark
