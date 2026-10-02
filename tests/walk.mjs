@@ -92,7 +92,7 @@ try {
     // where to: what the hints lead to (follow), or only what is in plain sight (wander)
     const near = (x, z) => (i, j) => (Math.abs(i - cellOf(x)) <= 1 && Math.abs(j - cellOf(z)) <= 1 ? Infinity : -Math.hypot(i - cellOf(x), j - cellOf(z)));
     const sees = (x, z, r) => Math.hypot(x - p.x, z - p.y) < r && S._lineOfSight(p.x, p.y, x, z);
-    let stroll = null, face = null;
+    let stroll = null, face = null, ledSeen = null;
     const goal = () => {
       face = null;
       const follow = mode === 'follow';
@@ -118,6 +118,15 @@ try {
       }
       // nothing to go to: a stroll to some cell in reach, 15 to 40 m off
       const gi = cellOf(p.x), gj = cellOf(p.y);
+      // a shadow walked off one way (it is thrown only in view): a visitor goes after it
+      const led = a.events?.ledAt;
+      if (led && led !== ledSeen) {
+        ledSeen = led;
+        const cells = [...S._reachableSet(gi, gj)].map(k => k.split(',').map(Number)).filter(([i, j]) => { const d = Math.hypot(i - gi, j - gj) * CELL; return d > 10 && d < 30; });
+        let best = null, bd = 0.5;
+        for (const [i, j] of cells) { const dx = i - gi, dz = j - gj, d = Math.hypot(dx, dz), k = (dx * led.x + dz * led.z) / d; if (k > bd) { bd = k; best = [i, j]; } }
+        if (best) stroll = [best[0], best[1], fake + 40000];
+      }
       if (!stroll || (Math.abs(stroll[0] - gi) <= 1 && Math.abs(stroll[1] - gj) <= 1) || fake > stroll[2]) {
         const cells = [...S._reachableSet(gi, gj)].map(k => k.split(',').map(Number)).filter(([i, j]) => { const d = Math.hypot(i - gi, j - gj) * CELL; return d > 15 && d < 40; });
         const c = cells[Math.floor(Math.random() * cells.length)] || [gi + 5, gj];

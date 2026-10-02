@@ -90,6 +90,8 @@ const FEAR_START = 2;            // works hanging in the first corridor, so nobo
 const FEAR_FIND_3 = { writings: 2, things: 3 };   // scrawls and boards, things lying about: then the third work
 const FEAR_TURNS = 2;            // turns of the corridor after the third, before the door and the portal
 const FIND_NEAR = 3.0;           // metres: passing this close, looking its way, a thing counts as found      // works seen in fear before its portal is summoned
+const KEEP_STILL = 3, KEEP_LINGER = 9, KEEP_FALLBACK = 3;   // a question kept: seconds still, seconds it stays after; none kept: the last three asked
+const ROOM_STILL = 6;            // seconds standing still in grandmother's room before the clock strikes for you
 const PORTAL_SEEN_MEMORY = 5;    // works seen in memory (past the room) before the way into the light
 const PORTAL_NEAR = 8;           // metres: a summoned portal never lands closer than this
 const PORTAL_FAR = 24;           // metres: nor further than this
@@ -469,7 +471,8 @@ export class SoulPath {
     this.kitchenRig = createKitchenRig(scene, renderer, quality);
     this._paint = [];               // canvases waiting to be painted, one a frame (_stepPaint)
     this.seen = new Set();          // art ids seen this visit
-    this.asked = [];                // what the souls asked, in order, for the card
+    this.asked = [];                // what the souls asked, in order
+    this.kept = [];                 // the questions the visitor stood still with: the card (or the last three asked)
     this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
     // in the light, a wall that would take a work already seen takes one
     // still unseen instead: the last few come to meet the walk wherever it
@@ -1134,7 +1137,7 @@ export class SoulPath {
     this.player.locked = true;
     this.audio?.silence?.();
     showCard({
-      questions: this.asked,
+      questions: this.kept.length ? this.kept : this.asked.slice(-KEEP_FALLBACK),
       strings: {
         heading: t('cardHeading'), empty: t('cardEmpty'), boot: t('cardBoot'),
         save: t('cardSave'), home: t('cardHome'), finish: t('cardFinish'),
@@ -1173,7 +1176,12 @@ export class SoulPath {
     };
     const onTap = e => { if (!e.target.closest?.('button, #pad, #hud-toolbar, a')) close(); };
     setTimeout(() => { if (el.isConnected) addEventListener('pointerdown', onTap, true); }, 400);   // not the tap that set it off
-    if (!keep) setTimeout(() => { if (el.isConnected && el.classList.contains('visible')) close(); }, 11000);
+    const fade = () => { if (el.isConnected && el.classList.contains('visible')) close(); };
+    let timer = keep ? 0 : setTimeout(fade, 11000);
+    // a question can be kept: standing still while it is on screen (update)
+    this._onScreen = this.asked.includes(text) && !this.kept.includes(text)
+      ? { text, el, still: 0, keep: () => { clearTimeout(timer); if (!keep) timer = setTimeout(fade, KEEP_LINGER * 1000); } }
+      : null;
     return close;
   }
 
@@ -3161,6 +3169,27 @@ export class SoulPath {
         this._say(t('roomLabel'), t('roomHint')); this._soulAt = time;
         this._rebuildScatter();                       // candles now point to the way out into the light
       }
+    }
+
+    // a question on screen, the visitor standing still: it is kept for the card,
+    // and it warms and stays a while longer to say so
+    const q = this._onScreen;
+    if (q) {
+      if (!q.el.isConnected || !q.el.classList.contains('visible')) this._onScreen = null;
+      else if ((q.still = P.vel.length() < 0.15 ? q.still + dt : 0) >= KEEP_STILL) {
+        this.kept.push(q.text);
+        q.el.classList.add('kept');
+        q.el.style.setProperty('--q', '#ff1a1a');      // the design system's one red, as small text on the dark
+        q.keep();
+        this._onScreen = null;
+      }
+    }
+
+    // standing still in her room for a while: the clock strikes twelve, then
+    // the kettle boils (places.js stay), once a visit
+    if (inKitchen && !this._roomStayed) {
+      this._roomStill = P.vel.length() < 0.15 ? (this._roomStill || 0) + dt : 0;
+      if (this._roomStill > ROOM_STILL) { this._roomStayed = true; this.audio?.roomStay?.(); }
     }
 
     // portals: cross-check, animate the veils, dim the ones already used

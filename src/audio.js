@@ -253,6 +253,30 @@ export class AudioEngine {
     }
   }
 
+  // someone else's steps on the tile, quiet, starting at (dx, dz) from the
+  // visitor and going off at (vx, vz) metres a second for `dur` seconds
+  steps(dx, dz, vx, vz, dur) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t0 = ctx.currentTime + 0.3, gap = 0.56;
+    for (let k = 0; k * gap < dur; k++) {
+      const s = k * gap + Math.random() * 0.04, x = dx + vx * s, z = dz + vz * s;
+      const out = this._at(x, z, Math.hypot(x, z)), t = t0 + s;
+      const fade = Math.min(1, (dur - s) / 1.5);            // they thin out as they go
+      const o = ctx.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime((k % 2 ? 64 : 59) * (0.97 + Math.random() * 0.06), t);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.0001 + 0.16 * fade, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.2);
+      const nb = ctx.createBufferSource(); nb.buffer = this._noiseBuf();
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2300; bp.Q.value = 1.2;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.0001 + 0.05 * fade, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.025);
+      nb.connect(bp); bp.connect(ng); ng.connect(out); nb.start(t); nb.stop(t + 0.04);
+    }
+  }
+
   // a thing off the wall hits the floor (glass: a few bright tinkles after), or the water
   fall(dx, dz, dist, { glass = false, wet = false } = {}) {
     if (!this.ctx || this.muted) return;
@@ -491,6 +515,7 @@ export class AudioEngine {
   }
 
   // Grandmother's room: the corridor music gives way to the gramophone.
+  roomStay() { this.music?.places?.stay(); }
   hush(on) { this._inRoom = !!on; this.music?.room(on); }
 
   // A presence door gives way for a moment, then slams.
