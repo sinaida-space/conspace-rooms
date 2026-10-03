@@ -119,6 +119,7 @@ async function boot() {
     let speed = 0;
     if (player) {
       player.update(dt);
+      ui.hintsTick(dt, player.vel.length() > 0.15, caps.device.isTouch);
       world.update(player.pos.x, player.pos.y);
       atmo = atmo ?? window.__app.atmo;
       // "Путь души": fog and clear colour follow the zone the visitor stands in

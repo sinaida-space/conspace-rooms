@@ -109,10 +109,24 @@ export class Places {
       this._tone(at + 0.32, 523, 515, 0.02, 0.02, 0.4, this.memory, 'triangle');
     }
   }
+  // For whoever stands still in grandmother's room, once a visit: the wall
+  // clock strikes twelve (it is always 12:24 there, but it strikes the hour
+  // it remembers), and as the last stroke dies the kettle comes to the boil.
+  stay() {
+    const t0 = this.ctx.currentTime + 0.4, gap = 1.45;
+    for (let k = 0; k < 12; k++) this._strike(t0 + k * gap);
+    this._kettle(t0 + 12 * gap + 1.5, 2.5);
+  }
+  // one stroke on a coiled gong: a low note with its inharmonic partials, the high ones gone first
+  _strike(t) {
+    const f = 196;
+    this._noiseBurst(t, 0.03, 'bandpass', 1800, 2, 0.015, this.memory);   // the hammer
+    for (const [m, v, len] of [[1, 0.05, 3.2], [2.76, 0.025, 1.6], [5.4, 0.012, 0.7]]) this._tone(t, f * m, f * m * 0.998, v, 0.004, len, this.memory);
+  }
   // the kettle: a rumble, then a whistle climbing into its note and cut off
-  _kettle(t) {
-    this._noiseBurstLong(t, 5, 0.01);
-    this._tone(t + 3, 1500, 2300, 0.006, 1.8, 4, this.memory);
+  _kettle(t, loud = 1) {
+    this._noiseBurstLong(t, 5, 0.01 * loud);
+    this._tone(t + 3, 1500, 2300, 0.006 * loud, 1.8, 4, this.memory);
   }
   _noiseBurstLong(t, len, vel) {
     const s = this.ctx.createBufferSource(); s.buffer = this._noise; s.loop = true;

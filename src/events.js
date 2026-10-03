@@ -17,6 +17,10 @@ import { CELL, CHUNK, solidAtGlobal } from './world.js';
 // begins) and are thrown only on a wall ahead, inside the view, so a zone
 // shows several. FEAR also has someone standing at the end of a corridor who
 // is gone as the visitor comes near; MEMORY a hand drawn along the wall.
+// Once the fear portal is summoned the shadows lead (LEAD_GAP): they come
+// more often, a figure walks the way the route to the portal goes, with its
+// steps heard going off that way, and the one standing at the end of a
+// corridor stands on the side where the route turns.
 // ?debug=events logs every event; window.__app.events.fire(kind) stages one
 // now; window.__app.events.log keeps them all ({ t, kind, stage, dist }).
 
@@ -27,6 +31,7 @@ const WEIGHTS = [
   { shiver: 3, drip: 3 },
 ];
 const SHADOW_GAP = [30, 50], SHADOW_FIRST = [8, 15];   // seconds; the first after a zone begins
+const LEAD_GAP = [12, 20];                              // fear, the portal summoned: the shadows lead the way to it
 const SHADOWS = [{ figure: 2, stander: 1 }, { cat: 1, hand: 1 }, { bird: 1 }];
 const LOOK = Math.cos(0.6);                             // inside ~35° of where the visitor looks
 const DEBUG = /(^|[?&])debug=events/.test(location.search);
@@ -118,7 +123,10 @@ export class EventDirector {
     for (let i = this.running.length - 1; i >= 0; i--) if (!this.running[i](step)) this.running.splice(i, 1);
     if (this.soul?.finale || document.hidden) return;
     if (this.stage.stage !== this._shadowStage) { this._shadowStage = this.stage.stage; this.shadowWait = rand(...SHADOW_FIRST); }
-    if ((this.shadowWait -= dt) <= 0) this.shadowWait = this.throwShadow() ? rand(...SHADOW_GAP) : 2;   // nowhere ahead: look again soon
+    if ((this.shadowWait -= dt) <= 0) {
+      const lead = this._lead();
+      this.shadowWait = this.throwShadow(null, lead) ? rand(...(lead ? LEAD_GAP : SHADOW_GAP)) : 2;   // nowhere ahead: look again soon
+    }
     this.wait -= dt;
     if (this.wait > 0) return;
     const st = this.stage.stage, w = WEIGHTS[st] || WEIGHTS[0];
@@ -149,19 +157,33 @@ export class EventDirector {
   }
 
   // one of the zone's shadows, on a wall ahead; false if there is none in view
-  throwShadow(kind) {
+  throwShadow(kind, lead = null) {
     const st = this.stage.stage;
+    if (!kind && lead) {                             // looking down the way: someone waits at its end, else one walks it
+      const f = this._ahead();
+      kind = f && f.x * lead.x + f.z * lead.z > 0.6 && Math.random() < 0.4 ? 'stander' : 'figure';
+    }
     if (!kind) {
       const w = SHADOWS[st] || SHADOWS[0], ks = Object.keys(w);
       let x = Math.random() * ks.reduce((u, k) => u + w[k], 0);
       kind = ks.find(k => (x -= w[k]) <= 0) || ks[0];
     }
-    const r = kind === 'stander' ? this._stander() : this._shadow(st, kind);
+    const r = kind === 'stander' ? this._stander(lead) : this._shadow(st, kind, lead);
     if (!r) return false;
-    const e = { t: +this.t.toFixed(1), kind, stage: st, dist: +r.dist.toFixed(1) };
+    const e = { t: +this.t.toFixed(1), kind, stage: st, dist: +r.dist.toFixed(1), lead: !!lead };
     this.shadows.push(e);
+    if (lead) this.ledAt = { t: this.t, x: lead.x, z: lead.z };   // the way the last leading shadow showed (checks)
     if (DEBUG) console.info('[events] shadow', e);
     return true;
+  }
+
+  // The way to the summoned fear portal from where the visitor stands, as a
+  // unit vector on the floor, or null when there is nothing to lead to.
+  _lead() {
+    const s = this.soul, plan = s?.summonedPortals?.[1];
+    if (this.stage.stage !== 0 || !plan) return null;
+    const yaw = s._wayYaw(plan);
+    return yaw == null ? null : { x: -Math.sin(yaw), z: -Math.cos(yaw) };
   }
 
   _here() { return { x: this.player.pos.x, z: this.player.pos.y }; }
@@ -187,7 +209,7 @@ export class EventDirector {
   // a wall run near the visitor, long enough to walk a shadow along, whose
   // middle is inside the view; facing: it must face the visitor head-on
   // (the wall that closes a corridor ahead)
-  _wallNear(min, max, minLen, facing = false) {
+  _wallNear(min, max, minLen, facing = false, lead = null) {
     const p = this._here(), f = this._ahead(), cx = Math.floor(p.x / (CELL * CHUNK)), cz = Math.floor(p.z / (CELL * CHUNK));
     const cand = [];
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++)
@@ -203,11 +225,17 @@ export class EventDirector {
         if (-(sl.normal.x * dx + sl.normal.z * dz) / d < (facing ? 0.8 : 0.5)) continue;
         if (clear(p.x, p.z, sl.position.x + sl.normal.x * 0.3, sl.position.z + sl.normal.z * 0.3)) cand.push({ sl, d });
       }
+    if (lead && !facing && cand.length) {             // leading: a wall that runs the way the route goes
+      const along = c => Math.abs(-c.sl.normal.z * lead.x + c.sl.normal.x * lead.z);
+      const best = Math.max(...cand.map(along));
+      const runs = cand.filter(c => along(c) > best - 0.2);
+      return runs[Math.floor(Math.random() * runs.length)];
+    }
     return cand.length ? cand[Math.floor(Math.random() * cand.length)] : null;
   }
 
-  _shadow(st, kind = ['figure', 'cat', 'bird'][st]) {
-    const w = this._wallNear(3, st === 2 ? 8 : 12, kind === 'figure' ? 4 : 3);
+  _shadow(st, kind = ['figure', 'cat', 'bird'][st], lead = null) {
+    const w = this._wallNear(3, st === 2 ? 8 : 12, kind === 'figure' ? 4 : 3, false, lead);
     if (!w) return null;
     const sil = this.sil[kind] ||= silhouette(kind);
     const h = kind === 'figure' ? 2.2 : kind === 'cat' ? 0.6 : kind === 'hand' ? 0.34 : 0.55;
@@ -216,13 +244,18 @@ export class EventDirector {
     mat.map.needsUpdate = true;
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(h * sil.scale * sil.aspect, h * sil.scale), mat);
     const { sl } = w, n = sl.normal, along = new THREE.Vector3(-n.z, 0, n.x);   // along the wall, to the right as it faces the visitor
-    const half = sl.length * CELL / 2 - 0.3, dir = Math.random() < 0.5 ? 1 : -1;
+    const half = sl.length * CELL / 2 - 0.3;
+    const dir = lead ? (along.x * lead.x + along.z * lead.z >= 0 ? 1 : -1) : Math.random() < 0.5 ? 1 : -1;
     mesh.rotation.y = Math.atan2(n.x, n.z);
     if (dir < 0) { mat.map.repeat.x = -1 / sil.frames; mat.map.offset.x = 1 / sil.frames; }   // facing the way it goes
     const y0 = kind === 'figure' ? h / 2 + 0.02 : kind === 'cat' ? h / 2 + 0.05 : kind === 'hand' ? rand(1.15, 1.45) : rand(1.7, 2.3);
     const speed = kind === 'figure' ? 1.1 : kind === 'cat' ? 0.9 : kind === 'hand' ? 0.45 : 3.2, dur = (2 * half) / speed;
     this.scene.add(mesh);
     this.lastShadow = mesh;                          // for checks
+    if (lead && kind === 'figure') {                 // its steps, heard going off the way it walks
+      const p = this._here(), x0 = sl.position.x - along.x * half * dir, z0 = sl.position.z - along.z * half * dir;
+      this.audio?.steps?.(x0 - p.x, z0 - p.z, along.x * dir * speed, along.z * dir * speed, dur + 1.5);
+    }
     let t = 0;
     this.running.push(dt => {
       t += dt;
@@ -244,14 +277,15 @@ export class EventDirector {
 
   // Someone standing at the end of the corridor ahead, still; gone in a
   // breath when the visitor comes within a few metres, or after a while
-  _stander() {
+  _stander(lead = null) {
     const w = this._wallNear(6, 20, 2, true);
     if (!w) return null;
     const sil = this.sil.figure ||= silhouette('figure');
     const h = 2.15, mat = new THREE.MeshBasicMaterial({ map: sil.tex, transparent: true, opacity: 0, depthWrite: false, fog: true,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(h * sil.scale * sil.aspect, h * sil.scale), mat);
-    const { sl } = w, n = sl.normal, along = new THREE.Vector3(-n.z, 0, n.x), off = rand(-0.4, 0.4);
+    const { sl } = w, n = sl.normal, along = new THREE.Vector3(-n.z, 0, n.x);
+    const off = lead ? Math.sign(along.x * lead.x + along.z * lead.z || 1) * rand(0.4, Math.max(0.5, sl.length * CELL / 2 - 0.5)) : rand(-0.4, 0.4);   // on the side the way turns
     mesh.rotation.y = Math.atan2(n.x, n.z);
     mesh.position.set(sl.position.x + n.x * 0.03 + along.x * off, h / 2 + 0.02, sl.position.z + n.z * 0.03 + along.z * off);
     this.scene.add(mesh);

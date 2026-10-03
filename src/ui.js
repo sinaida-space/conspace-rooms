@@ -109,6 +109,7 @@ export class UI {
     await new Promise(res => {
       $('btn-consent')?.addEventListener('click', () => {
         try { localStorage.setItem('conspace-consent', '1'); } catch (e) { /* storage blocked */ }
+        document.body.classList.add('tw-read');   // the warning was just read here: the welcome need not repeat it
         res();
       }, { once: true });
     });
@@ -348,6 +349,19 @@ export class UI {
     set();
     addEventListener('resize', set);
     watch.observe(document.body, { childList: true });   // the pad arrives later
+  }
+
+  // The legend (and the pad's arrows where there is a keyboard instead of a
+  // finger) step back after 20 s of walking and come back once the visitor
+  // has stood idle for 30 s. Called every frame with whether the walk moves.
+  hintsTick(dt, walking, touch) {
+    if (walking) { this._walkT = (this._walkT || 0) + dt; this._idleT = 0; }
+    else if ((this._idleT = (this._idleT || 0) + dt) >= 30) this._walkT = 0;
+    const away = (this._walkT || 0) >= 20;
+    if (away === this._hintsAway) return;
+    this._hintsAway = away;
+    document.body.classList.toggle('hints-away', away);
+    document.body.classList.toggle('pad-away', away && !touch);
   }
 
   // Persistent low-opacity key legend for keyboard mode — mirrors the

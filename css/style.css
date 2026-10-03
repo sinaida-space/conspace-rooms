@@ -412,6 +412,8 @@ body::after {
   opacity: 0; transition: opacity 1s ease;
 }
 #soul-q.visible { opacity: 1; }
+/* kept: stood still with, it goes to the card (soulpath.js); it warms to the one red */
+#soul-q .sq-label, #soul-q .sq-text { transition: color 2.4s ease, text-shadow 2.4s ease; }
 #soul-q .sq-label { display: inline-block; font-size: 0.75em; letter-spacing: 0.2em; color: var(--q, #6fcf8e); opacity: 0.85; margin-bottom: 0.5em; background: rgba(1, 8, 5, 0.55); padding: 0.2em 0.6em; }
 #soul-q .sq-text {
   font-size: clamp(1.1rem, 2.6vw, 1.7rem); line-height: 1.5; color: var(--q, var(--fg));
@@ -420,6 +422,11 @@ body::after {
 }
 
 body.inspecting #control-hud, body.inspecting #hand-legend, body.inspecting #pad .pad-arrows { opacity: 0 !important; pointer-events: none; }
+/* after a while of walking the hints step back (ui.js hintsTick); the arrows only where there is a keyboard */
+#pad .pad-arrows { transition: opacity 1.2s ease; }
+body.hints-away #control-hud, body.hints-away #hand-legend { opacity: 0; transition-duration: 1.2s; }
+body.pad-away #pad .pad-arrows { opacity: 0; }
+body.tw-read #welcome .tw { display: none; }
 
 /* on-screen pad for the buttons mode: arrows bottom-left, LOOK CLOSER bottom-right above mute */
 #pad {

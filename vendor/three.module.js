@@ -29524,7 +29524,8 @@ class WebGLRenderer {
 						const materialProperties = properties.get( material );
 						const program = materialProperties.currentProgram;
 
-						if ( program.isReady() ) {
+						// conspace: a material disposed while it compiled (its chunk unloaded) has no program left
+						if ( program === undefined || program.isReady() ) {
 
 							// remove any programs that report they're ready to use from the list
 							materials.delete( material );
