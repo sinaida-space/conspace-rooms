@@ -2753,7 +2753,8 @@ export class SoulPath {
       } else if (st === 1) {
         if (s.egg && near(s.egg.x, s.egg.z)) out.push({ kind: 'clock', key: s.egg, x: s.egg.x, y: 0.7, z: s.egg.z, r: 0.35 });
         const tv = s.kitchen?.room?.tv;
-        if (tv && near(tv.x, tv.z)) out.push({ kind: 'tv', key: s.kitchen.room, x: tv.x, y: 0.76, z: tv.z, r: 0.7 });
+        const talking = this._tvText && performance.now() < this._tvUntil;   // a soul speaking on it is not interrupted
+        if (tv && !talking && near(tv.x, tv.z)) out.push({ kind: 'tv', key: s.kitchen.room, x: tv.x, y: 0.76, z: tv.z, r: 0.7 });
       } else {
         for (const th of s.drown?.things || []) if (near(th.x, th.z)) out.push({ kind: 'drowned', key: th, x: th.x, y: th.floats ? 0.3 : 0.08, z: th.z, r: 0.3, th });
       }
