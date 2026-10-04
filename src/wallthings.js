@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { shape } from './props.js';
 import { roundedBox } from './geom.js';
 import { mountOrDrop } from './placement.js';
+import { getLang } from './i18n.js';
 
 // ── conspace-rooms · wallthings.js ──────────────────────────────────────────
 // Small things hung on the corridor walls (#43, C4), each its own mesh so the
@@ -30,6 +31,27 @@ function digitInk(d, u, v) {
     || (s[5] === '1' && vl(t / 2, 0.5, 1)) || (s[4] === '1' && vl(t / 2, 0, 0.5));
 }
 
+// The maker's mark above the six, in thin strokes: «ИН» in Russian, «JN»
+// in English (John, as the time they all stopped at). Glyphs in a unit cell.
+const GLYPH = {
+  'И': [[0, 0, 0, 1], [1, 0, 1, 1], [0, 0, 1, 1]],
+  'Н': [[0, 0, 0, 1], [1, 0, 1, 1], [0, 0.5, 1, 0.5]],
+  'J': [[1, 1, 1, 0.22], [1, 0.22, 0.55, 0], [0.55, 0, 0.05, 0.22]],
+  'N': [[0, 0, 0, 1], [1, 0, 1, 1], [0, 1, 1, 0]],
+};
+function brand(put, R, ink) {
+  const text = getLang() === 'ru' ? 'ИН' : 'JN';
+  const h = R * 0.15, w = R * 0.1, sw = R * 0.018, gap = R * 0.07, y0 = -R * 0.5;   // above the six: at 12:24 the hour hand covers the twelve
+  const x0 = -(text.length * w + (text.length - 1) * gap) / 2;
+  [...text].forEach((ch, n) => {
+    for (const [ax, ay, bx, by] of GLYPH[ch]) {
+      const x1 = x0 + n * (w + gap) + ax * w, y1 = y0 + ay * h, x2 = x0 + n * (w + gap) + bx * w, y2 = y0 + by * h;
+      const len = Math.hypot(x2 - x1, y2 - y1) + sw, a = Math.atan2(x2 - x1, y2 - y1);
+      put(new THREE.BoxGeometry(sw, len, 0.002), ink, 0.1, M((x1 + x2) / 2, (y1 + y2) / 2, 0.035, 0, 0, -a));
+    }
+  });
+}
+
 // a clock face: ticks round the rim and the hands at hh:mm, all in the face's plane (z = 0 front)
 function clockFace(put, R, rim, face, ink, hh, mm, { second = null, roman = false } = {}) {
   put(faceOut(new THREE.CylinderGeometry(R, R, 0.03, 40)), rim, 0.55, M(0, 0, 0.015));
@@ -40,6 +62,7 @@ function clockFace(put, R, rim, face, ink, hh, mm, { second = null, roman = fals
     const l = roman ? 0.022 : big ? 0.03 : 0.016, w = roman ? (big ? 0.012 : 0.006) : big ? 0.009 : 0.005;
     put(new THREE.BoxGeometry(w, l, 0.002), ink, 0.1, M(Math.sin(a) * R * 0.76, Math.cos(a) * R * 0.76, 0.035, 0, 0, -a));
   }
+  brand(put, R, ink);
   const hand = (len, w, a, col, z) => put(new THREE.BoxGeometry(w, len, 0.003), col, 0.4, M(Math.sin(a) * len * 0.4, Math.cos(a) * len * 0.4, z, 0, 0, -a));
   hand(R * 0.5, 0.012, ((hh % 12) + mm / 60) / 12 * Math.PI * 2, ink, 0.038);
   hand(R * 0.74, 0.008, mm / 60 * Math.PI * 2, ink, 0.041);
@@ -139,8 +162,9 @@ export function createWallThings(atmo) {
   const mat = atmo.prop({ vertexColors: true, rust: 0.05 });
   const geos = new Map();
   const geoOf = (name) => {
-    if (!geos.has(name)) { const g = shape(BUILD[name].build); g.computeBoundingSphere(); geos.set(name, g); }
-    return geos.get(name);
+    const key = name + ':' + getLang();               // the clocks carry a maker's mark in the game's language
+    if (!geos.has(key)) { const g = shape(BUILD[name].build); g.computeBoundingSphere(); geos.set(key, g); }
+    return geos.get(key);
   };
   return {
     // group: the chunk's · stage 0 fear, 1 memory, 2 light · spots: [{ x, z, nx, nz, r }] wall face points.

@@ -39,8 +39,10 @@ function clockTexture() {
   g.fillText('12:24', 80, 27);
   g.shadowBlur = 26; g.fillText('12:24', 80, 27); // a second, brighter pass over the first
   g.shadowBlur = 0;
-  g.fillStyle = '#c7ccd0';                          // the brand plaque, a silver strip under the display
-  g.fillRect(46, 47, 68, 5);
+  g.fillStyle = '#c7ccd0';                          // the brand plaque, a silver strip under the display, and its mark
+  g.fillRect(46, 50, 68, 7);
+  g.fillStyle = '#1a1414'; g.font = '700 7px Arial, sans-serif'; g.textBaseline = 'middle';
+  g.fillText(getLang() === 'ru' ? 'ИН' : 'JN', 80, 53.8);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
