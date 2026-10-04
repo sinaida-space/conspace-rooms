@@ -92,12 +92,14 @@ three taps, E or the controller's A three times while looking at it, or one open
 palm held toward it for two seconds. A candle crackles by the ear, flares, sends
 sparks toward a work not yet seen and asks a question in its smoke; in fear a
 bed's sheet breathes, a drip falls slowly to a monitor's beep, a wheelchair
-squeaks; in grandmother's world her clock strikes and the television shows
-12:24; in the light a drowned thing stirs in the water.
+squeaks; in grandmother's world the television shows 12:24; in the light a
+drowned thing stirs in the water. A clock needs only one touch: it ticks and
+strikes once. Every clock stopped at 12:24 carries the same maker's mark, «ИН»
+in Russian and «JN» in English.
 
 Subtitles for the sounds and the music (`src/captions.js`) are switched on the
 welcome screen or in the menu and kept only in the URL as `?cc=1`. They look
-like film captions: yellow with a black edge, [sounds in brackets], ♪ music ♪,
+like film captions: yellow with a black edge, [sounds in brackets], `♪ music ♪`,
 and a sound from one side is captioned on that side of the screen.
 
 Gesture mode requests webcam access on entry (opt-in); if it's denied or unavailable the
