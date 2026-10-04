@@ -227,6 +227,7 @@ opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 
 - Vanilla JS (ES modules), no build step
 - [Departure Mono](https://github.com/rektdeckard/departure-mono) by Helena Zhang (SIL OFL 1.1), self-hosted in `assets/fonts/`
+- Subtitles use the device's system font (Helvetica Neue / Helvetica / Arial / system-ui); nothing is loaded or shipped for them
 - [three.js](https://threejs.org/) (vendored) for rendering
 - Procedural GLSL materials; the labyrinth geometry uses no texture files
 - Two CC0 models from [Poly Haven](https://polyhaven.com/) in `assets/models/` (Old Bed Frame, Wheelchair 01), simplified with glTF-Transform; every other hospital prop is drawn in `src/ward.js`
