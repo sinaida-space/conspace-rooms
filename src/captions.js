@@ -62,7 +62,7 @@ export const captions = {
   // say('creak', { dx, dz }) or say('cuckoo', { pan }) or say(key, { at }) for
   // a sound scheduled on the audio clock; gap: seconds before it may repeat
   say(key, { dx, dz, pan, at, gap, music = false } = {}) {
-    if (!on || window.__app?.audio?.muted) return;
+    if (!on) return;                             // with the sound off too: that is when they are read most
     const now = performance.now();
     if (now - (last.get(key) ?? -Infinity) < (gap != null ? gap * 1000 : GAP_MS)) return;
     last.set(key, now);

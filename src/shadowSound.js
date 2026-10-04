@@ -38,9 +38,9 @@ function puff(ctx, dest, t, { type = 'bandpass', f0, f1 = f0, q = 1.2, peak, att
 // The shadow's voice. update(dx, dz) each frame (from the listener, world),
 // step() on each footfall, halt() when it stops dead, stop() when it is gone.
 export function shadowVoice(audio, kind) {
+  captions.say('shadow_' + kind, { gap: 12 });           // read even with the sound off
   const ctx = audio?.ctx;
   if (!ctx || audio.muted) return null;
-  captions.say('shadow_' + kind, { gap: 12 });
   const pan = ctx.createStereoPanner(), near = ctx.createGain();
   near.gain.value = 0;
   pan.connect(near); near.connect(audio.bed);
