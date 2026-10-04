@@ -1158,7 +1158,7 @@ export class SoulPath {
         palette: t('cardPalette'), palettes: t('cardPalettes'),
         thanks: t('finThanks'), farewells: t('finLines'), links: t('finLinks'),
       },
-      onHome: () => { location.href = `index.html?lang=${getLang()}`; },   // the title screen, in the same language
+      onHome: () => { location.href = `index.html?lang=${getLang()}${/[?&]cc=1/.test(location.search) ? '&cc=1' : ''}`; },   // the title screen, in the same language
     });
   }
 

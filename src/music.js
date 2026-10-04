@@ -43,6 +43,10 @@
 // ahead, so a busy frame never makes the music stumble.
 
 import { Places } from './places.js';
+import { captions } from './captions.js';
+
+const CORRIDOR_CC = ['ward', 'kosmos', 'techno', 'synth', 'musicBox', 'radioPiece', 'cello', 'glass', 'bells'];
+const ROOM_CC = ['waltz', 'tango', 'estrada', 'romance', 'foxtrot', 'gypsy', 'kids'];
 
 const midi = n => 440 * Math.pow(2, (n - 69) / 12);
 const LOOKAHEAD = 1.5;           // seconds of music scheduled ahead of now
@@ -241,6 +245,8 @@ export class Music {
     if (stage !== this.stage) {                       // a new world: its own music from the next phrase on
       this.stage = stage;
       this._piece.corridorUntil = 0;
+      captions.say('amb' + stage, { gap: 30 });
+      if (stage === 1 && !this.inRoom) captions.say('r_' + ROOM_CC[this._piece.room] + 'Far', { music: true, gap: 20 });
       this._mixLevels(3);
     }
   }
@@ -260,6 +266,7 @@ export class Music {
     this._mixLevels(on ? 3.5 : 2.5);
     this.roomFar.frequency.setTargetAtTime(on ? 7000 : 1500, this.ctx.currentTime, 1.5);
     if (on) { this._t.room = Math.max(this._t.room, this.ctx.currentTime + 0.4); this._bar.room = 0; }
+    if (on) captions.say('r_' + ROOM_CC[this._piece.room], { music: true, gap: 20 });
   }
   // a door gives way: the light plays over everything for `seconds`
   light(seconds = 5) {
@@ -381,6 +388,7 @@ export class Music {
       this._piece.corridor = next[Math.floor(Math.random() * next.length)];
       this._vc = this._variation();
       this._piece.corridorUntil = t0 + PIECE_SECONDS[0] + Math.random() * (PIECE_SECONDS[1] - PIECE_SECONDS[0]);
+      if (!this.gram) captions.say('m_' + CORRIDOR_CC[this._piece.corridor], { at: t0 + 1.5, music: true, gap: 20 });
       this._bar.corridor = 0;
       this._t.corridor += 1.5;                                   // a breath between pieces
       return;
@@ -596,6 +604,7 @@ export class Music {
 
   // the radio breaking through: tuning noise, then the six pips of the time signal
   _radio(t) {
+    captions.say('radio', { at: t });
     const ctx = this.ctx;
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1400; bp.Q.value = 1.4;
     const out = ctx.createGain(); out.gain.value = 1;
@@ -627,6 +636,7 @@ export class Music {
       this._bar.room = 0;
       this._t.room += 2;                                          // the needle lifted and set down
       if (this.gram) this._click(t0 + 0.4, 0.3, 700, this.roomBus);
+      if (this.gram) captions.say('r_' + ROOM_CC[this._piece.room] + (this.inRoom ? '' : 'Far'), { at: t0 + 2, music: true, gap: 20 });
       return;
     }
     this._out = this.roomIn; this._v = this._vr; this._lane = 'room';

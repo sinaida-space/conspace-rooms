@@ -141,7 +141,9 @@ export class Player {
     if (this.locked) return; // inspect mode owns the camera; leave pos/yaw/pitch untouched
 
     // keys always work, on hands too: any walking key takes over from the hands
-    const keyMove = MOVE_KEYS.some(k => this.keys[k]);
+    const pad = this.pad;                             // a game controller (gamepad.js), if one is in hand
+    const padMove = !!pad && !!(pad.walk || pad.strafe || pad.turn || pad.look);
+    const keyMove = MOVE_KEYS.some(k => this.keys[k]) || padMove;
     if (keyMove && this.auto && !this.auto.hold) this.auto = null;   // a hold (the finale) is not let go
     const onHands = this.hand.present && !keyMove;
 
@@ -163,7 +165,11 @@ export class Player {
     } else {
       // arrow-left/right turn the camera directly (independent of pointer-lock
       // mouse look, which stays optional) — A/D remain strafe below.
-      const turn = (this.keys.ArrowRight ? 1 : 0) - (this.keys.ArrowLeft ? 1 : 0) + (this.drive?.x || 0);
+      const turn = (this.keys.ArrowRight ? 1 : 0) - (this.keys.ArrowLeft ? 1 : 0) + (this.drive?.x || 0) + (pad?.turn || 0);
+      if (pad && (pad.turn || pad.look)) {
+        this._lookAt = performance.now();             // looking round with the stick: the walk does not straighten the view
+        this.pitch = clamp(this.pitch - pad.look * YAW_RATE * 0.6 * dt, -PITCH_LIMIT, PITCH_LIMIT);
+      }
       if (turn) this.yaw -= Math.max(-1, Math.min(1, turn)) * YAW_RATE * dt;
       this._keyTurn = !!turn;
     }
@@ -185,9 +191,9 @@ export class Player {
       if (walk && !this.hand.bothFists && (this.hand.turnLeft || this.hand.turnRight)) walk = TURN_WALK;
       strafe = 0;
     } else {
-      walk = (this.keys.KeyW || this.keys.ArrowUp ? 1 : 0) - (this.keys.KeyS || this.keys.ArrowDown ? 1 : 0) - (this.drive?.y || 0);
+      walk = (this.keys.KeyW || this.keys.ArrowUp ? 1 : 0) - (this.keys.KeyS || this.keys.ArrowDown ? 1 : 0) - (this.drive?.y || 0) + (pad?.walk || 0);
       walk = Math.max(-1, Math.min(1, walk));
-      strafe = (this.keys.KeyD ? 1 : 0) - (this.keys.KeyA ? 1 : 0);
+      strafe = Math.max(-1, Math.min(1, (this.keys.KeyD ? 1 : 0) - (this.keys.KeyA ? 1 : 0) + (pad?.strafe || 0)));
     }
 
     this.intent = walk;
@@ -208,7 +214,7 @@ export class Player {
     // run: Shift on the keyboard; holding the pad's ▲ for 1.5 s speeds up by
     // itself; both hand fists held long do the same
     this._walkT = walk > 0 ? (this._walkT || 0) + dt : 0;
-    const running = this.keys.ShiftLeft || this.keys.ShiftRight || (onHands && this.hand.bothFists && walk > 0) ||
+    const running = this.keys.ShiftLeft || this.keys.ShiftRight || (pad?.run && walk > 0) || (onHands && this.hand.bothFists && walk > 0) ||
       ((this.keys.Pad || (this.drive && this.drive.y < -0.9)) && this._walkT > 1.5);
     const top = running ? RUN_SPEED : MAX_SPEED;
     const target = new THREE.Vector2(tx * top, tz * top);

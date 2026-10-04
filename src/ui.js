@@ -4,6 +4,7 @@ import { keyCode } from './input.js';
 import { t, getLang, setLang, langFromUrl, applyStatic } from './i18n.js';
 import { renderFooter } from './footer.js';
 import { calm } from './calm.js';
+import { captions } from './captions.js';
 
 const $ = id => document.getElementById(id);
 const wait = ms => new Promise(res => setTimeout(res, ms));
@@ -171,6 +172,16 @@ export class UI {
     // nothing is chosen for the visitor: ВОЙТИ waits until a way to walk is picked
     this.selectedMode = null;
     this._syncTrain();
+    // subtitles for the sounds, chosen here or later in the menu (captions.js)
+    const cc = $('btn-cc-welcome');
+    if (cc) {
+      const sync = () => {
+        cc.setAttribute('aria-checked', String(captions.on));
+        cc.querySelector('.cc-box').textContent = captions.on ? '[x]' : '[ ]';
+      };
+      cc.addEventListener('click', () => captions.set(!captions.on));
+      captions.onChange(sync); sync();
+    }
     const enter = $('btn-enter');
     if (enter) enter.disabled = true;
     const buttons = Array.from(document.querySelectorAll('#mode-select button'));
@@ -477,6 +488,14 @@ export class UI {
     calmBtn?.addEventListener('click', () => calm.set(!calm.on));
     if (calmBtn) { calm.onChange(syncCalm); syncCalm(); }
 
+    const ccBtn = $('btn-cc');
+    const syncCc = () => {
+      ccBtn.querySelector('span').textContent = t(captions.on ? 'ccOn' : 'ccOff');
+      ccBtn.setAttribute('aria-checked', String(captions.on));
+    };
+    ccBtn?.addEventListener('click', () => captions.set(!captions.on));
+    if (ccBtn) { captions.onChange(syncCc); syncCc(); }
+
     const fsBtn = $('btn-fullscreen');
     const syncFsLabel = () => {
       const active = !!document.fullscreenElement;
@@ -491,7 +510,7 @@ export class UI {
     // In-page confirm: window.confirm() is silently blocked in some embedded
     // browsers, which left this button doing nothing.
     $('btn-main-screen').addEventListener('click', async () => {
-      if (await this.confirmDialog(t('confirmLeave'))) location.href = `index.html?lang=${getLang()}`;
+      if (await this.confirmDialog(t('confirmLeave'))) location.href = `index.html?lang=${getLang()}${captions.on ? '&cc=1' : ''}`;
     });
 
     $('btn-finish').addEventListener('click', () => onFinish?.());

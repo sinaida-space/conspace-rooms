@@ -7,6 +7,8 @@
 //             and once in a long while a kettle coming to the boil
 //   light     open air: a slow wind and birds calling
 
+import { captions } from './captions.js';
+
 const TICK = 1.0;                  // seconds between the clock's ticks
 
 export class Places {
@@ -88,12 +90,14 @@ export class Places {
 
   // a drop far off: a tick, then a small rising bubble, mostly echo
   _drip(t) {
+    captions.say('dripFar', { at: t, gap: 60 });
     const f = 900 + Math.random() * 900;
     this._noiseBurst(t, 0.01, 'highpass', 3000, 0.7, 0.01, this.verb);
     this._tone(t + 0.004, f, f * 1.9, 0.012, 0.002, 0.06, this.verb);
   }
   // a tube stuttering: the hum breaks into clicks for a moment
   _flicker(t) {
+    captions.say('flicker', { at: t, gap: 30 });
     for (let k = 0; k < 3 + Math.floor(Math.random() * 5); k++) this._noiseBurst(t + k * (0.04 + Math.random() * 0.08), 0.02, 'bandpass', 2200, 1.2, 0.02, this.fear);
   }
   // tick and tock, a little apart in pitch
@@ -103,6 +107,7 @@ export class Places {
   }
   // the little door opens: two notes a third apart, twice
   _cuckoo(t) {
+    captions.say('cuckoo', { at: t });
     for (let k = 0; k < 2; k++) {
       const at = t + k * 0.9;
       this._tone(at, 659, 650, 0.02, 0.02, 0.28, this.memory, 'triangle');
@@ -114,6 +119,7 @@ export class Places {
   // it remembers), and as the last stroke dies the kettle comes to the boil.
   stay() {
     const t0 = this.ctx.currentTime + 0.4, gap = 1.45;
+    captions.say('strike', { at: t0 });
     for (let k = 0; k < 12; k++) this._strike(t0 + k * gap);
     this._kettle(t0 + 12 * gap + 1.5, 2.5);
   }
@@ -125,6 +131,7 @@ export class Places {
   }
   // the kettle: a rumble, then a whistle climbing into its note and cut off
   _kettle(t, loud = 1) {
+    captions.say('kettle', { at: t });
     this._noiseBurstLong(t, 5, 0.01 * loud);
     this._tone(t + 3, 1500, 2300, 0.006 * loud, 1.8, 4, this.memory);
   }
@@ -136,6 +143,7 @@ export class Places {
   }
   // a bird: a few quick upward chirps, somewhere to one side
   _bird(t) {
+    captions.say('bird', { at: t, gap: 90 });
     const pan = this.ctx.createStereoPanner(); pan.pan.value = Math.random() * 1.6 - 0.8; pan.connect(this.light);
     const base = 2600 + Math.random() * 1800, n = 2 + Math.floor(Math.random() * 4);
     for (let k = 0; k < n; k++) this._tone(t + k * (0.09 + Math.random() * 0.05), base, base * (1.3 + Math.random() * 0.4), 0.008, 0.005, 0.07, pan);

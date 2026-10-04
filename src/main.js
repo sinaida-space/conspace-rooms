@@ -7,6 +7,7 @@ import { t, applyStatic, setLang, langFromUrl, getLang } from './i18n.js';
 import { mixZone, SoulStage } from './zones.js';
 import { createClip, clipSupported } from './clip.js';
 import { installBugReport, setBugSource, bugTick, bugFrame } from './bugreport.js';
+import { pollGamepad } from './gamepad.js';
 
 installBugReport();   // R R R anywhere: a picture of the state to screenshot and send
 // F: full screen, on every screen and in every mode
@@ -118,6 +119,7 @@ async function boot() {
     audio = audio ?? window.__app.audio;
     let speed = 0;
     if (player) {
+      pollGamepad(player, router);
       player.update(dt);
       ui.hintsTick(dt, player.vel.length() > 0.15, caps.device.isTouch);
       world.update(player.pos.x, player.pos.y);

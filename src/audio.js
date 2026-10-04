@@ -2,6 +2,7 @@ import { startAmbience } from './ambience.js';
 import { sketchParam } from './device.js';
 import { Music } from './music.js';
 import { WaterSound } from './waterSound.js';
+import { captions } from './captions.js';
 // Generative audio, zero files: the music (music.js), crackle, footsteps,
 // turns, the works' voices, soft chime on demand.
 // Init-only — build only after a user gesture (start()), not auto-started.
@@ -188,6 +189,7 @@ export class AudioEngine {
 
   // one drip landed: dx/dz = direction from the listener (world), dist metres
   drip(dx, dz, dist) {
+    captions.say('drip', { dx, dz, gap: 20 });
     if (!this.ctx || this.muted) return;
     const yaw = window.__app?.player?.yaw ?? 0;
     this.water.drip(dx, dz, dist, yaw);
@@ -208,6 +210,7 @@ export class AudioEngine {
 
   // a floorboard or an old hinge somewhere: a slow stick-slip saw through two resonances
   creak(dx, dz, dist, { low = false } = {}) {
+    captions.say(low ? 'floor' : 'creak', { dx, dz });
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime, dur = 0.5 + Math.random() * 0.6, out = this._at(dx, dz, dist);
     const o = ctx.createOscillator(); o.type = 'sawtooth';
@@ -233,6 +236,7 @@ export class AudioEngine {
 
   // knocks: metal on a pipe (a ringing partial) or knuckles on a wooden door
   knock(dx, dz, dist, { metal = false, n = 2 + Math.floor(Math.random() * 2) } = {}) {
+    captions.say(metal ? 'pipe' : 'knock', { dx, dz });
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, out = this._at(dx, dz, dist);
     for (let k = 0; k < n; k++) {
@@ -256,6 +260,7 @@ export class AudioEngine {
   // someone else's steps on the tile, quiet, starting at (dx, dz) from the
   // visitor and going off at (vx, vz) metres a second for `dur` seconds
   steps(dx, dz, vx, vz, dur) {
+    captions.say('steps', { dx, dz, gap: 15 });
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t0 = ctx.currentTime + 0.3, gap = 0.56;
     for (let k = 0; k * gap < dur; k++) {
@@ -279,6 +284,7 @@ export class AudioEngine {
 
   // a thing off the wall hits the floor (glass: a few bright tinkles after), or the water
   fall(dx, dz, dist, { glass = false, wet = false } = {}) {
+    captions.say(wet ? 'fallWet' : glass ? 'fallGlass' : 'fall', { dx, dz });
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime, out = this._at(dx, dz, dist);
     const burst = (at, type, fr, q, peak, dur) => {
@@ -317,6 +323,7 @@ export class AudioEngine {
   }
 
   chime() { // soft bell: root + fifth, long decay
+    captions.say('chime', { gap: 10 });
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime;
     for (const [f, v] of [[523.25, 0.10], [784, 0.05], [1046.5, 0.03]]) {
@@ -336,6 +343,7 @@ export class AudioEngine {
   // rings in one large empty room. to: the stage entered · times: the
   // tunnel's own (seconds).
   crossing(to, { inT = 0.75, hold = 1.6, out = 0.9 } = {}) {
+    captions.say('crossing');
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime + 0.02, open = t + inT + hold;
     if (!this._room) {                                   // a stereo tail of darkening, decaying noise, built once
@@ -458,6 +466,7 @@ export class AudioEngine {
 
   // A whisper: breath-like noise swelling and falling, for the souls.
   whisper() {
+    captions.say('whisper');
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime, len = ctx.sampleRate * 3;
     const buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
@@ -472,6 +481,7 @@ export class AudioEngine {
 
   // Television snow: a hiss whose level the caller sets (0 silent .. 1 close).
   tvStatic(level) {
+    if (level > 0.3) captions.say('tv', { gap: 30 });
     if (!this.ctx) return;
     if (!this._tvGain) {
       const ctx = this.ctx, len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
@@ -525,6 +535,7 @@ export class AudioEngine {
   // and what is left is a low mains hum and a slow heartbeat, close, as if
   // inside the head. The corridor comes back after.
   nightmare(seconds) {
+    captions.say('nightmare');
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime;
     this.bed.gain.setTargetAtTime(0.12, t, 0.35);
@@ -552,6 +563,7 @@ export class AudioEngine {
     }
   }
   doorSlam() {
+    captions.say('doorSlam');
     this.music?.slam();
     if (!this.ctx || this.muted) return;
     // the wood of it: a hollow knock and a rattle of the latch after
@@ -571,6 +583,7 @@ export class AudioEngine {
   // sticks and slips, chopped by the stick-slip itself, through two
   // resonances of the wood.
   doorCreak(seconds = 1.3) {
+    captions.say('doorCreak');
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime;
     const o = ctx.createOscillator(); o.type = 'sawtooth';
@@ -601,6 +614,7 @@ export class AudioEngine {
   // clicking as it falls, and a long hiss settling after. All into bed, so
   // muting and the corridor's own levels still hold.
   collapse() {
+    captions.say('collapse');
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime, dur = 3.6;
     const len = ctx.sampleRate * dur, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
@@ -647,6 +661,7 @@ export class AudioEngine {
 
   // The metal door slamming shut: a heavy low thump and a metallic ring.
   slam() {
+    captions.say('slam');
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime;
     const len = ctx.sampleRate * 0.4, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
