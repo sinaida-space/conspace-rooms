@@ -248,7 +248,7 @@ export function createRituals({ scene, camera, canvas, router, soul, player }) {
     setTimeout(() => a?.creak?.(dx, dz, d, { cc: false }), 900);
   }
 
-  function clock() { audio()?.music?.places?.stay?.(); }
+  function clock() { audio()?.music?.places?.stay?.({ cc: false }); }
 
   function tv() {                                        // a burst of loud snow, then the time (soulpath.js draws and hisses both)
     soul._tvText = null; soul._tvBurstUntil = performance.now() + 1600;

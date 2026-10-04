@@ -117,9 +117,9 @@ export class Places {
   // For whoever stands still in grandmother's room, once a visit: the wall
   // clock strikes twelve (it is always 12:24 there, but it strikes the hour
   // it remembers), and as the last stroke dies the kettle comes to the boil.
-  stay() {
+  stay({ cc = true } = {}) {                             // cc: false when the caller captions it itself
     const t0 = this.ctx.currentTime + 0.4, gap = 1.45;
-    captions.say('strike', { at: t0 });
+    if (cc) captions.say('strike', { at: t0 });
     for (let k = 0; k < 12; k++) this._strike(t0 + k * gap);
     this._kettle(t0 + 12 * gap + 1.5, 2.5);
   }
