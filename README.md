@@ -227,4 +227,4 @@ opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 
 ## Rights
 
-© Sinaida Krivchenko & UVALISS (Alisa Feer). Artworks all rights reserved. The window views (`assets/windows/`) and the stairwell pictures (`assets/stairs/`) are by Sinaida Krivchenko, made in Midjourney.
+© Sinaida Krivchenko & UVALISS (Alisa Feer). Artworks all rights reserved. The window views (`assets/windows/`), the stairwell pictures (`assets/stairs/`) and the carpet pictures (`assets/carpets/`) are by Sinaida Krivchenko, made in Midjourney; the other carpets and the runners are drawn in code.

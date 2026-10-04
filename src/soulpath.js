@@ -4,7 +4,8 @@ import { keyCode } from './input.js';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, mulberry32 } from './world.js';
 import { zoneWeights, ORIGIN } from './zones.js';
 import { t, getLang } from './i18n.js';
-import { boardTexture, carpetTexture, rugTexture, runnerTexture, boardPaintJobs } from './boards.js';
+import { boardTexture, rugTexture, runnerTexture, boardPaintJobs } from './boards.js';
+import { wearCarpet, pickCarpet } from './carpets.js';
 import { createChandeliers } from './chandeliers.js';
 import { EYE_HEIGHT } from './player.js';
 import { buildKitchen, createKitchenRig, buildScatter, tickCandles, shadeOf } from './kitchen.js';
@@ -716,8 +717,8 @@ export class SoulPath {
     const long = this.world.getWallSlots(cx, cz).filter(sl => sl.length >= 4 && !hung.has(sl.cellKey));
     for (let i = long.length - 1; i > 0; i--) { const j = Math.floor(rpo() * (i + 1)); [long[i], long[j]] = [long[j], long[i]]; }
     const nPost = rpo() < 0.85 ? (rpo() < 0.45 ? 2 : 1) : 0;
-    const onWall = (sl, w, h, y, off) => {
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), this.atmo.prop({ rust: 0 }));
+    const onWall = (sl, w, h, y, off, mat = this.atmo.prop({ rust: 0 })) => {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
       mesh.position.set(
         sl.position.x + sl.normal.x * 0.014 + (sl.normal.x === 0 ? off : 0), y,
         sl.position.z + sl.normal.z * 0.014 + (sl.normal.z === 0 ? off : 0));
@@ -737,29 +738,42 @@ export class SoulPath {
       hangOrDrop(mesh, sl, 'poster', 0.62);                // after the print: the board is scaled wide by then
       stuff.posters.push(p);
     });
-    const carpetWall = long[nPost];
-    if (carpetWall && rpo() < 0.65) {
-      const mesh = onWall(carpetWall, 2.0, 1.46, 1.62, 0);     // landscape, as they hung over a sofa
-      const seed = Math.floor(rpo() * 1e6);
-      mesh.userData.paint = () => { mesh.material.uniforms.uMap.value = carpetTexture(seed); mesh.material.uniforms.uHasMap.value = 1; };
+    // Soviet carpets on two or three more of the long walls, each a woven
+    // picture (carpets.js), never one hung or laid within twenty metres
+    stuff.carpetIds = [];
+    const carpetsNear = () => [...this.chunkStuff.values()].flatMap(st => st.carpetIds || []).concat(stuff.carpetIds);
+    const carpetMat = (w, h) => this.atmo.prop({ rust: 0, pile: [w, h] });
+    long.slice(nPost, nPost + (rpo() < 0.5 ? 2 : 3)).forEach(carpetWall => {
+      const mesh = onWall(carpetWall, 2.1, 1.4, 1.62, 0, carpetMat(2.1, 1.4));     // landscape, as they hung over a sofa
+      const id = pickCarpet(rpo, mesh.position.x, mesh.position.z, carpetsNear());
+      stuff.carpetIds.push({ id, x: mesh.position.x, z: mesh.position.z });
+      mesh.userData.paint = () => wearCarpet(mesh.material, id);
       this._showMemory(mesh);
-      hangOrDrop(mesh, carpetWall, 'wall carpet', 1.0);
+      hangOrDrop(mesh, carpetWall, 'wall carpet', 1.05);
       stuff.carpets.push(mesh);
       (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.2]);
-      stuff.wallBusy.push({ x: mesh.position.x, z: mesh.position.z, nx: carpetWall.normal.x, nz: carpetWall.normal.z, hw: 1.0 });
-    }
+      stuff.wallBusy.push({ x: mesh.position.x, z: mesh.position.z, nx: carpetWall.normal.x, nz: carpetWall.normal.z, hw: 1.05 });
+    });
 
     // ── rugs on the parquet of the red rooms: one or two a chunk, 1.8 by
     // 3 metres, turned a little, wherever the floor is open enough round them
     stuff.rugs = [];
     const rr = mulberry32(hash2i(SEED_POSTER ^ 0x7a9, cx, cz));
     const kRoom = kitchenPlan(cx, cz);
+    // pal: the lampshade's colours or a runner, painted (boards.js); else a woven picture, its long side across
     const addRug = (x, z, w, d, rot, pal = null) => {
-      const seed = Math.floor(rr() * 1e6), mat = this.atmo.prop({ rust: 0 });
+      const seed = Math.floor(rr() * 1e6), woven = !pal;
+      if (woven) { [w, d] = [d, w]; rot += Math.PI / 2; }
+      const mat = this.atmo.prop({ rust: 0, pile: [w, d] });
       mat.polygonOffset = true; mat.polygonOffsetFactor = -1; mat.polygonOffsetUnits = -1;
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), mat);
       mesh.position.set(x, 0.003, z); mesh.rotation.y = rot;
-      mesh.userData.paint = () => { mat.uniforms.uMap.value = pal?.runner ? runnerTexture(seed) : rugTexture(seed, pal); mat.uniforms.uHasMap.value = 1; };
+      const id = woven ? pickCarpet(rr, x, z, carpetsNear()) : 0;
+      if (woven) stuff.carpetIds.push({ id, x, z });
+      mesh.userData.paint = () => {
+        if (woven) return wearCarpet(mat, id);
+        mat.uniforms.uMap.value = pal.runner ? runnerTexture(seed) : rugTexture(seed, pal); mat.uniforms.uHasMap.value = 1;
+      };
       group.add(mesh);
       this._showMemory(mesh);
       stuff.rugs.push(mesh);
