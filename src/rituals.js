@@ -9,7 +9,8 @@
 //   bed         (fear) the sheet rises and falls as if someone breathed under it
 //   drip        (fear) a drop falls, slowly, and the ward monitor beeps
 //   wheelchair  (fear) its wheels squeak, twice, as if someone sat down
-//   clock       (memory) the nightstand clock strikes twelve, and the kettle after
+// A clock is simpler: one touch and it ticks and strikes once, nothing more
+// (every clock: the ward's, grandmother's, the nightstand's).
 //   tv          (memory) the television bursts into snow and shows 12:24
 //   drowned     (light) the thing lifts a little in the water and settles, a ring spreads
 // What can be touched is asked of soulpath.js (ritualTargets); nothing here
@@ -23,7 +24,7 @@ const REACH = 3.2;                 // metres: further than this nothing answers
 const GAP = 0.65;                  // seconds between touches that still count as one ritual
 const PALM_HOLD = 2;               // seconds of one open palm toward a thing
 const AGAIN = 15;                  // seconds before the same thing answers again
-const AGAIN_CLOCK = 26;            // the clock: twelve strokes and the kettle after take about 22 s
+const AGAIN_CLOCK = 2.5;           // a clock answers every touch, only not on top of itself
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const again = tg => (tg.kind === 'clock' ? AGAIN_CLOCK : AGAIN);
@@ -50,14 +51,17 @@ export function createRituals({ scene, camera, canvas, router, soul, player }) {
       const along = (vx * d.x + vy * d.y + vz * d.z) / dist;
       if (along <= 0) continue;
       const ang = Math.acos(Math.min(1, along)), allow = Math.atan2(tg.r, dist) + 0.04;
-      if (ang < allow && ang < best.a) { best.a = ang; best.t = tg; }
+      const a = tg.kind === 'clock' ? ang - 1 : ang;   // a clock in sight wins over the candles at its foot
+      if (ang < allow && a < best.a) { best.a = a; best.t = tg; }
     }
     return best.t;
   }
 
   function touch(tg) {
     if (!tg) return;
+    window.__app.ritualAt = performance.now();         // this touch was for the thing: no work opens under it (artworks.js)
     if (time - (done.get(tg.key) ?? -Infinity) < again(tg)) return;
+    if (tg.kind === 'clock') { done.set(tg.key, time); clock(tg); return; }   // one touch is enough
     const c = count.get(tg.key);
     const n = c && time - c.at < GAP ? c.n + 1 : 1;
     count.set(tg.key, { n, at: time });
@@ -248,7 +252,23 @@ export function createRituals({ scene, camera, canvas, router, soul, player }) {
     setTimeout(() => a?.creak?.(dx, dz, d, { cc: false }), 900);
   }
 
-  function clock() { audio()?.music?.places?.stay?.({ cc: false }); }
+  function clock(tg) {                                   // tick, tock, and one stroke of its bell
+    captions.say('clockTap', { dx: tg.x - player.pos.x, dz: tg.z - player.pos.y, gap: 0 });
+    const a = audio(); if (!a?.ctx || a.muted) return;
+    const ctx = a.ctx, out = panAt(a, tg), t0 = ctx.currentTime + 0.02;
+    [0, 0.5].forEach((d, i) => {
+      const s = ctx.createBufferSource(); s.buffer = noise(ctx);
+      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = i ? 2600 : 3300; f.Q.value = 6;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.12, t0 + d); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.035);
+      s.connect(f); f.connect(g); g.connect(out); s.start(t0 + d, Math.random()); s.stop(t0 + d + 0.05);
+    });
+    const at = t0 + 1;
+    for (const [fr, v] of [[587, 0.06], [1174, 0.025], [1580, 0.015]]) {
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = fr;
+      g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(v, at + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, at + 1.8);
+      o.connect(g); g.connect(out); o.start(at); o.stop(at + 1.9);
+    }
+  }
 
   function tv() {                                        // a burst of loud snow, then the time (soulpath.js draws and hisses both)
     soul._tvText = null; soul._tvBurstUntil = performance.now() + 1600;

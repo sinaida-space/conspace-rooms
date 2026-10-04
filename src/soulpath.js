@@ -2737,12 +2737,16 @@ export class SoulPath {
   }
 
   // What can be touched for a ritual near (px, pz): rituals.js. Candles in
-  // every stage; the ward's beds, drips and wheelchairs in fear; the clock
+  // every stage, the wall clocks in fear and memory; the ward's beds, drips and wheelchairs in fear; the clock
   // nook and grandmother's television in memory; the drowned things in the light.
   ritualTargets(px, pz, reach = 4) {
     const out = [], st = this.stage.stage, near = (x, z) => Math.hypot(x - px, z - pz) < reach;
     for (const s of this.chunkStuff.values()) {
       s.scatter?.items?.forEach((it, i) => { if (!it.gone && near(it.x, it.z)) out.push({ kind: 'candle', key: it, x: it.x, y: 0.2, z: it.z, r: 0.16, it, i, sc: s.scatter }); });
+      for (const h of s.props?.hung || []) {               // the clocks on the walls, while they hang
+        if (h.fallen || !/Clock/.test(h.kind) || !near(h.mesh.position.x, h.mesh.position.z)) continue;
+        out.push({ kind: 'clock', key: h, x: h.mesh.position.x, y: h.mesh.position.y, z: h.mesh.position.z, r: 0.2 });
+      }
       if (st === 0) {
         const a = s.ward?.plan?.anchor;
         if (a && near(a.x, a.z)) {
@@ -2751,7 +2755,7 @@ export class SoulPath {
           else if (a.type === 'wheelchair') out.push({ kind: 'wheelchair', key: a, x: a.x, y: 0.5, z: a.z, r: 0.5 });
         }
       } else if (st === 1) {
-        if (s.egg && near(s.egg.x, s.egg.z)) out.push({ kind: 'clock', key: s.egg, x: s.egg.x, y: 0.7, z: s.egg.z, r: 0.35 });
+        if (s.egg && near(s.egg.x, s.egg.z)) out.push({ kind: 'clock', key: s.egg, x: s.egg.x, y: 0.7, z: s.egg.z, r: 0.3 });
         const tv = s.kitchen?.room?.tv;
         const talking = this._tvText && performance.now() < this._tvUntil;   // a soul speaking on it is not interrupted
         if (tv && !talking && near(tv.x, tv.z)) out.push({ kind: 'tv', key: s.kitchen.room, x: tv.x, y: 0.76, z: tv.z, r: 0.7 });
