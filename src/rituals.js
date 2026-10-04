@@ -244,8 +244,8 @@ export function createRituals({ scene, camera, canvas, router, soul, player }) {
 
   function wheelchair(tg) {
     const a = audio(), dx = tg.x - player.pos.x, dz = tg.z - player.pos.y, d = Math.hypot(dx, dz);
-    a?.creak?.(dx, dz, d);
-    setTimeout(() => a?.creak?.(dx, dz, d), 900);
+    a?.creak?.(dx, dz, d, { cc: false });                // its wheels, not 'a door somewhere'
+    setTimeout(() => a?.creak?.(dx, dz, d, { cc: false }), 900);
   }
 
   function clock() { audio()?.music?.places?.stay?.(); }

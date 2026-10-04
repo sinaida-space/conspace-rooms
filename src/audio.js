@@ -216,8 +216,8 @@ export class AudioEngine {
   }
 
   // a floorboard or an old hinge somewhere: a slow stick-slip saw through two resonances
-  creak(dx, dz, dist, { low = false } = {}) {
-    captions.say(low ? 'floor' : 'creak', { dx, dz });
+  creak(dx, dz, dist, { low = false, cc = true } = {}) {   // cc: false when the caller captions it itself
+    if (cc) captions.say(low ? 'floor' : 'creak', { dx, dz });
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime, dur = 0.5 + Math.random() * 0.6, out = this._at(dx, dz, dist);
     const o = ctx.createOscillator(); o.type = 'sawtooth';
