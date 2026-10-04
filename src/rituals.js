@@ -258,7 +258,7 @@ export function createRituals({ scene, camera, canvas, router, soul, player }) {
   function drowned(tg) {
     const th = tg.th, y0 = th.meshes.map(m => m.position.y);
     window.__app?.water?.addRipple?.(tg.x, tg.z, 1.4);
-    audio()?.chime?.();
+    audio()?.chime?.({ cc: false });
     let k = 0;
     running.push(dt => {
       k += dt / 2.6;

@@ -329,8 +329,8 @@ export class AudioEngine {
     this.turnGain.gain.setTargetAtTime(s * 0.02, this.ctx.currentTime, 0.08);
   }
 
-  chime() { // soft bell: root + fifth, long decay
-    captions.say('chime', { gap: 10 });
+  chime({ cc = true } = {}) { // soft bell: root + fifth, long decay; cc: false when the caller captions it itself
+    if (cc) captions.say('chime', { gap: 10 });
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime;
     for (const [f, v] of [[523.25, 0.10], [784, 0.05], [1046.5, 0.03]]) {
