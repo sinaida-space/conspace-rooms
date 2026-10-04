@@ -2,7 +2,7 @@
 import { detectDevice } from './device.js';
 import { keyCode } from './input.js';
 import { t, getLang, setLang, langFromUrl, applyStatic } from './i18n.js';
-import { renderFooter } from './footer.js';
+import { renderFooter, VERSION } from './footer.js';
 import { calm } from './calm.js';
 import { captions } from './captions.js';
 
@@ -80,6 +80,7 @@ export class UI {
       gate?.classList.add('hidden');
       applyStatic();
       renderFooter(getLang());
+      $('welcome-version').textContent = t('versionLine', { v: VERSION.replace(/^v/, '') });
       return;
     }
     const el = $('lang-boot');
@@ -93,6 +94,7 @@ export class UI {
     setLang(chosen);
     applyStatic();
     renderFooter(getLang());
+    $('welcome-version').textContent = t('versionLine', { v: VERSION.replace(/^v/, '') });
     gate?.classList.add('hidden');
   }
 

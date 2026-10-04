@@ -222,6 +222,9 @@ body::after {
 #mode-select button.mode-secondary.selected .mode-legend,
 #mode-select button:active .mode-legend { color: rgba(1,8,5,0.75); }
 
+/* the version under the statement, quiet print */
+.welcome-version { color: var(--dim); font-size: 0.8em; margin: -0.4em 0 1.2em; letter-spacing: 0.04em; }
+
 /* subtitles for the sounds: a plain switch under the ways to walk */
 .cc-switch {
   font-family: inherit; font-size: 0.95em;

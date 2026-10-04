@@ -2,7 +2,7 @@
 // product · navigate · more. Rendered from one source so the pages never drift.
 // "~" in the strings stands for a non-breaking space.
 
-const VERSION = 'v2.0';
+export const VERSION = 'v2.1';
 
 const COPY = {
   en: {
@@ -17,7 +17,7 @@ const COPY = {
     other: 'Русская версия',
     more: 'More',
     playlist: 'Companion playlist',
-    released: 'September 2026',
+    released: 'October 2026',
   },
   ru: {
     tagline: 'Бесконечный лабиринт, в~котором живёт серия~SOULS.',
@@ -31,7 +31,7 @@ const COPY = {
     other: 'English version',
     more: 'Ещё',
     playlist: 'Плейлист к~работе',
-    released: 'сентябрь 2026',
+    released: 'октябрь 2026',
   },
 };
 
