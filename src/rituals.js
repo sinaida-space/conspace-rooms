@@ -271,9 +271,9 @@ export function createRituals({ scene, camera, canvas, router, soul, player }) {
     }
   }
 
-  function tv() {                                        // a burst of loud snow, then the time (soulpath.js draws and hisses both)
-    soul._tvText = null; soul._tvBurstUntil = performance.now() + 1600;
-    setTimeout(() => { soul._tvText = '12:24'; soul._tvUntil = performance.now() + 6000; soul._tvDirty = true; }, 1600);
+  function tv() {                                        // a flare of snow, then 12:24 large (soulpath.js draws and hisses both)
+    const now = performance.now();
+    soul._tvBurstUntil = now + 1200; soul._tvClockUntil = now + 6200;
   }
 
   function drowned(tg) {

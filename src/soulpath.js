@@ -2223,8 +2223,29 @@ export class SoulPath {
     return this._tv;
   }
   _drawTV() {
-    const tv = this._tvTexture(), g = tv.g, W = tv.c.width, H = tv.c.height;
-    const talking = this._tvText && performance.now() < this._tvUntil;
+    const tv = this._tvTexture(), g = tv.g, W = tv.c.width, H = tv.c.height, now = performance.now();
+    // touched three times (rituals.js): a white flare of snow, then the time,
+    // large, as if the set had only ever been a clock; then back to what it showed
+    if (now < (this._tvBurstUntil || 0)) {
+      if (!tv.img) tv.img = g.createImageData(W, H);
+      const d = tv.img.data;
+      for (let i = 0; i < W * H; i++) { const v = 150 + Math.random() * 105; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
+      g.putImageData(tv.img, 0, 0);
+      tv.tex.needsUpdate = true; this._tvDirty = true;
+      return true;
+    }
+    if (now < (this._tvClockUntil || 0)) {
+      g.fillStyle = '#050000'; g.fillRect(0, 0, W, H);
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '700 64px "Departure Mono", monospace';
+      g.fillStyle = '#ffe2d6'; g.shadowColor = '#ff3a20';
+      g.shadowBlur = 18 + 10 * Math.sin(now / 90); g.fillText('12:24', W / 2, H / 2 + 4);
+      g.shadowBlur = 0; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+      for (let yy = (now / 40 | 0) % 3; yy < H; yy += 3) { g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(0, yy, W, 1); }
+      tv.tex.needsUpdate = true; this._tvDirty = true;   // the soul's words are redrawn after
+      return true;
+    }
+    const talking = this._tvText && now < this._tvUntil;
     if (talking) {
       if (!this._tvDirty) return true;
       this._tvDirty = false;
@@ -2757,8 +2778,7 @@ export class SoulPath {
       } else if (st === 1) {
         if (s.egg && near(s.egg.x, s.egg.z)) out.push({ kind: 'clock', key: s.egg, x: s.egg.x, y: 0.7, z: s.egg.z, r: 0.3 });
         const tv = s.kitchen?.room?.tv;
-        const talking = this._tvText && performance.now() < this._tvUntil;   // a soul speaking on it is not interrupted
-        if (tv && !talking && near(tv.x, tv.z)) out.push({ kind: 'tv', key: s.kitchen.room, x: tv.x, y: 0.76, z: tv.z, r: 0.7 });
+        if (tv && near(tv.x, tv.z)) out.push({ kind: 'tv', key: s.kitchen.room, x: tv.x, y: 0.76, z: tv.z, r: 0.7 });
       } else {
         for (const th of s.drown?.things || []) if (near(th.x, th.z)) out.push({ kind: 'drowned', key: th, x: th.x, y: th.floats ? 0.3 : 0.08, z: th.z, r: 0.3, th });
       }
