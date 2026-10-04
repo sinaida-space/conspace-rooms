@@ -51,22 +51,64 @@ function clear(x0, z0, x1, z1) {
 // browser (ctx.filter does not in older Safari, where the figures came out
 // flat black). PAD leaves room round each frame for the blur to fade out.
 const PAD = 28, OFF = 4096;
+const WALK_FRAMES = 8;
+
+// One frame of a walk, facing right (+x), the foot line at y = 256: a stooped
+// someone in a coat to the knees, head pushed forward, the legs and arms a
+// little too long. phase 0..2π is one stride; the legs swing opposite, the
+// knee folds as a leg comes through, the arms swing against the legs.
+function walker(g, phase) {
+  g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#000';
+  const hip = [62, 146], shoulder = [70, 60];
+  const leg = (p, w) => {
+    const a = 0.46 * Math.sin(p);                                 // thigh: forward is +
+    const knee = 0.12 + 0.75 * Math.max(0, Math.cos(p)) * Math.max(0, Math.sin(p + 0.6));   // folds while it swings through
+    const kx = hip[0] + Math.sin(a) * 58, ky = hip[1] + Math.cos(a) * 58;
+    const b = a - knee;
+    const fx = kx + Math.sin(b) * 60, fy = Math.min(256, ky + Math.cos(b) * 60);
+    g.lineWidth = w; g.beginPath(); g.moveTo(...hip); g.lineTo(kx, ky); g.lineTo(fx, fy); g.lineTo(fx + 11, fy); g.stroke();
+  };
+  const arm = (p, w) => {
+    const a = -0.38 * Math.sin(p) - 0.12;
+    const ex = shoulder[0] + Math.sin(a) * 46, ey = shoulder[1] + Math.cos(a) * 46;
+    const b = a + 0.25 + 0.2 * Math.max(0, -Math.sin(p));
+    g.lineWidth = w; g.beginPath(); g.moveTo(...shoulder); g.lineTo(ex, ey); g.lineTo(ex + Math.sin(b) * 52, ey + Math.cos(b) * 52); g.stroke();
+  };
+  leg(phase + Math.PI, 12); arm(phase, 9);                       // the far side first
+  g.beginPath(); g.moveTo(60, 50); g.lineTo(78, 48); g.lineTo(92, 66); g.lineTo(86, 160); g.lineTo(42, 160); g.lineTo(44, 64); g.closePath(); g.fill();   // the coat, shoulders hunched
+  g.beginPath(); g.ellipse(84, 34, 12, 15, 0.35, 0, Math.PI * 2); g.fill();   // the head, pushed forward
+  leg(phase, 13); arm(phase + Math.PI, 10);
+}
+
+// A mirage in the shadow: the edges waver like air over a stove and the
+// darkness breathes. uMirage is the shadow's own clock (set every frame).
+function mirage(mat, amount) {
+  const u = { value: Math.random() * 100 };
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uMirage = u;
+    sh.fragmentShader = 'uniform float uMirage;\n' + sh.fragmentShader.replace('#include <map_fragment>', `
+#ifdef USE_MAP
+  vec2 mUv = vMapUv;
+  mUv.x += (sin(mUv.y * 38.0 + uMirage * 7.0) * 0.6 + sin(mUv.y * 91.0 - uMirage * 11.0) * 0.4) * ${amount.toFixed(4)};
+  diffuseColor *= texture2D( map, mUv );
+  diffuseColor.a *= 0.82 + 0.18 * sin(uMirage * 13.0 + mUv.y * 6.0);
+#endif`);
+  };
+  mat.customProgramCacheKey = () => 'mirage' + amount;
+  return u;
+}
 function silhouette(kind) {
   const W = kind === 'figure' ? 128 : 256, H = kind === 'figure' ? 256 : 128;
   const CW = W + 2 * PAD, CH = H + 2 * PAD;
-  const frames = kind === 'cat' || kind === 'bird' ? 2 : 1;
+  const frames = kind === 'figure' ? WALK_FRAMES : kind === 'cat' || kind === 'bird' ? 2 : 1;
   const shape = document.createElement('canvas'); shape.width = CW * frames; shape.height = CH;
   const g = shape.getContext('2d');
   g.fillStyle = '#000';
   for (let f = 0; f < frames; f++) {
     g.save(); g.translate(f * CW + PAD, PAD);
     g.translate(W / 2, H); g.transform(1, 0, -0.08, 1.07, 0, 0); g.translate(-W / 2, -H);   // slant and stretch from the foot
-    if (kind === 'figure') {                         // someone walking past, a coat to the knees
-      g.beginPath(); g.ellipse(64, 30, 13, 16, 0, 0, Math.PI * 2); g.fill();
-      g.beginPath(); g.moveTo(58, 44); g.lineTo(70, 44); g.lineTo(88, 62); g.lineTo(84, 160); g.lineTo(44, 160); g.lineTo(40, 62); g.closePath(); g.fill();
-      g.fillRect(48, 150, 12, 96); g.save(); g.translate(76, 152); g.rotate(-0.18); g.fillRect(-6, 0, 12, 94); g.restore();
-      g.save(); g.translate(86, 64); g.rotate(-0.25); g.fillRect(-5, 0, 10, 80); g.restore();
-    } else if (kind === 'cat') {                     // a cat along the skirting, tail up; two steps
+    if (kind === 'figure') walker(g, f / frames * Math.PI * 2);   // someone walking past, a step in eight frames
+    else if (kind === 'cat') {                     // a cat along the skirting, tail up; two steps
       g.beginPath(); g.ellipse(120, 70, 62, 22, 0, 0, Math.PI * 2); g.fill();
       g.beginPath(); g.arc(196, 52, 18, 0, Math.PI * 2); g.fill();
       g.beginPath(); g.moveTo(184, 40); g.lineTo(188, 22); g.lineTo(196, 36); g.lineTo(206, 22); g.lineTo(210, 42); g.fill();
@@ -251,7 +293,9 @@ export class EventDirector {
     const half = sl.length * CELL / 2 - 0.3;
     const dir = lead ? (along.x * lead.x + along.z * lead.z >= 0 ? 1 : -1) : Math.random() < 0.5 ? 1 : -1;
     mesh.rotation.y = Math.atan2(n.x, n.z);
-    if (dir < 0) { mat.map.repeat.x = -1 / sil.frames; mat.map.offset.x = 1 / sil.frames; }   // facing the way it goes
+    // facing the way it goes: the plane's own +x runs against `along`, and every shape is drawn facing +x
+    const flip = dir > 0;
+    if (flip) { mat.map.repeat.x = -1 / sil.frames; mat.map.offset.x = 1 / sil.frames; }
     const y0 = kind === 'figure' ? h / 2 + 0.02 : kind === 'cat' ? h / 2 + 0.05 : kind === 'hand' ? rand(1.15, 1.45) : rand(1.7, 2.3);
     const speed = kind === 'figure' ? 1.1 : kind === 'cat' ? 0.9 : kind === 'hand' ? 0.45 : 3.2, dur = (2 * half) / speed;
     this.scene.add(mesh);
@@ -262,20 +306,63 @@ export class EventDirector {
       this.audio?.steps?.(-f.x * 4, -f.z * 4, f.x * 1.4, f.z * 1.4, 2.2);
       setTimeout(() => this.audio?.steps?.(x0 - p.x, z0 - p.z, along.x * dir * speed, along.z * dir * speed, dur + 1.5), 1600);
     }
-    let t = 0;
+    // Figures and cats are alive: the step is drawn frame by frame and driven
+    // by the ground covered, the weight lands on each step (a lurch), the
+    // figure stops dead now and then and goes on, and the lamp being low and
+    // midway, it is tallest at either end. Their edges waver like a mirage,
+    // and a fainter double follows a breath behind.
+    const living = kind === 'figure' || kind === 'cat';
+    const mir = living ? mirage(mat, kind === 'figure' ? 0.0035 : 0.002) : null;
+    let ghost = null, gmir = null;
+    if (kind === 'figure') {
+      const gm = new THREE.MeshBasicMaterial({ map: sil.tex.clone(), transparent: true, opacity: 0, depthWrite: false, fog: true,
+        polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+      gm.map.needsUpdate = true;
+      gm.map.repeat.x = mat.map.repeat.x; gm.map.offset.x = mat.map.offset.x;
+      gmir = mirage(gm, 0.006);
+      ghost = new THREE.Mesh(mesh.geometry, gm);
+      ghost.rotation.y = mesh.rotation.y;
+      this.scene.add(ghost);
+    }
+    const stride = kind === 'figure' ? 1.35 : 0.45, TAU = Math.PI * 2, hist = [];
+    let t = 0, pos = -half, phase = 0, hold = 0, holdIn = rand(1.2, 2.6);
+    const place = (m, x, y, z, frame, sy) => {
+      m.position.set(x, y, z);
+      m.scale.y = sy;
+      m.material.map.offset.x = (flip ? 1 : 0) / sil.frames + frame / sil.frames;
+    };
     this.running.push(dt => {
       t += dt;
-      const k = Math.min(1, t / dur), s = (k - 0.5) * 2 * half * dir;
-      const bob = kind === 'figure' ? Math.abs(Math.sin(t * 5.2)) * 0.03 : kind === 'bird' ? Math.sin(t * 2) * 0.12 : kind === 'hand' ? Math.sin(t * 0.9) * 0.05 : 0;
-      mesh.position.set(sl.position.x + n.x * 0.03 + along.x * s, y0 + bob, sl.position.z + n.z * 0.03 + along.z * s);
-      if (sil.frames > 1) {                          // two frames: steps or wingbeats
-        const f = Math.floor(t * (kind === 'bird' ? 7 : 5)) % 2;
-        mat.map.offset.x = (dir < 0 ? 1 : 0) / sil.frames + f / sil.frames;
+      if (!living) pos = -half + 2 * half * Math.min(1, t / dur);
+      else if (hold > 0) hold -= dt;                 // stopped dead, as if it heard something
+      else {
+        if ((holdIn -= dt) <= 0 && kind === 'figure' && Math.abs(pos) < half * 0.6) { hold = rand(0.5, 1.3); holdIn = rand(2, 4); }
+        const v = speed * (0.55 + 0.6 * Math.abs(Math.sin(phase)));
+        pos += v * dt; phase += v * dt / stride * TAU;
       }
-      const fade = Math.min(1, t / 0.5, (dur - t) / 0.5);
-      mat.opacity = Math.max(0, fade) * (kind === 'bird' ? 0.5 : 0.65);   // the texture is a penumbra already: under 0.5 at its middle
+      const k = Math.min(1, (pos + half) / (2 * half)), sAlong = pos * dir;
+      const frame = living ? Math.floor(phase / TAU * sil.frames) % sil.frames : sil.frames > 1 ? Math.floor(t * (kind === 'bird' ? 7 : 5)) % 2 : 0;
+      const sy = kind === 'figure' ? 1 + 0.22 * (2 * k - 1) ** 2 : 1;
+      const bob = kind === 'figure' ? Math.abs(Math.sin(phase)) * 0.025 : kind === 'bird' ? Math.sin(t * 2) * 0.12 : kind === 'hand' ? Math.sin(t * 0.9) * 0.05 : 0;
+      const y = kind === 'figure' || kind === 'cat' ? (y0 - 0.02) * sy + 0.02 + bob : y0 + bob;
+      const x = sl.position.x + n.x * 0.03 + along.x * sAlong, z = sl.position.z + n.z * 0.03 + along.z * sAlong;
+      place(mesh, x, y, z, frame, sy);
+      if (hold > 0) mesh.scale.x = 1 + 0.015 * Math.sin(t * 3.3);   // standing, it breathes
+      else mesh.scale.x = 1;
+      const fade = Math.max(0, Math.min(1, t / 0.5, (1 - k) * 2 * half / 0.6));
+      mat.opacity = fade * (kind === 'bird' ? 0.5 : 0.65);   // the texture is a penumbra already: under 0.5 at its middle
+      if (mir) mir.value = t;
+      if (ghost) {                                   // the double: where the figure was a breath ago
+        hist.push([t, x, y, z, frame, sy]);
+        while (hist.length > 2 && hist[1][0] < t - 0.22) hist.shift();
+        const [, gx, gy, gz, gf, gsy] = hist[0];
+        place(ghost, gx + n.x * 0.005, gy, gz + n.z * 0.005, gf, gsy * 1.03);
+        ghost.material.opacity = fade * 0.22;
+        gmir.value = t * 1.3 + 5;
+      }
       if (k < 1) return true;
       this.scene.remove(mesh); mesh.geometry.dispose(); mat.map.dispose(); mat.dispose();
+      if (ghost) { this.scene.remove(ghost); ghost.material.map.dispose(); ghost.material.dispose(); }
       return false;
     });
     return { dist: w.d };
@@ -289,6 +376,7 @@ export class EventDirector {
     const sil = this.sil.figure ||= silhouette('figure');
     const h = 2.15, mat = new THREE.MeshBasicMaterial({ map: sil.tex, transparent: true, opacity: 0, depthWrite: false, fog: true,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const mir = mirage(mat, 0.003);
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(h * sil.scale * sil.aspect, h * sil.scale), mat);
     const { sl } = w, n = sl.normal, along = new THREE.Vector3(-n.z, 0, n.x);
     const off = lead ? Math.sign(along.x * lead.x + along.z * lead.z || 1) * rand(0.4, Math.max(0.5, sl.length * CELL / 2 - 0.5)) : rand(-0.4, 0.4);   // on the side the way turns
@@ -304,6 +392,7 @@ export class EventDirector {
       const k = going < 0 ? Math.min(1, t / 1.2) : 1 - (t - going) / 0.25;
       mat.opacity = Math.max(0, k) * 0.65;
       mesh.scale.x = 1 + Math.sin(t * 0.7) * 0.015;  // it breathes
+      mir.value = t;
       if (going < 0 || k > 0) return true;
       this.scene.remove(mesh); mesh.geometry.dispose(); mat.dispose();
       return false;
