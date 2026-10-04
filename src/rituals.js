@@ -23,8 +23,10 @@ const REACH = 3.2;                 // metres: further than this nothing answers
 const GAP = 0.65;                  // seconds between touches that still count as one ritual
 const PALM_HOLD = 2;               // seconds of one open palm toward a thing
 const AGAIN = 15;                  // seconds before the same thing answers again
+const AGAIN_CLOCK = 26;            // the clock: twelve strokes and the kettle after take about 22 s
 
 const rand = (a, b) => a + Math.random() * (b - a);
+const again = tg => (tg.kind === 'clock' ? AGAIN_CLOCK : AGAIN);
 
 export function createRituals({ scene, camera, canvas, router, soul, player }) {
   const ray = new THREE.Raycaster();
@@ -55,7 +57,7 @@ export function createRituals({ scene, camera, canvas, router, soul, player }) {
 
   function touch(tg) {
     if (!tg) return;
-    if (time - (done.get(tg.key) ?? -Infinity) < AGAIN) return;
+    if (time - (done.get(tg.key) ?? -Infinity) < again(tg)) return;
     const c = count.get(tg.key);
     const n = c && time - c.at < GAP ? c.n + 1 : 1;
     count.set(tg.key, { n, at: time });
@@ -248,12 +250,9 @@ export function createRituals({ scene, camera, canvas, router, soul, player }) {
 
   function clock() { audio()?.music?.places?.stay?.(); }
 
-  function tv() {
-    const a = audio();
-    soul._tvText = '12:24'; soul._tvUntil = performance.now() + 6000; soul._tvDirty = true;
-    if (!a) return;
-    let k = 0;
-    running.push(dt => { k += dt; a.tvStatic(k < 1.6 ? 1 : 0); return k < 1.7; });
+  function tv() {                                        // a burst of loud snow, then the time (soulpath.js draws and hisses both)
+    soul._tvText = null; soul._tvBurstUntil = performance.now() + 1600;
+    setTimeout(() => { soul._tvText = '12:24'; soul._tvUntil = performance.now() + 6000; soul._tvDirty = true; }, 1600);
   }
 
   function drowned(tg) {
@@ -278,7 +277,7 @@ export function createRituals({ scene, camera, canvas, router, soul, player }) {
       const one = h?.present && !h.stopped && ((h.left === 'palm') !== (h.right === 'palm'));
       const tg = one ? aim() : null;
       if (tg && tg.key === palm.key) {
-        if ((palm.t += dt) >= PALM_HOLD && time - (done.get(tg.key) ?? -Infinity) >= AGAIN) { done.set(tg.key, time); palm.t = 0; perform(tg); }
+        if ((palm.t += dt) >= PALM_HOLD && time - (done.get(tg.key) ?? -Infinity) >= again(tg)) { done.set(tg.key, time); palm.t = 0; perform(tg); }
       } else palm = { key: tg?.key ?? null, t: 0 };
     },
   };

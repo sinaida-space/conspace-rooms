@@ -3334,7 +3334,8 @@ export class SoulPath {
       const talking = nook.group.visible ? this._drawTV() : false;   // no painting a screen nobody can see
       const tvPos = room.tv;
       const dTv = tvPos ? Math.hypot(tvPos.x - P.pos.x, tvPos.z - P.pos.y) : 99;
-      this.audio?.tvStatic?.(talking ? 0 : Math.max(0, 1 - dTv / 7));
+      const burst = performance.now() < (this._tvBurstUntil || 0);   // touched three times: a loud snow first (rituals.js)
+      this.audio?.tvStatic?.(burst ? 1 : talking ? 0 : Math.max(0, 1 - dTv / 7));
     } else this.audio?.tvStatic?.(0);
     if (room) {
       for (const { flame, halo } of room.flames.concat(room.trail || [])) {
