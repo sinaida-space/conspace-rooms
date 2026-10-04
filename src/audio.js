@@ -473,7 +473,11 @@ export class AudioEngine {
   }
 
   // the music and the places go wobbly (1) or straight again (0)
-  wow(on) { if (this._wowDepth) this._wowDepth.gain.setTargetAtTime(on ? 0.0045 : 0, this.ctx.currentTime, on ? 0.8 : 1.2); }
+  // counted, so one shadow leaving does not straighten another's wobble
+  wow(on) {
+    this._wowN = Math.max(0, (this._wowN || 0) + (on ? 1 : -1));
+    if (this._wowDepth) this._wowDepth.gain.setTargetAtTime(this._wowN ? 0.0045 : 0, this.ctx.currentTime, this._wowN ? 0.8 : 1.2);
+  }
 
   // A whisper: breath-like noise swelling and falling, for the souls.
   whisper() {
