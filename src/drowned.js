@@ -329,6 +329,7 @@ export function createDrowned(atmo, quality) {
       const settle = s => { const a = r() * Math.PI * 2, d = 0.3 + r() * 0.2; return { x: s.x + Math.cos(a) * d, z: s.z + Math.sin(a) * d }; };
 
       const created = [];
+      const things = [];                            // { kind, x, z, meshes }: for the rituals (rituals.js)
       const myFloaters = [];
       const place = (kind, build) => {
         const s = takeSpot();
@@ -337,6 +338,7 @@ export function createDrowned(atmo, quality) {
         const out = build(at, r() * Math.PI * 2);
         record({ kind: 'drowned ' + kind, x: at.x, z: at.z, y: 0.1, mount: out.floater ? 'air' : 'floor', ok: true, why: out.floater ? 'floats by design' : 'lies on the floor by design', parent: group });
         created.push(...out.meshes);
+        things.push({ kind, x: at.x, z: at.z, meshes: out.meshes, floats: !!out.floater });
         if (out.floater) { floaters.push(out.floater); myFloaters.push(out.floater); }
       };
 
@@ -359,6 +361,7 @@ export function createDrowned(atmo, quality) {
 
       return {
         meshes: created,                            // where they lie: the glowing petals keep round them
+        things,
         dispose() {
           for (const m of created) {
             group.remove(m);

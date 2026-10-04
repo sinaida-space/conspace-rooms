@@ -840,7 +840,7 @@ export class SoulPath {
       group.add(eg);
       buildClockNook(eg, cp.x, cp.z, cp.rot, this.atmo);
       eg.visible = this.stage.stage === 1;
-      stuff.egg = { group: eg };
+      stuff.egg = { group: eg, x: cp.x, z: cp.z };
     }
 
     // ── scattered things: candles, teapots, cups. The closer the portal into
@@ -2734,6 +2734,31 @@ export class SoulPath {
     const [ti, tj] = c[Math.min(4, c.length - 1)];
     const dx = centreOf(ti) - P.pos.x, dz = centreOf(tj) - P.pos.y, d = Math.hypot(dx, dz);
     return d > 0.5 ? { x: dx / d, z: dz / d } : null;
+  }
+
+  // What can be touched for a ritual near (px, pz): rituals.js. Candles in
+  // every stage; the ward's beds, drips and wheelchairs in fear; the clock
+  // nook and grandmother's television in memory; the drowned things in the light.
+  ritualTargets(px, pz, reach = 4) {
+    const out = [], st = this.stage.stage, near = (x, z) => Math.hypot(x - px, z - pz) < reach;
+    for (const s of this.chunkStuff.values()) {
+      s.scatter?.items?.forEach((it, i) => { if (!it.gone && near(it.x, it.z)) out.push({ kind: 'candle', key: it, x: it.x, y: 0.2, z: it.z, r: 0.16, it, i, sc: s.scatter }); });
+      if (st === 0) {
+        const a = s.ward?.plan?.anchor;
+        if (a && near(a.x, a.z)) {
+          if (a.type === 'bed' || a.type === 'gurney') out.push({ kind: 'bed', key: a, x: a.x, y: a.type === 'gurney' ? 0.78 : 0.64, z: a.z, r: 0.9, rot: a.rot });
+          else if (a.type === 'drip' && !a.tip) out.push({ kind: 'drip', key: a, x: a.x, y: 1.1, z: a.z, r: 0.35 });
+          else if (a.type === 'wheelchair') out.push({ kind: 'wheelchair', key: a, x: a.x, y: 0.5, z: a.z, r: 0.5 });
+        }
+      } else if (st === 1) {
+        if (s.egg && near(s.egg.x, s.egg.z)) out.push({ kind: 'clock', key: s.egg, x: s.egg.x, y: 0.7, z: s.egg.z, r: 0.35 });
+        const tv = s.kitchen?.room?.tv;
+        if (tv && near(tv.x, tv.z)) out.push({ kind: 'tv', key: s.kitchen.room, x: tv.x, y: 0.76, z: tv.z, r: 0.7 });
+      } else {
+        for (const th of s.drown?.things || []) if (near(th.x, th.z)) out.push({ kind: 'drowned', key: th, x: th.x, y: th.floats ? 0.3 : 0.08, z: th.z, r: 0.3, th });
+      }
+    }
+    return out;
   }
 
   _updateMarks() {

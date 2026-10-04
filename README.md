@@ -87,6 +87,14 @@ A game controller works in every mode (standard mapping): left stick walks and
 strafes, right stick looks, RT or L3 runs, A inspects, B closes, Y puts the walk
 back to the middle, Start opens the menu (D-pad moves in it, A chooses).
 
+Touch a thing three times and it answers (`src/rituals.js`): three clicks,
+three taps, E or the controller's A three times while looking at it, or one open
+palm held toward it for two seconds. A candle crackles by the ear, flares, sends
+sparks toward a work not yet seen and asks a question in its smoke; in fear a
+bed's sheet breathes, a drip falls slowly to a monitor's beep, a wheelchair
+squeaks; in grandmother's world her clock strikes and the television shows
+12:24; in the light a drowned thing stirs in the water.
+
 Subtitles for the sounds and the music (`src/captions.js`) are switched on the
 welcome screen or in the menu and kept only in the URL as `?cc=1`. They look
 like film captions: yellow with a black edge, [sounds in brackets], ♪ music ♪,

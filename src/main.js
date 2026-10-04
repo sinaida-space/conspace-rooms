@@ -9,6 +9,7 @@ import { createClip, clipSupported } from './clip.js';
 import { installBugReport, setBugSource, bugTick, bugFrame } from './bugreport.js';
 import { pollGamepad } from './gamepad.js';
 import { pace } from './pace.js';
+import { createRituals } from './rituals.js';
 
 installBugReport();   // R R R anywhere: a picture of the state to screenshot and send
 // F: full screen, on every screen and in every mode
@@ -149,6 +150,9 @@ async function boot() {
       }
       if (window.__app.soul) window.__app.soul.update(dt, elapsed, zone);
       window.__app.events?.update(dt);
+      // touch a thing three times and it answers (rituals.js)
+      if (!window.__app.rituals && window.__app.soul) window.__app.rituals = createRituals({ scene, camera, canvas, router, soul: window.__app.soul, player });
+      window.__app.rituals?.update(dt);
       window.__app.water?.update(dt, elapsed, player, window.__app.soul, audio);
       if (artworks) { artworks.sync(); artworks.update(dt); }
       speed = player.vel.length();
