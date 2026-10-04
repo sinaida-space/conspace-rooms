@@ -260,6 +260,11 @@ export class Music {
       acid: Array.from({ length: 16 }, () => (Math.random() < 0.7 ? [0, 0, 3, 5, 7, 10, 12][Math.floor(Math.random() * 7)] : null)) };
   }
   motion(s) { this._speed = s; }
+  // hurrying, the music presses on a little (pace.js): the next phrase is played faster
+  _paced(v, most) {
+    const run = window.__app?.pace?.run ?? 0;
+    return run > 0.02 ? { ...v, tempo: v.tempo * (1 + most * run) } : v;
+  }
   room(on) {
     if (on === this.inRoom) return;
     this.inRoom = on;
@@ -394,7 +399,7 @@ export class Music {
       return;
     }
     const play = !this.gram;                                     // keep time under the gramophone, play nothing
-    this._out = this.corridorIn; this._v = this._vc; this._lane = 'corridor';
+    this._out = this.corridorIn; this._v = this._paced(this._vc, 0.15); this._lane = 'corridor';
     this._t.corridor += [this._wardPhrase, this._kosmosPhrase, this._technoPhrase, this._synthPhrase, this._musicBoxBar,
       this._radioPhrase, this._celloPhrase, this._glassPhrase, this._bellsPhrase][this._piece.corridor].call(this, t0, play);
   }
@@ -639,7 +644,7 @@ export class Music {
       if (this.gram) captions.say('r_' + ROOM_CC[this._piece.room] + (this.inRoom ? '' : 'Far'), { at: t0 + 2, music: true, gap: 20 });
       return;
     }
-    this._out = this.roomIn; this._v = this._vr; this._lane = 'room';
+    this._out = this.roomIn; this._v = this._paced(this._vr, 0.08); this._lane = 'room';
     this._t.room += [this._waltzBar, this._tangoBar, this._estradaPhrase, this._romanceBar,
       this._foxtrotBar, this._gypsyBar, this._kidsBar][this._piece.room].call(this, t0, this.gram);
   }

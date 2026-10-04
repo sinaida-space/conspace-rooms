@@ -2726,6 +2726,16 @@ export class SoulPath {
     return false;
   }
 
+  // The way the marks lead from where the visitor stands, a few cells ahead
+  // so it follows the corridor, as a unit vector on the floor; null if none.
+  wayDir() {
+    const c = this.wayCells, P = this.player;
+    if (!c || c.length < 2) return null;
+    const [ti, tj] = c[Math.min(4, c.length - 1)];
+    const dx = centreOf(ti) - P.pos.x, dz = centreOf(tj) - P.pos.y, d = Math.hypot(dx, dz);
+    return d > 0.5 ? { x: dx / d, z: dz / d } : null;
+  }
+
   _updateMarks() {
     const p = this.player.pos;
     const gi = cellOf(p.x), gj = cellOf(p.y);
@@ -2792,6 +2802,7 @@ export class SoulPath {
       return best;
     };
     const cells = this._route(goalFn, gi, gj).slice(0, ROUTE_CELLS);
+    this.wayCells = cells;                               // the shadows lead along it too (events.js, wayDir)
     for (let k = 2; k < cells.length - 1; k += MARK_EVERY) {
       const [i, j] = cells[k], [ni, nj] = cells[k + 1];
       const di = ni - i, dj = nj - j;

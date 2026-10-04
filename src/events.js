@@ -31,7 +31,7 @@ const WEIGHTS = [
   { shiver: 3, drip: 3 },
 ];
 const SHADOW_GAP = [30, 50], SHADOW_FIRST = [8, 15];   // seconds; the first after a zone begins
-const LEAD_GAP = [12, 20];                              // fear, the portal summoned: the shadows lead the way to it
+const LEAD_GAP = [12, 20];                              // fear and memory: the shadows lead the way the marks go
 const SHADOWS = [{ figure: 2, stander: 1 }, { cat: 1, hand: 1 }, { bird: 1 }];
 const LOOK = Math.cos(0.6);                             // inside ~35° of where the visitor looks
 const DEBUG = /(^|[?&])debug=events/.test(location.search);
@@ -123,7 +123,7 @@ export class EventDirector {
     for (let i = this.running.length - 1; i >= 0; i--) if (!this.running[i](step)) this.running.splice(i, 1);
     if (this.soul?.finale || document.hidden) return;
     if (this.stage.stage !== this._shadowStage) { this._shadowStage = this.stage.stage; this.shadowWait = rand(...SHADOW_FIRST); }
-    if ((this.shadowWait -= dt) <= 0) {
+    if ((this.shadowWait -= dt * (1 + 1.5 * (window.__app?.pace?.run ?? 0))) <= 0) {   // hurrying, they come sooner (pace.js)
       const lead = this._lead();
       this.shadowWait = this.throwShadow(null, lead) ? rand(...(lead ? LEAD_GAP : SHADOW_GAP)) : 2;   // nowhere ahead: look again soon
     }
@@ -159,7 +159,8 @@ export class EventDirector {
   // one of the zone's shadows, on a wall ahead; false if there is none in view
   throwShadow(kind, lead = null) {
     const st = this.stage.stage;
-    if (!kind && lead) {                             // looking down the way: someone waits at its end, else one walks it
+    if (!kind && lead && st === 1) kind = 'cat';     // grandmother's: her cat runs ahead along the skirting
+    else if (!kind && lead) {                        // looking down the way: someone waits at its end, else one walks it
       const f = this._ahead();
       kind = f && f.x * lead.x + f.z * lead.z > 0.6 && Math.random() < 0.4 ? 'stander' : 'figure';
     }
@@ -180,9 +181,12 @@ export class EventDirector {
   // The way to the summoned fear portal from where the visitor stands, as a
   // unit vector on the floor, or null when there is nothing to lead to.
   _lead() {
-    const s = this.soul, plan = s?.summonedPortals?.[1];
-    if (this.stage.stage !== 0 || !plan) return null;
-    const yaw = s._wayYaw(plan);
+    const s = this.soul, st = this.stage.stage;
+    if (st > 1 || !s) return null;                   // the light has its petals; no shadow leads there
+    const way = s.wayDir?.();                        // the way the marks go: an unseen work, what is still to find, a portal
+    if (way) return way;
+    const plan = s.summonedPortals?.[st + 1];
+    const yaw = plan ? s._wayYaw(plan) : null;
     return yaw == null ? null : { x: -Math.sin(yaw), z: -Math.cos(yaw) };
   }
 
@@ -252,9 +256,11 @@ export class EventDirector {
     const speed = kind === 'figure' ? 1.1 : kind === 'cat' ? 0.9 : kind === 'hand' ? 0.45 : 3.2, dur = (2 * half) / speed;
     this.scene.add(mesh);
     this.lastShadow = mesh;                          // for checks
-    if (lead && kind === 'figure') {                 // its steps, heard going off the way it walks
+    if (lead && kind === 'figure') {                 // someone was walking behind: steps come up from the back, then go off the way it walks
       const p = this._here(), x0 = sl.position.x - along.x * half * dir, z0 = sl.position.z - along.z * half * dir;
-      this.audio?.steps?.(x0 - p.x, z0 - p.z, along.x * dir * speed, along.z * dir * speed, dur + 1.5);
+      const f = this._ahead() || lead;
+      this.audio?.steps?.(-f.x * 4, -f.z * 4, f.x * 1.4, f.z * 1.4, 2.2);
+      setTimeout(() => this.audio?.steps?.(x0 - p.x, z0 - p.z, along.x * dir * speed, along.z * dir * speed, dur + 1.5), 1600);
     }
     let t = 0;
     this.running.push(dt => {

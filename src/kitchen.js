@@ -783,18 +783,21 @@ function mergeStill(group, skip) {
 // per part per chunk, so a hundred things cost a handful of draw calls.
 let SHARED = null;
 const CANDLE_TIME = { value: 0 };   // shared clock for every flame and pool
+const CANDLE_PACE = { value: new THREE.Vector2(0, 0) };   // (slow, run) from pace.js: tall and calm, or low and shuddering
 
 // A flame drawn on a quad that always faces the camera: a white-hot core, a
 // teardrop body in the candle's colour, a soft halo; it breathes and gutters
 // on its own rhythm (seeded by gl_InstanceID).
 const FLAME_VERT = /* glsl */`
 uniform float uTime;
+uniform vec2 uPace;   // x: the visitor is still, y: hurrying
 varying vec2 vUv; varying vec3 vCol; varying float vFl;
 void main(){
   float id = float(gl_InstanceID);
   vFl = 0.82 + 0.12 * sin(uTime * 11.0 + id * 1.7) + 0.06 * sin(uTime * 29.0 + id * 5.3);
+  vFl *= 1.0 + 0.25 * uPace.x - 0.35 * uPace.y * (0.7 + 0.3 * sin(uTime * 23.0 + id * 3.1));
   vec4 centre = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-  vec2 sway = vec2(0.012 * sin(uTime * 3.1 + id), 0.0);
+  vec2 sway = vec2((0.012 + 0.03 * uPace.y) * sin(uTime * (3.1 + 6.0 * uPace.y) + id), 0.0);
   centre.xy += (position.xy + sway * (position.y + 0.5)) * vec2(1.0, vFl);   // billboard in view space
   gl_Position = projectionMatrix * centre;
   vUv = uv;
@@ -853,7 +856,7 @@ function shared() {
   const wc = [], pos = waxGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) { const k = 0.55 + 0.45 * ((pos.getY(i) + 0.08) / 0.16) ** 1.5; wc.push(k, k, k); }   // wax lets light through: the foot is never grey
   waxGeo.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
-  const uniforms = { uTime: CANDLE_TIME };
+  const uniforms = { uTime: CANDLE_TIME, uPace: CANDLE_PACE };
   const poolUniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog]);
   poolUniforms.uTime = CANDLE_TIME;
   SHARED = {
@@ -869,7 +872,11 @@ function shared() {
   };
   return SHARED;
 }
-export function tickCandles(time) { CANDLE_TIME.value = time; }
+export function tickCandles(time) {
+  CANDLE_TIME.value = time;
+  const pace = window.__app?.pace;
+  if (pace) CANDLE_PACE.value.set(pace.slow, pace.run);
+}
 
 // A paper boat for the light's candles, folded from the same paper as the
 // cranes: a flat floor, six creased panels flaring up to a rim that rises

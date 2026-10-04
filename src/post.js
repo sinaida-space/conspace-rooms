@@ -11,6 +11,8 @@ uniform sampler2D tScene;
 uniform sampler2D tWater;   // the water, drawn alone and premultiplied (water.js), laid over the scene
 uniform float uWaterOn;
 uniform float uTime, uShift, uGlitch;
+uniform vec3 uGrade;     // the walk's pace in colour: amber when slow, cold green when hurrying (pace.js)
+uniform float uVertigo;  // hurrying: the frame breathes and its edges split
 uniform float uCrt;    // how much television: 1 in the dark stages, a quarter in the light
 uniform vec3 uBloom;   // bloom tint: phosphor green in the dark stages, warm white in the light
 // soft edges for whatever is not drawn yet (sketches, ?edge=a|b|c):
@@ -47,12 +49,15 @@ void main(){
     float band = step(0.92 - uGlitch*0.25, hash(vec2(floor(uv.y*36.0), floor(uTime*24.0))));
     uv.x += band * (hash(vec2(floor(uv.y*36.0), floor(uTime*24.0)+1.0)) - 0.5) * 0.12 * uGlitch;
   }
-  // rgb delay
+  // vertigo: the frame breathes in and out a little round its centre
+  if (uVertigo > 0.001) uv = 0.5 + (uv - 0.5) * (1.0 - uVertigo * 0.014 * (0.5 + 0.5 * sin(uTime * 1.6)));
+  // rgb delay, and with vertigo a split that grows toward the edges
   float s = uShift + uGlitch*0.01;
+  vec2 fr = (uv - 0.5) * uVertigo * 0.007;
   vec3 c;
-  c.r = frame(uv + vec2(s, 0.0)).r;
+  c.r = frame(uv + vec2(s, 0.0) + fr).r;
   c.g = frame(uv).g;
-  c.b = frame(uv - vec2(s, 0.0)).b;
+  c.b = frame(uv - vec2(s, 0.0) - fr).b;
 
   // cheap phosphor bloom: sample a small ring around this texel, keep only
   // the brightest neighbours, add back tinted green — a poor-man's
@@ -103,6 +108,7 @@ void main(){
 
   if (uBlack > 0.0) c = mix(c, vec3(hash(floor(vUv * vec2(320.0, 200.0)) + fract(uTime * 7.0)) * 0.22), uBlack);
 
+  c *= uGrade;
   // scanlines + noise
   c *= mix(1.0, 0.90 + 0.10 * sin(uv.y * 900.0 + uTime * 8.0), uCrt);
   c += (hash(uv * vec2(1441.0, 907.0) + fract(uTime)) - 0.5) * 0.055 * uCrt;
@@ -118,7 +124,7 @@ export function createPost(renderer, quality) {
   const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const uniforms = {
     tScene: { value: null }, tWater: { value: null }, uWaterOn: { value: 0 },
-    uTime: { value: 0 }, uShift: { value: 0 }, uGlitch: { value: 0 }, uCrt: { value: 1 },
+    uTime: { value: 0 }, uShift: { value: 0 }, uGrade: { value: new THREE.Vector3(1, 1, 1) }, uVertigo: { value: 0 }, uGlitch: { value: 0 }, uCrt: { value: 1 },
     uBloom: { value: new THREE.Vector3(0.25, 0.85, 0.45) },
     uBlack: { value: 0 },
     uEdge: { value: { off: 0, a: 1, b: 2, c: 3, abc: 4 }[sketchParam('edge')] ?? 2 },   // B, the dream periphery, is the house style
@@ -174,6 +180,12 @@ export function createPost(renderer, quality) {
       uniforms.uCrt.value = crt;
       uniforms.uGlitch.value = glitch * crt;
       uniforms.uShift.value = (Math.min(0.0018, Math.abs(speed) * 0.0003) + glitch * 0.002) * crt; // no resting RGB split: small lights stay whole
+      const pace = window.__app?.pace;
+      if (pace) {                                        // slow: amber; hurrying: cold green; half as much in the light
+        const k = 1 - 0.5 * acc, sl = pace.slow * k, rn = pace.run * k;
+        uniforms.uGrade.value.set(1 + 0.07 * sl - 0.09 * rn, 1 + 0.01 * sl + 0.03 * rn, 1 - 0.12 * sl + 0.03 * rn);
+        uniforms.uVertigo.value = pace.vertigo;
+      }
       if (dbg.noCrt) { uniforms.uCrt.value = 0; uniforms.uGlitch.value = 0; }
       if (dbg.noShift) uniforms.uShift.value = 0;
       if (dbg.noEdge !== undefined) uniforms.uEdge.value = dbg.noEdge ? 0 : 2;

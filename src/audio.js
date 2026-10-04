@@ -434,7 +434,8 @@ export class AudioEngine {
       v.panner.positionX ? (v.panner.positionX.value = src.x, v.panner.positionZ.value = src.z)
         : v.panner.setPosition(src.x, 1.55, src.z);
       v.lp.frequency.setTargetAtTime(src.occluded ? 420 : 2600, now, 0.3);
-      v.gain.gain.setTargetAtTime(this._silenced ? 0 : (src.seen ? 0.022 : 0.06), now, 0.8);
+      const still = 1 + 0.8 * (window.__app?.pace?.slow ?? 0);   // standing still, the works sing louder (pace.js)
+      v.gain.gain.setTargetAtTime(this._silenced ? 0 : (src.seen ? 0.022 : 0.06) * still, now, 0.8);
     }
   }
 
