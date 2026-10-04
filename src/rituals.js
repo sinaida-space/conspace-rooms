@@ -24,7 +24,7 @@ const REACH = 3.2;                 // metres: further than this nothing answers
 const GAP = 0.65;                  // seconds between touches that still count as one ritual
 const PALM_HOLD = 2;               // seconds of one open palm toward a thing
 const AGAIN = 15;                  // seconds before the same thing answers again
-const AGAIN_CLOCK = 2.5;           // a clock answers every touch, only not on top of itself
+const AGAIN_CLOCK = 4;             // a clock answers every touch, once its stroke has rung out
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const again = tg => (tg.kind === 'clock' ? AGAIN_CLOCK : AGAIN);
@@ -255,15 +255,16 @@ export function createRituals({ scene, camera, canvas, router, soul, player }) {
   function clock(tg) {                                   // tick, tock, and one stroke of its bell
     captions.say('clockTap', { dx: tg.x - player.pos.x, dz: tg.z - player.pos.y, gap: 0 });
     const a = audio(); if (!a?.ctx || a.muted) return;
-    const ctx = a.ctx, out = panAt(a, tg), t0 = ctx.currentTime + 0.02;
-    [0, 0.5].forEach((d, i) => {
-      const s = ctx.createBufferSource(); s.buffer = noise(ctx);
-      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = i ? 2600 : 3300; f.Q.value = 6;
-      const g = ctx.createGain(); g.gain.setValueAtTime(0.12, t0 + d); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.035);
-      s.connect(f); f.connect(g); g.connect(out); s.start(t0 + d, Math.random()); s.stop(t0 + d + 0.05);
+    const ctx = a.ctx, out = panAt(a, tg, 1), t0 = ctx.currentTime + 0.02;   // close, whatever the music is doing
+    [0, 0.5, 1, 1.5].forEach((d, i) => {                 // tick, tock, tick, tock: a bright click over a small wooden knock
+      for (const [fr, v, len] of [[i % 2 ? 2700 : 3400, 0.5, 0.045], [i % 2 ? 900 : 1100, 0.45, 0.08]]) {
+        const o = ctx.createOscillator(), g = ctx.createGain(), at = t0 + d; o.frequency.value = fr;
+        g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(v, at + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+        o.connect(g); g.connect(out); o.start(at); o.stop(at + len + 0.01);
+      }
     });
-    const at = t0 + 1;
-    for (const [fr, v] of [[587, 0.06], [1174, 0.025], [1580, 0.015]]) {
+    const at = t0 + 2;
+    for (const [fr, v] of [[587, 0.5], [1174, 0.18], [1580, 0.1]]) {
       const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = fr;
       g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(v, at + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, at + 1.8);
       o.connect(g); g.connect(out); o.start(at); o.stop(at + 1.9);
@@ -313,12 +314,12 @@ function noise(ctx) {
 }
 
 // a panner placed where the thing is, as the listener stands
-function panAt(a, tg) {
+function panAt(a, tg, level = null) {
   const ctx = a.ctx, P = window.__app?.player;
   const dx = tg.x - (P?.pos.x ?? 0), dz = tg.z - (P?.pos.y ?? 0), d = Math.max(0.5, Math.hypot(dx, dz)), yaw = P?.yaw ?? 0;
   const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / d));
-  const g = ctx.createGain(); g.gain.value = 1 / (1 + d / 3);
-  p.connect(g); g.connect(a.bed);
+  const g = ctx.createGain(); g.gain.value = level ?? 1 / (1 + d / 3);
+  p.connect(g); g.connect(a.master);   // not the corridor's bus: it goes silent at a work, and a touch must be heard
   setTimeout(() => { try { g.disconnect(); } catch (e) { /* gone */ } }, 8000);
   return p;
 }
