@@ -1246,6 +1246,8 @@ export function createMaterials(quality) {
         if (!c) { shared.uCandle.value[i].w = 0; continue; }
         let fl = 0.8 + 0.12 * Math.sin(t * 11 + i * 1.7) + 0.08 * Math.sin(t * 29 + i * 5.3);
         if (shiver > 0) fl *= 1 - Math.min(1, shiver) * (0.45 + 0.35 * Math.sin(t * 37 + i * 2.3));   // a draught through every flame
+        const pace = window.__app?.pace;                 // stillness feeds the flames, haste starves them (pace.js)
+        if (pace) fl *= 1 + 0.35 * pace.slow - 0.4 * pace.run * (0.75 + 0.25 * Math.sin(t * 23 + i * 3.1));
         shared.uCandle.value[i].set(c.x, c.y, c.z, 3.2 * fl);
         shared.uCandleCol.value[i].copy(c.col);
       }

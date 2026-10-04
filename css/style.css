@@ -222,6 +222,39 @@ body::after {
 #mode-select button.mode-secondary.selected .mode-legend,
 #mode-select button:active .mode-legend { color: rgba(1,8,5,0.75); }
 
+/* the version under the statement, quiet print */
+.welcome-version { color: var(--dim); font-size: 0.8em; margin: -0.4em 0 1.2em; letter-spacing: 0.04em; }
+
+/* subtitles for the sounds: a plain switch under the ways to walk */
+.cc-switch {
+  font-family: inherit; font-size: 0.95em;
+  background: transparent; color: var(--dim); border: 0;
+  padding: 0.3em 0; margin: -0.6em 0 1.4em; cursor: pointer; text-align: left;
+}
+.cc-switch:hover, .cc-switch:focus-visible, .cc-switch[aria-checked="true"] { color: var(--fg); }
+.cc-switch .cc-state { color: var(--fg); }
+.cc-switch[aria-checked="true"] .cc-state { color: var(--accent); text-shadow: var(--glow); }
+.cc-switch .cc-legend { display: block; font-size: 0.8em; color: var(--dim); }
+
+/* the subtitles themselves, as films do them: yellow, a black edge, no box;
+   a sound from one side is captioned on that side */
+#captions {
+  position: fixed; left: 50%; bottom: calc(5.5em + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  width: min(92vw, 56em); z-index: 12; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 0.15em;
+  font-family: 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif; font-weight: 600;
+  font-size: clamp(1rem, 2.8vw, 1.45rem); line-height: 1.25; text-align: center;
+}
+#captions .cc-line {
+  color: #ffe100;
+  text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+    0 -2px 0 #000, 0 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000, 0 0 6px rgba(0, 0, 0, 0.8);
+  opacity: 1; transition: opacity 0.6s ease;
+}
+#captions .cc-line.cc-left { align-self: flex-start; text-align: left; }
+#captions .cc-line.cc-right { align-self: flex-end; text-align: right; }
+#captions .cc-line.out { opacity: 0; }
+
 .gesture-note {
   color: var(--dim);
   font-size: 0.85em;

@@ -37,6 +37,9 @@ function faceTexture(colonOn) {
   g.fillStyle = colonOn ? '#3dff7a' : 'rgba(61,255,122,0.12)';
   g.beginPath(); g.arc(80, 22, 3, 0, 7); g.fill();
   g.beginPath(); g.arc(80, 46, 3, 0, 7); g.fill();
+  g.shadowBlur = 0; g.fillStyle = 'rgba(190,200,180,0.55)';     // the maker's mark, as on every clock here: «ИН» / «JN»
+  g.font = '700 8px Arial, sans-serif'; g.textAlign = 'left';
+  g.fillText(getLang() === 'ru' ? 'ИН' : 'JN', 6, 8);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }

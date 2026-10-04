@@ -840,7 +840,7 @@ export class SoulPath {
       group.add(eg);
       buildClockNook(eg, cp.x, cp.z, cp.rot, this.atmo);
       eg.visible = this.stage.stage === 1;
-      stuff.egg = { group: eg };
+      stuff.egg = { group: eg, x: cp.x, z: cp.z };
     }
 
     // ── scattered things: candles, teapots, cups. The closer the portal into
@@ -1158,7 +1158,7 @@ export class SoulPath {
         palette: t('cardPalette'), palettes: t('cardPalettes'),
         thanks: t('finThanks'), farewells: t('finLines'), links: t('finLinks'),
       },
-      onHome: () => { location.href = `index.html?lang=${getLang()}`; },   // the title screen, in the same language
+      onHome: () => { location.href = `index.html?lang=${getLang()}${/[?&]cc=1/.test(location.search) ? '&cc=1' : ''}`; },   // the title screen, in the same language
     });
   }
 
@@ -2223,8 +2223,29 @@ export class SoulPath {
     return this._tv;
   }
   _drawTV() {
-    const tv = this._tvTexture(), g = tv.g, W = tv.c.width, H = tv.c.height;
-    const talking = this._tvText && performance.now() < this._tvUntil;
+    const tv = this._tvTexture(), g = tv.g, W = tv.c.width, H = tv.c.height, now = performance.now();
+    // touched three times (rituals.js): a white flare of snow, then the time,
+    // large, as if the set had only ever been a clock; then back to what it showed
+    if (now < (this._tvBurstUntil || 0)) {
+      if (!tv.img) tv.img = g.createImageData(W, H);
+      const d = tv.img.data;
+      for (let i = 0; i < W * H; i++) { const v = 150 + Math.random() * 105; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
+      g.putImageData(tv.img, 0, 0);
+      tv.tex.needsUpdate = true; this._tvDirty = true;
+      return true;
+    }
+    if (now < (this._tvClockUntil || 0)) {
+      g.fillStyle = '#050000'; g.fillRect(0, 0, W, H);
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '700 64px "Departure Mono", monospace';
+      g.fillStyle = '#ffe2d6'; g.shadowColor = '#ff3a20';
+      g.shadowBlur = 18 + 10 * Math.sin(now / 90); g.fillText('12:24', W / 2, H / 2 + 4);
+      g.shadowBlur = 0; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+      for (let yy = (now / 40 | 0) % 3; yy < H; yy += 3) { g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(0, yy, W, 1); }
+      tv.tex.needsUpdate = true; this._tvDirty = true;   // the soul's words are redrawn after
+      return true;
+    }
+    const talking = this._tvText && now < this._tvUntil;
     if (talking) {
       if (!this._tvDirty) return true;
       this._tvDirty = false;
@@ -2726,6 +2747,45 @@ export class SoulPath {
     return false;
   }
 
+  // The way the marks lead from where the visitor stands, a few cells ahead
+  // so it follows the corridor, as a unit vector on the floor; null if none.
+  wayDir() {
+    const c = this.wayCells, P = this.player;
+    if (!c || c.length < 2) return null;
+    const [ti, tj] = c[Math.min(4, c.length - 1)];
+    const dx = centreOf(ti) - P.pos.x, dz = centreOf(tj) - P.pos.y, d = Math.hypot(dx, dz);
+    return d > 0.5 ? { x: dx / d, z: dz / d } : null;
+  }
+
+  // What can be touched for a ritual near (px, pz): rituals.js. Candles in
+  // every stage, the wall clocks in fear and memory; the ward's beds, drips and wheelchairs in fear; the clock
+  // nook and grandmother's television in memory; the drowned things in the light.
+  ritualTargets(px, pz, reach = 4) {
+    const out = [], st = this.stage.stage, near = (x, z) => Math.hypot(x - px, z - pz) < reach;
+    for (const s of this.chunkStuff.values()) {
+      s.scatter?.items?.forEach((it, i) => { if (!it.gone && near(it.x, it.z)) out.push({ kind: 'candle', key: it, x: it.x, y: 0.2, z: it.z, r: 0.16, it, i, sc: s.scatter }); });
+      for (const h of s.props?.hung || []) {               // the clocks on the walls, while they hang
+        if (h.fallen || !/Clock/.test(h.kind) || !near(h.mesh.position.x, h.mesh.position.z)) continue;
+        out.push({ kind: 'clock', key: h, x: h.mesh.position.x, y: h.mesh.position.y, z: h.mesh.position.z, r: 0.2 });
+      }
+      if (st === 0) {
+        const a = s.ward?.plan?.anchor;
+        if (a && near(a.x, a.z)) {
+          if (a.type === 'bed' || a.type === 'gurney') out.push({ kind: 'bed', key: a, x: a.x, y: a.type === 'gurney' ? 0.78 : 0.64, z: a.z, r: 0.9, rot: a.rot });
+          else if (a.type === 'drip' && !a.tip) out.push({ kind: 'drip', key: a, x: a.x, y: 1.1, z: a.z, r: 0.35 });
+          else if (a.type === 'wheelchair') out.push({ kind: 'wheelchair', key: a, x: a.x, y: 0.5, z: a.z, r: 0.5 });
+        }
+      } else if (st === 1) {
+        if (s.egg && near(s.egg.x, s.egg.z)) out.push({ kind: 'clock', key: s.egg, x: s.egg.x, y: 0.7, z: s.egg.z, r: 0.3 });
+        const tv = s.kitchen?.room?.tv;
+        if (tv && near(tv.x, tv.z)) out.push({ kind: 'tv', key: s.kitchen.room, x: tv.x, y: 0.76, z: tv.z, r: 0.7 });
+      } else {
+        for (const th of s.drown?.things || []) if (near(th.x, th.z)) out.push({ kind: 'drowned', key: th, x: th.x, y: th.floats ? 0.3 : 0.08, z: th.z, r: 0.3, th });
+      }
+    }
+    return out;
+  }
+
   _updateMarks() {
     const p = this.player.pos;
     const gi = cellOf(p.x), gj = cellOf(p.y);
@@ -2792,6 +2852,7 @@ export class SoulPath {
       return best;
     };
     const cells = this._route(goalFn, gi, gj).slice(0, ROUTE_CELLS);
+    this.wayCells = cells;                               // the shadows lead along it too (events.js, wayDir)
     for (let k = 2; k < cells.length - 1; k += MARK_EVERY) {
       const [i, j] = cells[k], [ni, nj] = cells[k + 1];
       const di = ni - i, dj = nj - j;
@@ -3298,7 +3359,8 @@ export class SoulPath {
       const talking = nook.group.visible ? this._drawTV() : false;   // no painting a screen nobody can see
       const tvPos = room.tv;
       const dTv = tvPos ? Math.hypot(tvPos.x - P.pos.x, tvPos.z - P.pos.y) : 99;
-      this.audio?.tvStatic?.(talking ? 0 : Math.max(0, 1 - dTv / 7));
+      const burst = performance.now() < (this._tvBurstUntil || 0);   // touched three times: a loud snow first (rituals.js)
+      this.audio?.tvStatic?.(burst ? 1 : talking ? 0 : Math.max(0, 1 - dTv / 7), { cc: !burst });
     } else this.audio?.tvStatic?.(0);
     if (room) {
       for (const { flame, halo } of room.flames.concat(room.trail || [])) {

@@ -7,6 +7,9 @@ import { t, applyStatic, setLang, langFromUrl, getLang } from './i18n.js';
 import { mixZone, SoulStage } from './zones.js';
 import { createClip, clipSupported } from './clip.js';
 import { installBugReport, setBugSource, bugTick, bugFrame } from './bugreport.js';
+import { pollGamepad } from './gamepad.js';
+import { pace } from './pace.js';
+import { createRituals } from './rituals.js';
 
 installBugReport();   // R R R anywhere: a picture of the state to screenshot and send
 // F: full screen, on every screen and in every mode
@@ -96,7 +99,7 @@ async function boot() {
   let artworks = null;
 
   const stage = new SoulStage(); // advanced only by walking through portals
-  window.__app = { scene, camera, renderer, quality, stage };
+  window.__app = { scene, camera, renderer, quality, stage, pace };
   setBugSource(canvas);
 
   addEventListener('resize', () => {
@@ -118,7 +121,10 @@ async function boot() {
     audio = audio ?? window.__app.audio;
     let speed = 0;
     if (player) {
+      pollGamepad(player, router);
       player.update(dt);
+      // hurrying, the horizon drifts a little (pace.js; never in calm mode)
+      if (!player.locked && pace.vertigo > 0.01) camera.rotation.z = pace.vertigo * 0.022 * Math.sin(elapsed * 0.7) * Math.sin(elapsed * 0.31 + 1);
       ui.hintsTick(dt, player.vel.length() > 0.15, caps.device.isTouch);
       world.update(player.pos.x, player.pos.y);
       atmo = atmo ?? window.__app.atmo;
@@ -144,6 +150,9 @@ async function boot() {
       }
       if (window.__app.soul) window.__app.soul.update(dt, elapsed, zone);
       window.__app.events?.update(dt);
+      // touch a thing three times and it answers (rituals.js)
+      if (!window.__app.rituals && window.__app.soul) window.__app.rituals = createRituals({ scene, camera, canvas, router, soul: window.__app.soul, player });
+      window.__app.rituals?.update(dt);
       window.__app.water?.update(dt, elapsed, player, window.__app.soul, audio);
       if (artworks) { artworks.sync(); artworks.update(dt); }
       speed = player.vel.length();
@@ -159,6 +168,7 @@ async function boot() {
       prevYaw = player.yaw;
     }
     post = post ?? window.__app.post;
+    pace.update(dt, speed);
     if (audio) audio.motion(speed);
     if (!window.__app.tunnel?.covering) {   // in the portal's flight the tunnel hides it all: nothing under it is drawn
       window.__app.water?.beforeRender();   // the mirror pass, tier 2 only (the refraction split happens inside post.render)

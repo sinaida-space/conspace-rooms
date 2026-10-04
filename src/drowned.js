@@ -39,8 +39,10 @@ function clockTexture() {
   g.fillText('12:24', 80, 27);
   g.shadowBlur = 26; g.fillText('12:24', 80, 27); // a second, brighter pass over the first
   g.shadowBlur = 0;
-  g.fillStyle = '#c7ccd0';                          // the brand plaque, a silver strip under the display
-  g.fillRect(46, 47, 68, 5);
+  g.fillStyle = '#c7ccd0';                          // the brand plaque, a silver strip under the display, and its mark
+  g.fillRect(46, 50, 68, 7);
+  g.fillStyle = '#1a1414'; g.font = '700 7px Arial, sans-serif'; g.textBaseline = 'middle';
+  g.fillText(getLang() === 'ru' ? 'ИН' : 'JN', 80, 53.8);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
@@ -329,6 +331,7 @@ export function createDrowned(atmo, quality) {
       const settle = s => { const a = r() * Math.PI * 2, d = 0.3 + r() * 0.2; return { x: s.x + Math.cos(a) * d, z: s.z + Math.sin(a) * d }; };
 
       const created = [];
+      const things = [];                            // { kind, x, z, meshes }: for the rituals (rituals.js)
       const myFloaters = [];
       const place = (kind, build) => {
         const s = takeSpot();
@@ -337,6 +340,7 @@ export function createDrowned(atmo, quality) {
         const out = build(at, r() * Math.PI * 2);
         record({ kind: 'drowned ' + kind, x: at.x, z: at.z, y: 0.1, mount: out.floater ? 'air' : 'floor', ok: true, why: out.floater ? 'floats by design' : 'lies on the floor by design', parent: group });
         created.push(...out.meshes);
+        things.push({ kind, x: at.x, z: at.z, meshes: out.meshes, floats: !!out.floater });
         if (out.floater) { floaters.push(out.floater); myFloaters.push(out.floater); }
       };
 
@@ -359,6 +363,7 @@ export function createDrowned(atmo, quality) {
 
       return {
         meshes: created,                            // where they lie: the glowing petals keep round them
+        things,
         dispose() {
           for (const m of created) {
             group.remove(m);

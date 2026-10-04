@@ -83,6 +83,25 @@ darkness, childhood and dreams.
 | Finish (hold 1 s)       | Q                             | Q                               | tap the menu tape                |
 | Bug report             | R R R: a picture of the walk's state to screenshot and send | R R R | —            |
 
+A game controller works in every mode (standard mapping): left stick walks and
+strafes, right stick looks, RT or L3 runs, A inspects, B closes, Y puts the walk
+back to the middle, Start opens the menu (D-pad moves in it, A chooses).
+
+Touch a thing three times and it answers (`src/rituals.js`): three clicks,
+three taps, E or the controller's A three times while looking at it, or one open
+palm held toward it for two seconds. A candle crackles by the ear, flares, sends
+sparks toward a work not yet seen and asks a question in its smoke; in fear a
+bed's sheet breathes, a drip falls slowly to a monitor's beep, a wheelchair
+squeaks; in grandmother's world the television shows 12:24; in the light a
+drowned thing stirs in the water. A clock needs only one touch: it ticks and
+strikes once. Every clock stopped at 12:24 carries the same maker's mark, «ИН»
+in Russian and «JN» in English.
+
+Subtitles for the sounds and the music (`src/captions.js`) are switched on the
+welcome screen or in the menu and kept only in the URL as `?cc=1`. They look
+like film captions: yellow with a black edge, [sounds in brackets], `♪ music ♪`,
+and a sound from one side is captioned on that side of the screen.
+
 Gesture mode requests webcam access on entry (opt-in); if it's denied or unavailable the
 experience falls back to keyboard controls automatically. Light mode is auto-suggested on
 touch devices and runs at reduced quality (tier 0, tighter draw radius, no post-processing,
@@ -218,6 +237,7 @@ opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 
 - Vanilla JS (ES modules), no build step
 - [Departure Mono](https://github.com/rektdeckard/departure-mono) by Helena Zhang (SIL OFL 1.1), self-hosted in `assets/fonts/`
+- Subtitles use the device's system font (Helvetica Neue / Helvetica / Arial / system-ui); nothing is loaded or shipped for them
 - [three.js](https://threejs.org/) (vendored) for rendering
 - Procedural GLSL materials; the labyrinth geometry uses no texture files
 - Two CC0 models from [Poly Haven](https://polyhaven.com/) in `assets/models/` (Old Bed Frame, Wheelchair 01), simplified with glTF-Transform; every other hospital prop is drawn in `src/ward.js`

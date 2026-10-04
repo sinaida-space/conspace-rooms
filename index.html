@@ -99,6 +99,7 @@
  <div class="welcome-col">
   <h1><button type="button" id="wordmark" class="wordmark">CONSPACE ROOMS</button></h1>
   <p class="statement" data-i18n="statement"></p>
+  <p class="welcome-version" id="welcome-version"></p>
   <section class="tw" role="note">
     <p class="tw-title" data-i18n="twTitle"></p>
     <ul class="tw-list" data-i18n-list="twList"></ul>
@@ -140,6 +141,7 @@
     <button type="button" data-mode="keys"><span data-i18n="modeKeys"></span><span class="mode-legend" data-i18n="legendKeys"></span></button>
     <button type="button" data-mode="hands" class="mode-secondary"><span data-i18n="modeHands"></span><span class="mode-legend" data-i18n="legendHands"></span></button>
   </div>
+  <button type="button" id="btn-cc-welcome" class="cc-switch" role="switch" aria-checked="false"><span data-i18n="a11yMode"></span>: <span class="cc-state"></span><span class="cc-legend" data-i18n="ccWelcome"></span></button>
   <div id="gesture-note" class="gesture-note">
     <p class="gesture-title" data-i18n="gestureTitle"></p>
     <ul class="expect" data-i18n-list="gestureList"></ul>
@@ -162,6 +164,7 @@
     <button type="button" id="btn-mute" class="tape hidden" role="menuitem"><span data-i18n="soundOn"></span><kbd>N</kbd></button>
     <label id="vol" class="tape hidden" role="menuitem"><span data-i18n="volume"></span><input type="range" id="vol-range" min="0" max="100" step="5" value="100"><kbd>[ ]</kbd></label>
     <button type="button" id="btn-calm" class="tape" role="menuitemcheckbox" aria-checked="true"><span data-i18n="flickerOn"></span></button>
+    <button type="button" id="btn-cc" class="tape" role="menuitemcheckbox" aria-checked="false"><span data-i18n="ccOff"></span></button>
     <button type="button" id="btn-main-screen" class="tape" role="menuitem"><span data-i18n="mainScreen"></span><kbd>H</kbd></button>
     <button type="button" id="btn-clip" class="tape hidden" role="menuitem"><span data-i18n="clip"></span><kbd>C</kbd></button>
     <button type="button" id="btn-finish" class="tape" role="menuitem"><span data-i18n="finish"></span><kbd>Q</kbd></button>
