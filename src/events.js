@@ -327,7 +327,8 @@ export class EventDirector {
       this.scene.add(ghost);
     }
     // its sound: a figure one of four at random, the cat meows (shadowSound.js)
-    const voice = kind === 'figure' ? shadowVoice(this.audio, pick(SHADOW_SOUNDS)) : kind === 'cat' ? shadowVoice(this.audio, 'meow') : null;
+    // creepy sounds belong to fear, meows to grandmother's world, nowhere else
+    const voice = kind === 'figure' && st === 0 ? shadowVoice(this.audio, pick(SHADOW_SOUNDS)) : kind === 'cat' && st === 1 ? shadowVoice(this.audio, 'meow') : null;
     let footfall = 0;
     const stride = kind === 'figure' ? 1.35 : 0.45, TAU = Math.PI * 2, hist = [];
     let t = 0, pos = -half, phase = 0, hold = 0, holdIn = rand(1.2, 2.6);
@@ -389,7 +390,7 @@ export class EventDirector {
     const h = 2.15, mat = new THREE.MeshBasicMaterial({ map: sil.tex, transparent: true, opacity: 0, depthWrite: false, fog: true,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     const mir = mirage(mat, 0.003);
-    const voice = shadowVoice(this.audio, pick(['whisper', 'warp']));
+    const voice = this.stage.stage === 0 ? shadowVoice(this.audio, pick(['whisper', 'warp'])) : null;
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(h * sil.scale * sil.aspect, h * sil.scale), mat);
     const { sl } = w, n = sl.normal, along = new THREE.Vector3(-n.z, 0, n.x);
     const off = lead ? Math.sign(along.x * lead.x + along.z * lead.z || 1) * rand(0.4, Math.max(0.5, sl.length * CELL / 2 - 0.5)) : rand(-0.4, 0.4);   // on the side the way turns
