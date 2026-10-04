@@ -33,7 +33,7 @@ export function pollGamepad(player, router) {
   const inMenu = menu && !menu.classList.contains('hidden');
   const down = i => b(i) && !prev[i];
   if (down(0)) {
-    if (inMenu && menu.contains(document.activeElement)) document.activeElement.click();
+    if (inMenu) { if (menu.contains(document.activeElement)) document.activeElement.click(); }   // never a work behind the menu
     else router.emit('pick');
   }
   if (down(1)) { if (inMenu) key('Escape'); else router.emit('halt'); }
