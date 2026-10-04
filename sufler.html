@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Суфлёр · CONSPACE ROOMS</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#010805">
+<link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+<style>
+  @font-face { font-family: 'Departure Mono'; src: url('assets/fonts/DepartureMono-Regular.woff2') format('woff2'); font-display: swap; }
+  :root { --bg: #010805; --fg: #b8f5c8; --dim: #4f7d5c; --red: #ff3b30; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 18px/1.5 'Departure Mono', ui-monospace, monospace; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 16px; }
+  [hidden] { display: none !important; }
+  h1 { font-size: 22px; font-weight: normal; letter-spacing: .08em; margin: 0 0 24px; }
+  ol { padding-left: 1.4em; } li { margin: 0 0 12px; }
+  input, button { font: inherit; color: var(--fg); background: transparent; border: 1px solid var(--dim); padding: 10px 16px; }
+  button { cursor: pointer; } button:hover, button:focus-visible { border-color: var(--fg); outline: none; }
+  .ok { border-color: var(--red); color: var(--red); }
+  .err { color: var(--red); min-height: 1.5em; }
+  .dim { color: var(--dim); font-size: 14px; }
+  #card { font-size: clamp(26px, 4.4vw, 44px); line-height: 1.3; min-height: 50vh; margin: 24px 0; }
+  #card small { display: block; font-size: 18px; color: var(--dim); margin-top: 24px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<main>
+  <!-- 1. Пароль -->
+  <form id="gate">
+    <h1>CONSPACE ROOMS · суфлёр</h1>
+    <div class="row">
+      <input id="pw" type="password" autocomplete="off" aria-label="Пароль" placeholder="пароль" autofocus>
+      <button type="submit">войти</button>
+    </div>
+    <p class="err" id="err" role="alert"></p>
+  </form>
+
+  <!-- 2. Инструкция -->
+  <section id="howto" hidden>
+    <h1>Перед показом</h1>
+    <ol>
+      <li>Подключи проектор к&nbsp;ноутбуку как второй экран: в&nbsp;настройках мониторов выбери «Расширить», а&nbsp;не&nbsp;«Повторить».</li>
+      <li>Нажми «ОК». Откроется отдельное окно с&nbsp;лабиринтом.</li>
+      <li>Перетащи это окно на&nbsp;проектор и&nbsp;нажми там F, чтобы развернуть на&nbsp;весь экран.</li>
+      <li>Вернись к&nbsp;этой вкладке на&nbsp;ноутбуке. Смотри сюда: здесь будут подсказки.</li>
+      <li>Следующая подсказка: пробел или&nbsp;→. Назад:&nbsp;←.</li>
+    </ol>
+    <div class="row">
+      <button class="ok" id="ok">ОК</button>
+      <span class="dim" id="popup"></span>
+    </div>
+  </section>
+
+  <!-- 3. Подсказки -->
+  <section id="hints" hidden>
+    <div id="card" aria-live="polite"></div>
+    <div class="row">
+      <button id="prev">←</button>
+      <button id="next">→</button>
+      <span class="dim" id="count"></span>
+      <button id="reopen" class="dim">открыть окно снова</button>
+    </div>
+  </section>
+</main>
+
+<script>
+  // SHA-256 of the password. It only keeps the page out of casual view; the repo is public.
+  const HASH = 'b2e7dec9f76146caf15ea443e12f53e7ec9b6075ce3e171f56d36b41e487eacf';
+  const HINTS = [
+    ['Заставка. Выбери язык, потом режим жестов и&nbsp;разреши камеру.', 'Встань в&nbsp;шаге от&nbsp;камеры, руки видны целиком.'],
+    ['Иди: сожми один кулак.', 'Два кулака: бег. Разожми, чтобы остановиться.'],
+    ['Поворот: укажи пальцем вправо или&nbsp;влево.', 'У&nbsp;стены лабиринт повернёт сам.'],
+    ['Больница, страх. Свечи вдоль стен показывают путь.', 'Расскажи про серию SOULS: взгляд в&nbsp;свой внутренний мир.'],
+    ['У&nbsp;картины: открытая ладонь держит её&nbsp;на&nbsp;экране.', 'Работы показываются сами, по&nbsp;3 секунды. У&nbsp;семи из&nbsp;них твой голос.'],
+    ['Портал. Бабушкина квартира, память.', 'Ковры, патефон, часы на&nbsp;12:24.'],
+    ['Приближение: две открытые ладони, разведи или&nbsp;сведи.', 'Две ладони без движения закрывают картину.'],
+    ['Светлые комнаты, принятие.', 'Роза в&nbsp;углу растёт с&nbsp;каждой работой.'],
+    ['Все восемнадцать найдены: арка из&nbsp;роз выводит наружу.', 'Если не&nbsp;успеваем, Q (держать секунду) завершает прогулку.'],
+    ['Спасибо.', 'Сайт: conspace-rooms.vercel.app']
+  ];
+  const $ = id => document.getElementById(id);
+  let i = 0, win = null;
+
+  async function sha(t) {
+    const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+    return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+  }
+  function show(id) { ['gate', 'howto', 'hints'].forEach(s => $(s).hidden = s !== id); }
+  function render() {
+    const [main, note] = HINTS[i];
+    $('card').innerHTML = main + (note ? '<small>' + note + '</small>' : '');
+    $('count').textContent = (i + 1) + ' / ' + HINTS.length;
+  }
+  function step(d) { i = Math.max(0, Math.min(HINTS.length - 1, i + d)); render(); }
+  function openStage() {
+    win = window.open('index.html?lang=ru', 'conspace-stage', 'popup,width=1280,height=720');
+    if (!win) $('popup').textContent = 'Браузер заблокировал окно: разреши всплывающие окна для этого сайта.';
+    return !!win;
+  }
+
+  $('gate').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (await sha($('pw').value.trim()) === HASH) { show('howto'); $('ok').focus(); }
+    else { $('err').textContent = 'Неверный пароль.'; $('pw').select(); }
+  });
+  $('ok').addEventListener('click', () => { if (openStage()) { show('hints'); render(); } });
+  $('reopen').addEventListener('click', openStage);
+  $('prev').addEventListener('click', () => step(-1));
+  $('next').addEventListener('click', () => step(1));
+  addEventListener('keydown', e => {
+    if ($('hints').hidden) return;
+    if (e.key === ' ' || e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); step(1); }
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); step(-1); }
+  });
+
+  // Je suis le spectre d'une rose que tu portais hier au bal.
+</script>
+</body>
+</html>

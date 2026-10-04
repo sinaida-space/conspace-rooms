@@ -90,11 +90,31 @@ half-resolution artwork textures, no webcam).
 
 ## Run locally
 
-```
-python3 -m http.server 4800
-```
+No build step and no dependencies: the site is plain HTML and ES modules, so any
+static file server will do. A server is needed because browsers block ES modules
+and the camera on `file://` pages.
 
-Then open http://localhost:4800/ in a browser. Requires WebGL2.
+1. Install [Git](https://git-scm.com/) and Python 3 (preinstalled on macOS; on
+   Windows from [python.org](https://www.python.org/downloads/)).
+2. Clone the repository and enter it:
+
+   ```
+   git clone https://github.com/sinaida-space/conspace-rooms.git
+   cd conspace-rooms
+   ```
+
+3. Start a server in that folder:
+
+   ```
+   python3 -m http.server 4800
+   ```
+
+   (On Windows: `py -m http.server 4800`. With Node.js: `npx serve -l 4800`.)
+4. Open http://localhost:4800/ in Chrome, Edge or Firefox. `localhost` counts as a
+   secure origin, so gesture mode and the camera work there too.
+5. Stop the server with Ctrl+C.
+
+Requires WebGL2. Add `?seed=123` to walk one fixed labyrinth while testing.
 
 ## Deploy
 

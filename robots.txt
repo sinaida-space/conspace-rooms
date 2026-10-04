@@ -20,6 +20,8 @@ Disallow: /gallery
 Disallow: /gallery.html
 Disallow: /voprosy
 Disallow: /voprosy.html
+Disallow: /sufler
+Disallow: /sufler.html
 Disallow: /reel/
 
 # AI search and assistant agents: welcome to read, not to train

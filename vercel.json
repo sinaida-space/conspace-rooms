@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/sufler",
+      "destination": "/sufler.html"
+    },
+    {
       "source": "/voprosy",
       "destination": "/voprosy.html"
     },
@@ -208,6 +212,15 @@
     },
     {
       "source": "/gallery(.html)?",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/sufler(.html)?",
       "headers": [
         {
           "key": "X-Robots-Tag",
