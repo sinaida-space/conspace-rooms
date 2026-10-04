@@ -195,8 +195,8 @@ export class AudioEngine {
   }
 
   // one drip landed: dx/dz = direction from the listener (world), dist metres
-  drip(dx, dz, dist) {
-    captions.say('drip', { dx, dz, gap: 20 });
+  drip(dx, dz, dist, { cc = true } = {}) {
+    if (cc) captions.say('drip', { dx, dz, gap: 20 });
     if (!this.ctx || this.muted) return;
     const yaw = window.__app?.player?.yaw ?? 0;
     this.water.drip(dx, dz, dist, yaw);

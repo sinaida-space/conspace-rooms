@@ -223,7 +223,7 @@ export function createRituals({ scene, camera, canvas, router, soul, player }) {
       if (k < 1) return true;
       if (!landed) {
         landed = true;
-        const a = audio(); a?.drip?.(tg.x - player.pos.x, tg.z - player.pos.y, Math.hypot(tg.x - player.pos.x, tg.z - player.pos.y));
+        const a = audio(); a?.drip?.(tg.x - player.pos.x, tg.z - player.pos.y, Math.hypot(tg.x - player.pos.x, tg.z - player.pos.y), { cc: false });
         beep(tg);
       }
       scene.remove(m); m.geometry.dispose(); mat.dispose();
