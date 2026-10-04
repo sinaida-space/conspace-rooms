@@ -236,17 +236,23 @@ body::after {
 .cc-switch[aria-checked="true"] .cc-state { color: var(--accent); text-shadow: var(--glow); }
 .cc-switch .cc-legend { display: block; font-size: 0.8em; color: var(--dim); }
 
-/* the subtitles themselves, low in the frame, in the walk's own voice */
+/* the subtitles themselves, as films do them: yellow, a black edge, no box;
+   a sound from one side is captioned on that side */
 #captions {
   position: fixed; left: 50%; bottom: calc(5.5em + env(safe-area-inset-bottom)); transform: translateX(-50%);
-  width: min(92vw, 40em); z-index: 12; pointer-events: none;
-  display: flex; flex-direction: column; align-items: center; gap: 0.3em;
-  font-family: var(--font-dos); font-size: clamp(0.85rem, 2.4vw, 1.05rem); text-align: center;
+  width: min(92vw, 56em); z-index: 12; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 0.15em;
+  font-family: 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif; font-weight: 600;
+  font-size: clamp(1rem, 2.8vw, 1.45rem); line-height: 1.25; text-align: center;
 }
 #captions .cc-line {
-  color: var(--fg); background: rgba(1, 8, 5, 0.72); padding: 0.2em 0.6em; border-radius: 2px;
+  color: #ffe100;
+  text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+    0 -2px 0 #000, 0 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000, 0 0 6px rgba(0, 0, 0, 0.8);
   opacity: 1; transition: opacity 0.6s ease;
 }
+#captions .cc-line.cc-left { align-self: flex-start; text-align: left; }
+#captions .cc-line.cc-right { align-self: flex-end; text-align: right; }
 #captions .cc-line.out { opacity: 0; }
 
 .gesture-note {

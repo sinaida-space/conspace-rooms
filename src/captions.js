@@ -3,8 +3,9 @@
 // with the sound off) reads it instead. Chosen on the welcome screen or in
 // the menu, kept only in the URL (?cc=1), like the language; nothing is
 // stored. Every sound that means something says one short line at the
-// bottom of the screen, in the walk's own voice, with an arrow when it comes
-// from one side; music says what is playing. Lines fade by themselves, at
+// bottom of the screen, the way films caption sound: yellow with a black
+// edge, [a sound in brackets], ♪ music between notes ♪, and a sound from one
+// side sits on that side of the screen. Lines fade by themselves, at
 // most three at once, and the same line does not come back too soon.
 
 import { t } from './i18n.js';
@@ -35,9 +36,9 @@ function side(dx, dz) {
   return (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / d;
 }
 
-function show(text, ms) {
+function show(text, ms, place = '') {
   const el = document.createElement('p');
-  el.className = 'cc-line';
+  el.className = 'cc-line' + (place ? ' cc-' + place : '');
   el.textContent = text;
   const b = ensureBox();
   b.appendChild(el);
@@ -66,14 +67,12 @@ export const captions = {
     if (now - (last.get(key) ?? -Infinity) < (gap != null ? gap * 1000 : GAP_MS)) return;
     last.set(key, now);
     const p = pan ?? (dx != null ? side(dx, dz) : 0);
-    let text = t('cc_' + key);
-    if (music) text = '♪ ' + text;
-    else if (p < -0.35) text = '← ' + text;
-    else if (p > 0.35) text = text + ' →';
+    const text = music ? `♪ ${t('cc_' + key)} ♪` : `[${t('cc_' + key)}]`;
+    const place = music ? '' : p < -0.35 ? 'left' : p > 0.35 ? 'right' : '';
     const ctx = window.__app?.audio?.ctx;
     const delay = at != null && ctx ? Math.max(0, (at - ctx.currentTime) * 1000) : 0;
     const ms = music ? MUSIC_MS : SHOW_MS;
-    if (delay > 30) setTimeout(() => on && show(text, ms), delay); else show(text, ms);
+    if (delay > 30) setTimeout(() => on && show(text, ms, place), delay); else show(text, ms, place);
   },
 };
 

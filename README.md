@@ -88,8 +88,9 @@ strafes, right stick looks, RT or L3 runs, A inspects, B closes, Y puts the walk
 back to the middle, Start opens the menu (D-pad moves in it, A chooses).
 
 Subtitles for the sounds and the music (`src/captions.js`) are switched on the
-welcome screen or in the menu and kept only in the URL as `?cc=1`; a line says
-what is heard, with an arrow when it comes from one side.
+welcome screen or in the menu and kept only in the URL as `?cc=1`. They look
+like film captions: yellow with a black edge, [sounds in brackets], ♪ music ♪,
+and a sound from one side is captioned on that side of the screen.
 
 Gesture mode requests webcam access on entry (opt-in); if it's denied or unavailable the
 experience falls back to keyboard controls automatically. Light mode is auto-suggested on
