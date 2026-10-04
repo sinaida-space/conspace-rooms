@@ -932,6 +932,7 @@ uniform float uSeed;
 uniform float uRust;       // how much time has eaten it: rust, streaks, scratches, grime
 uniform float uCloth;      // 1: a linen dust sheet (the light's furniture), lit like cloth
 uniform sampler2D uClothMap, uClothNor;   // Poly Haven rough_linen (CC0): the weave, and its normals
+uniform vec2  uPile;       // a carpet's size in metres; 0: no pile. Its wool is raised by the picture and by fibre
 varying vec2 vUv0;
 varying vec4 vCol;
 // The weave projected from three sides and blended by the facing, so the
@@ -958,6 +959,29 @@ void main(){
   float alpha = 1.0;
   if (uHasMap > 0.5) { vec4 tx = texture2D(uMap, vUv0); base *= tx.rgb; alpha = tx.a; }
   if (alpha < 0.5) discard;
+  // Wool pile: the knotted pattern stands a little proud of its field, the
+  // fibre roughens it, both bending the normal along the carpet's own frame
+  // (taken from the screen derivatives, so a wall carpet and a rug alike).
+  // The fibre fades out where it is finer than a pixel, else it shimmers.
+  float pileH = 0.5;
+  if (uPile.x > 0.0) {
+    vec3 dp1 = dFdx(vWorldPos), dp2 = dFdy(vWorldPos);
+    vec2 du1 = dFdx(vUv0), du2 = dFdy(vUv0);
+    vec3 T = dp1 * du2.y - dp2 * du1.y, B = dp2 * du1.x - dp1 * du2.x;
+    float inv = inversesqrt(max(max(dot(T, T), dot(B, B)), 1e-12));
+    T *= inv; B *= inv;
+    const vec3 LUM = vec3(0.3, 0.55, 0.15);
+    vec2 e = vec2(1.5 / 1024.0, 1.5 / 683.0);
+    float h0 = dot(texture2D(uMap, vUv0).rgb, LUM);
+    float hu = dot(texture2D(uMap, vUv0 + vec2(e.x, 0.0)).rgb, LUM) - h0;
+    float hv = dot(texture2D(uMap, vUv0 + vec2(0.0, e.y)).rgb, LUM) - h0;
+    vec2 q = vUv0 * uPile * 220.0;                                    // a tuft every few millimetres
+    float fine = 1.0 - smoothstep(0.35, 1.0, length(fwidth(q)));
+    float f0 = vnoise(q), fu = vnoise(q + vec2(0.35, 0.0)) - f0, fv = vnoise(q + vec2(0.0, 0.35)) - f0;
+    vec2 g = vec2(hu, hv) * 2.2 + vec2(fu, fv) * 0.9 * fine;
+    N = normalize(N - (T * g.x + B * g.y));
+    pileH = h0 + (f0 - 0.5) * 0.4 * fine;
+  }
   float rusted = 0.0;
   if (uRust > 0.0) {
     // project along the surface's own facing so patches never smear
@@ -981,6 +1005,17 @@ void main(){
   vec3 cl = candleLight(vWorldPos, N) * 0.4;          // a flame beside a thing warms it, it must not make it a beacon
   float ao = mix(0.5, 1.0, smoothstep(0.0, 0.3, vWorldPos.y));    // contact shade on the floor
   vec3 lit = base * (d + 0.05 * L + z.y * FILL_MEM * 1.4 + cl) * ao + s * vCol.a * ao * (1.0 - rusted);   // rust has no shine
+  if (uPile.x > 0.0) {
+    // wool takes the lamp softly, fibre-deep: the tufts darker in their
+    // hollows, almost no shine, and a velvet sheen where the pile turns
+    // away from the eye, lit by whatever lights the carpet, in its own colours
+    float NV = clamp(dot(N, V), 0.0, 1.0);
+    float velvet = pow(1.0 - NV, 4.0) * 0.9 + 0.08;
+    vec3 light = d + 0.05 * L + z.y * FILL_MEM * 1.4 + cl;
+    lit = base * light * ao * mix(0.8, 1.12, pileH)
+        + (base * 1.5 + 0.03) * velvet * min(light, vec3(1.5)) * ao
+        + s * 0.12 * ao;
+  }
   if (uCloth > 0.5) {
     // linen in the light: white sky from above, the lilac of the walls and
     // the water bounced up from below, a soft sheen where it turns away,
@@ -1107,11 +1142,12 @@ export function createMaterials(quality) {
 
   // A material for props: { map, color, vertexColors, glow, seed }. Shares the
   // world's uniforms, so fixtures, candles, flicker and stage reach it too.
-  const prop = ({ map = null, color = 0xffffff, vertexColors = false, glow = 0, seed = 0, rust = 0.8, cloth = null } = {}) => new THREE.ShaderMaterial({
+  const prop = ({ map = null, color = 0xffffff, vertexColors = false, glow = 0, seed = 0, rust = 0.8, cloth = null, pile = null } = {}) => new THREE.ShaderMaterial({
     uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), shared, {
       uMap: { value: map }, uHasMap: { value: map ? 1 : 0 }, uColor: { value: new THREE.Color(color) },
       uGlow: { value: glow }, uSeed: { value: seed }, uRust: { value: rust },
       uCloth: { value: cloth ? 1 : 0 }, uClothMap: { value: cloth?.map ?? null }, uClothNor: { value: cloth?.normal ?? null },
+      uPile: { value: new THREE.Vector2(...(pile || [0, 0])) },
     }),
     vertexShader: VERT_PROP,
     fragmentShader: FRAG_PROP,

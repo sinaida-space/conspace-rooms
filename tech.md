@@ -26,7 +26,7 @@ CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko 
 
 - Project code: Apache License 2.0, © Sinaida Krivchenko.
 - SOULS artworks: © UVALISS (Alisa Feer), all rights reserved.
-- Window views and stairwell pictures: © Sinaida Krivchenko, made in Midjourney.
+- Window views, stairwell pictures and carpets: © Sinaida Krivchenko, made in Midjourney.
 - three.js: MIT. MediaPipe: Apache 2.0. Departure Mono: SIL OFL 1.1. Poly Haven models: CC0 1.0.
 
 ## Privacy
