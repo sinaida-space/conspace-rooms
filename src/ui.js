@@ -177,7 +177,7 @@ export class UI {
     if (cc) {
       const sync = () => {
         cc.setAttribute('aria-checked', String(captions.on));
-        cc.querySelector('.cc-box').textContent = captions.on ? '[x]' : '[ ]';
+        cc.querySelector('.cc-state').textContent = t(captions.on ? 'stateOn' : 'stateOff');
       };
       cc.addEventListener('click', () => captions.set(!captions.on));
       captions.onChange(sync); sync();

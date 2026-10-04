@@ -229,7 +229,9 @@ body::after {
   padding: 0.3em 0; margin: -0.6em 0 1.4em; cursor: pointer; text-align: left;
 }
 .cc-switch:hover, .cc-switch:focus-visible, .cc-switch[aria-checked="true"] { color: var(--fg); }
-.cc-switch[aria-checked="true"] .cc-box { color: var(--accent); text-shadow: var(--glow); }
+.cc-switch .cc-state { color: var(--fg); }
+.cc-switch[aria-checked="true"] .cc-state { color: var(--accent); text-shadow: var(--glow); }
+.cc-switch .cc-legend { display: block; font-size: 0.8em; color: var(--dim); }
 
 /* the subtitles themselves, low in the frame, in the walk's own voice */
 #captions {
