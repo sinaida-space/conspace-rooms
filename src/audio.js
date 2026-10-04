@@ -495,8 +495,8 @@ export class AudioEngine {
   }
 
   // Television snow: a hiss whose level the caller sets (0 silent .. 1 close).
-  tvStatic(level) {
-    if (level > 0.3) captions.say('tv', { gap: 30 });
+  tvStatic(level, { cc = true } = {}) {                  // cc: false when the caller captions it itself
+    if (cc && level > 0.3) captions.say('tv', { gap: 30 });
     if (!this.ctx) return;
     if (!this._tvGain) {
       const ctx = this.ctx, len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);

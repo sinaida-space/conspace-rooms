@@ -3336,7 +3336,7 @@ export class SoulPath {
       const tvPos = room.tv;
       const dTv = tvPos ? Math.hypot(tvPos.x - P.pos.x, tvPos.z - P.pos.y) : 99;
       const burst = performance.now() < (this._tvBurstUntil || 0);   // touched three times: a loud snow first (rituals.js)
-      this.audio?.tvStatic?.(burst ? 1 : talking ? 0 : Math.max(0, 1 - dTv / 7));
+      this.audio?.tvStatic?.(burst ? 1 : talking ? 0 : Math.max(0, 1 - dTv / 7), { cc: !burst });
     } else this.audio?.tvStatic?.(0);
     if (room) {
       for (const { flame, halo } of room.flames.concat(room.trail || [])) {
