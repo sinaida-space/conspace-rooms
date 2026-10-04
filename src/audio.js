@@ -25,7 +25,14 @@ export class AudioEngine {
     this.bed.connect(this.master);
 
     // the music: lo-fi corridors, a gramophone in grandmother's room (music.js)
-    this.musicDuck = ctx.createGain(); this.musicDuck.connect(this.bed);   // Alisa's voice sinks the music (alisa.js)
+    this.musicDuck = ctx.createGain();   // Alisa's voice sinks the music (alisa.js)
+    // a tape that can go wobbly: a short delay whose time a slow LFO swings,
+    // at depth 0 until a shadow bends the world (wow, shadowSound.js)
+    this._wow = ctx.createDelay(0.05); this._wow.delayTime.value = 0.012;
+    const wowLfo = ctx.createOscillator(); wowLfo.frequency.value = 0.7;
+    this._wowDepth = ctx.createGain(); this._wowDepth.gain.value = 0;
+    wowLfo.connect(this._wowDepth); this._wowDepth.connect(this._wow.delayTime); wowLfo.start();
+    this.musicDuck.connect(this._wow); this._wow.connect(this.bed);
     this.music = new Music(ctx, this.musicDuck);
     // the flooded acceptance stage: surf, drips, wet steps (waterSound.js)
     this.water = new WaterSound(ctx, this.bed);
@@ -464,6 +471,9 @@ export class AudioEngine {
     [o1, o2, trem].forEach(o => o.start());
     return { oscs: [o1, o2, trem], gain, lp, panner, out: panner };
   }
+
+  // the music and the places go wobbly (1) or straight again (0)
+  wow(on) { if (this._wowDepth) this._wowDepth.gain.setTargetAtTime(on ? 0.0045 : 0, this.ctx.currentTime, on ? 0.8 : 1.2); }
 
   // A whisper: breath-like noise swelling and falling, for the souls.
   whisper() {

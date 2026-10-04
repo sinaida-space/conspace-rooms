@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { calm } from './calm.js';
+import { shadowVoice, SHADOW_SOUNDS } from './shadowSound.js';
 import { CELL, CHUNK, solidAtGlobal } from './world.js';
 
 // ── conspace-rooms · events.js ──────────────────────────────────────────────
@@ -36,6 +37,7 @@ const SHADOWS = [{ figure: 2, stander: 1 }, { cat: 1, hand: 1 }, { bird: 1 }];
 const LOOK = Math.cos(0.6);                             // inside ~35° of where the visitor looks
 const DEBUG = /(^|[?&])debug=events/.test(location.search);
 const rand = (a, b) => a + Math.random() * (b - a);
+const pick = list => list[Math.floor(Math.random() * list.length)];
 
 // nothing solid on the floor between two points (0.3 m steps on the cell grid)
 function clear(x0, z0, x1, z1) {
@@ -324,6 +326,9 @@ export class EventDirector {
       ghost.rotation.y = mesh.rotation.y;
       this.scene.add(ghost);
     }
+    // its sound: a figure one of four at random, the cat meows (shadowSound.js)
+    const voice = kind === 'figure' ? shadowVoice(this.audio, pick(SHADOW_SOUNDS)) : kind === 'cat' ? shadowVoice(this.audio, 'meow') : null;
+    let footfall = 0;
     const stride = kind === 'figure' ? 1.35 : 0.45, TAU = Math.PI * 2, hist = [];
     let t = 0, pos = -half, phase = 0, hold = 0, holdIn = rand(1.2, 2.6);
     const place = (m, x, y, z, frame, sy) => {
@@ -336,7 +341,7 @@ export class EventDirector {
       if (!living) pos = -half + 2 * half * Math.min(1, t / dur);
       else if (hold > 0) hold -= dt;                 // stopped dead, as if it heard something
       else {
-        if ((holdIn -= dt) <= 0 && kind === 'figure' && Math.abs(pos) < half * 0.6) { hold = rand(0.5, 1.3); holdIn = rand(2, 4); }
+        if ((holdIn -= dt) <= 0 && kind === 'figure' && Math.abs(pos) < half * 0.6) { hold = rand(0.5, 1.3); holdIn = rand(2, 4); voice?.halt(); }
         const v = speed * (0.55 + 0.6 * Math.abs(Math.sin(phase)));
         pos += v * dt; phase += v * dt / stride * TAU;
       }
@@ -347,6 +352,12 @@ export class EventDirector {
       const y = kind === 'figure' || kind === 'cat' ? (y0 - 0.02) * sy + 0.02 + bob : y0 + bob;
       const x = sl.position.x + n.x * 0.03 + along.x * sAlong, z = sl.position.z + n.z * 0.03 + along.z * sAlong;
       place(mesh, x, y, z, frame, sy);
+      if (voice) {
+        const p = this._here();
+        voice.update(x - p.x, z - p.z);
+        const ff = Math.floor(phase / Math.PI);         // a foot lands every half stride
+        if (ff !== footfall) { footfall = ff; voice.step(); }
+      }
       if (hold > 0) mesh.scale.x = 1 + 0.015 * Math.sin(t * 3.3);   // standing, it breathes
       else mesh.scale.x = 1;
       const fade = Math.max(0, Math.min(1, t / 0.5, (1 - k) * 2 * half / 0.6));
@@ -361,6 +372,7 @@ export class EventDirector {
         gmir.value = t * 1.3 + 5;
       }
       if (k < 1) return true;
+      voice?.stop();
       this.scene.remove(mesh); mesh.geometry.dispose(); mat.map.dispose(); mat.dispose();
       if (ghost) { this.scene.remove(ghost); ghost.material.map.dispose(); ghost.material.dispose(); }
       return false;
@@ -377,6 +389,7 @@ export class EventDirector {
     const h = 2.15, mat = new THREE.MeshBasicMaterial({ map: sil.tex, transparent: true, opacity: 0, depthWrite: false, fog: true,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     const mir = mirage(mat, 0.003);
+    const voice = shadowVoice(this.audio, pick(['whisper', 'warp']));
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(h * sil.scale * sil.aspect, h * sil.scale), mat);
     const { sl } = w, n = sl.normal, along = new THREE.Vector3(-n.z, 0, n.x);
     const off = lead ? Math.sign(along.x * lead.x + along.z * lead.z || 1) * rand(0.4, Math.max(0.5, sl.length * CELL / 2 - 0.5)) : rand(-0.4, 0.4);   // on the side the way turns
@@ -393,7 +406,9 @@ export class EventDirector {
       mat.opacity = Math.max(0, k) * 0.65;
       mesh.scale.x = 1 + Math.sin(t * 0.7) * 0.015;  // it breathes
       mir.value = t;
+      if (voice) { const p = this._here(); voice.update(mesh.position.x - p.x, mesh.position.z - p.z); }
       if (going < 0 || k > 0) return true;
+      voice?.stop();
       this.scene.remove(mesh); mesh.geometry.dispose(); mat.dispose();
       return false;
     });
