@@ -341,7 +341,7 @@ function lampshade(shade = SHADES[0], wide = 1) {
   };
 }
 
-export function buildKitchen(parent, X, Z) {
+export function buildKitchen(parent, X, Z, busy = []) {
   // everything is laid out around the room's centre in a group of its own,
   // turned a quarter at a time, so every room stands a different way round
   const rnd = roomRand(X, Z);
@@ -552,6 +552,7 @@ export function buildKitchen(parent, X, Z) {
       // and, on the floor before it, clear of what already stands or lies there
       const ff = V(dx * (d - 0.35) + px * u, 0, dz * (d - 0.35) + pz * u);
       if (whole && works.every(w => Math.hypot(w.x - fp.x, w.z - fp.z) > w.half + 0.9)
+        && busy.every(b => Math.hypot(b.x - fp.x, b.z - fp.z) > b.hw + half + 0.35)   // nor over a carpet, a notice board or a writing
         && (!floorKeep || taken.every(t => Math.hypot(t.x - ff.x, t.z - ff.z) > t.r + 0.8))) return { d, u, dx, dz };
     }
     return null;

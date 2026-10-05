@@ -878,7 +878,7 @@ export class SoulPath {
       stuff.kitchen = { ...kp, group: kg, room: null, wisps: null };
       stuff.kitchen.build = () => {
         if (group.userData.gone || stuff.kitchen.room) return;
-        stuff.kitchen.room = buildKitchen(kg, kp.x, kp.z);
+        stuff.kitchen.room = buildKitchen(kg, kp.x, kp.z, [...this._wallBusy.values()].flat());
         if (bigRug) {                                     // the table and the television both on it, in the lampshade's colours
           const tv = stuff.kitchen.room.tv, m = 1.35;          // room.tv is half a metre before the set: reach past it
           const x0 = Math.max(kp.minX + 0.3, Math.min(kp.x - 1.3, tv.x - m)), x1 = Math.min(kp.maxX - 0.3, Math.max(kp.x + 1.3, tv.x + m));
@@ -1636,6 +1636,7 @@ export class SoulPath {
         if (!slot) continue;
         this.stairwellPlan = { x: at.x, z: at.z, rotY: Math.atan2(slot.normal.x, slot.normal.z), cx, cz };
         this._stairCount = (this._stairCount || 0) + 1;
+        for (const m of this.marks) if (m.visible && Math.hypot(m.position.x - at.x, m.position.z - at.z) < 1) { m.visible = false; m.userData.key = null; m.userData.fadeAt = 0; }   // a scratch already there goes with the wall
         if (quiet) return;                               // its chunk is not built yet: it will be built round the door
         this._clearAround(at.x, at.z, 2.4);
         const stuff = this.chunkStuff.get(cx + ':' + cz);
@@ -2867,10 +2868,12 @@ export class SoulPath {
       const m = spare();
       if (!m) break;
       const nx = -si, nz = -sj;                         // wall normal, into the corridor
-      m.position.set(
-        si ? (si > 0 ? (i + 1) * CELL : i * CELL) + nx * 0.013 : centreOf(i),
-        MARK_Y + (k % 2) * 0.12,
-        sj ? (sj > 0 ? (j + 1) * CELL : j * CELL) + nz * 0.013 : centreOf(j));
+      const mx = si ? (si > 0 ? (i + 1) * CELL : i * CELL) + nx * 0.013 : centreOf(i);
+      const mz = sj ? (sj > 0 ? (j + 1) * CELL : j * CELL) + nz * 0.013 : centreOf(j);
+      // never across the metal door: it is cut into this wall, a scratch would hang in its opening
+      const sp = this.stairwellPlan;
+      if (sp && Math.abs((mx - sp.x) * nx + (mz - sp.z) * nz) < 0.3 && Math.abs((mx - sp.x) * nz - (mz - sp.z) * nx) < 0.85) continue;
+      m.position.set(mx, MARK_Y + (k % 2) * 0.12, mz);
       m.rotation.set(0, Math.atan2(nx, nz), 0);
       // plane's local +x in world is (nz, -nx); mirror so the arrow points onward
       m.scale.x = di * nz - dj * nx >= 0 ? 1 : -1;
