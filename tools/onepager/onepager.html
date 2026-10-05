@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>CONSPACE ROOMS</title>
+<meta name="author" content="Sinaida Krivchenko, UVALISS">
+<meta name="description" content="Интерактивная проекция с управлением жестами, 2026">
+<style>
+  @font-face { font-family: 'Departure Mono'; src: url('{{FONT}}') format('woff2'); }
+  @page { size: 595pt 842pt; margin: 0; }
+  :root {
+    --void: #010805; --mint: #baffc9; --mint-dim: #9fdcb0; --neon: #39ff6a;
+    --paper: #eef3ec; --ink: #0b2416; --muted: #3d5c48; --rule: #1e8f45;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 595pt; height: 842pt; }
+  body {
+    position: relative; overflow: hidden; background: var(--paper); color: var(--ink);
+    font-family: 'Departure Mono', monospace; font-size: 8pt; line-height: 11pt;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    font-kerning: none; hyphens: none;
+  }
+  .abs { position: absolute; }
+  a { color: inherit; text-decoration: none; }
+
+  /* dark band: photo and title */
+  .band { left: 0; top: 0; width: 595pt; height: 452pt; background: var(--void); }
+  .vrule { width: 0.75pt; background: var(--neon); }
+  .vrule.paper { background: var(--rule); }
+  .hrule { height: 0.75pt; background: var(--rule); }
+
+  .eyebrow { left: 21pt; top: 25pt; color: var(--mint-dim); font-size: 7pt; letter-spacing: 0.08em; }
+  .title { left: 21pt; top: 52pt; color: var(--mint); font-size: 40pt; line-height: 40pt; }
+  .title-rule { left: 21pt; top: 146pt; width: 72pt; height: 1.5pt; background: var(--neon); }
+  .kicker { left: 21pt; top: 160pt; width: 320pt; color: var(--mint); font-size: 9pt; line-height: 13pt; }
+  .hook { left: 21pt; top: 202pt; width: 318pt; color: var(--mint); font-size: 16pt; line-height: 22pt; }
+  .authors { left: 21pt; top: 340pt; width: 318pt; color: var(--mint-dim); font-size: 7.5pt; line-height: 11pt; }
+  .authors p + p { margin-top: 7pt; }
+  .authors b { color: var(--mint); font-weight: normal; }
+
+  .photo { left: 357.5pt; top: 21pt; width: 216pt; height: 384pt; object-fit: cover; }
+  .photo-cap { left: 357.5pt; top: 412pt; width: 216pt; color: var(--mint-dim); font-size: 6.5pt; line-height: 9pt; }
+
+  /* paper: stills, text, facts */
+  .still { top: 466pt; width: 178pt; height: 100pt; object-fit: cover; }
+  .still-cap { top: 571pt; width: 178pt; font-size: 7.5pt; letter-spacing: 0.08em; }
+  .still-cap span { color: var(--muted); letter-spacing: 0; font-size: 6.5pt; margin-left: 4pt; }
+
+  .body { left: 21pt; top: 600pt; width: 360pt; font-size: 9pt; line-height: 13pt; }
+
+  .qr { left: 396pt; top: 600pt; width: 76pt; height: 76pt; }
+  .qr svg { width: 100%; height: 100%; display: block; }
+  .qr svg path { fill: var(--ink); }
+  .qr-label { left: 480pt; top: 600pt; width: 94pt; font-size: 8pt; line-height: 11pt; }
+  .qr-label small { display: block; margin-top: 4pt; color: var(--muted); font-size: 6.5pt; line-height: 9pt; }
+  .links { left: 396pt; top: 686pt; width: 178pt; font-size: 7.5pt; line-height: 11pt; }
+  .links a { border-bottom: 0.75pt solid var(--rule); }
+
+  .facts { left: 21pt; top: 728pt; width: 553pt; display: grid;
+           grid-template-columns: 178pt 178pt 178pt; column-gap: 9.5pt; row-gap: 16pt; }
+  .facts dt { color: var(--muted); font-size: 6.5pt; line-height: 9pt; letter-spacing: 0.08em; }
+  .facts dd { font-size: 7.5pt; line-height: 10.5pt; }
+
+  .sig { right: 21pt; top: 828pt; font-size: 5.5pt; line-height: 7pt; opacity: 0.2; }
+</style>
+</head>
+<body>
+
+<div class="abs band"></div>
+<div class="abs vrule" style="left:16pt; top:21pt; height:431pt"></div>
+<div class="abs vrule" style="left:352pt; top:21pt; height:431pt"></div>
+<div class="abs vrule" style="left:578.25pt; top:21pt; height:431pt"></div>
+<div class="abs vrule paper" style="left:16pt; top:452pt; height:369pt"></div>
+<div class="abs vrule paper" style="left:578.25pt; top:452pt; height:369pt"></div>
+
+<p class="abs eyebrow">МЕДИАИНСТАЛЛЯЦИЯ · 2026</p>
+<h1 class="abs title">CONSPACE<br>ROOMS</h1>
+<div class="abs title-rule"></div>
+<p class="abs kicker">Интерактивная проекция с&nbsp;управлением жестами и&nbsp;работы серии SOULS</p>
+<p class="abs hook">Лабиринт строится заново для&nbsp;каждого гостя и&nbsp;больше никогда не&nbsp;повторится.</p>
+<div class="abs authors">
+  <p><b>UVALISS (Алиса Феер)</b>, Санкт-Петербург: серия SOULS, голос. Выставка «Интуиция пространства: Богоявление», Русский музей, 2026.</p>
+  <p><b>Sinaida Krivchenko</b>, Прага: идея, дизайн опыта, код.</p>
+</div>
+
+<img class="abs photo" src="room.jpg" alt="Зритель с поднятыми руками перед проекцией в тёмном зале">
+<p class="abs photo-cap">Документация: зал с&nbsp;проекцией, 2026</p>
+
+<img class="abs still" style="left:21pt" src="fear.jpg" alt="Больничный коридор">
+<img class="abs still" style="left:208.5pt" src="memory.jpg" alt="Бабушкина квартира">
+<img class="abs still" style="left:396pt" src="acceptance.jpg" alt="Арка из роз">
+<p class="abs still-cap" style="left:21pt">СТРАХ<span>кадр из&nbsp;игры</span></p>
+<p class="abs still-cap" style="left:208.5pt">ПАМЯТЬ<span>кадр из&nbsp;игры</span></p>
+<p class="abs still-cap" style="left:396pt">ПРИНЯТИЕ<span>кадр из&nbsp;игры</span></p>
+<div class="abs hrule" style="left:21pt; top:588pt; width:553pt"></div>
+
+<p class="abs body">Гость поднимает руки, и&nbsp;стена открывается в&nbsp;лабиринт: больничный коридор, бабушкина квартира, комнаты, которые распадаются в&nbsp;кружево. Карты нет, путь подсказывают свечи и&nbsp;растущая роза. Музыка сочиняется прямо во&nbsp;время прогулки. По&nbsp;дороге встречаются 18&nbsp;работ серии SOULS. Камера следит за&nbsp;руками и&nbsp;ничего не&nbsp;запоминает о&nbsp;человеке. Две художницы с&nbsp;разными бабушками построили из&nbsp;общей ностальгии один дом.</p>
+
+<a class="abs qr" href="{{URL_PLAY}}">{{QR}}</a>
+<p class="abs qr-label"><a href="{{URL_PLAY}}">Пройти лабиринт</a><small>в&nbsp;браузере, с&nbsp;камерой или&nbsp;кнопками</small></p>
+<p class="abs links"><a href="{{URL_RIDER}}">Райдер для&nbsp;площадок</a><br><a href="{{URL_PRESS}}">Кадры, видео и&nbsp;тексты</a></p>
+
+<div class="abs hrule" style="left:21pt; top:712pt; width:553pt"></div>
+<dl class="abs facts">
+  <div><dt>ВИЗИТ</dt><dd>около 10&nbsp;минут, один ведущий и&nbsp;до&nbsp;шести зрителей. 16+</dd></div>
+  <div><dt>ФОРМАТЫ</dt><dd>два зала, один зал или&nbsp;киоск без затемнения</dd></div>
+  <div><dt>ТЕХНИКА</dt><dd>работает без интернета, изображение с&nbsp;камеры не&nbsp;записывается</dd></div>
+  <div><dt>УСЛОВИЯ</dt><dd>показ по&nbsp;лицензии или&nbsp;версия под&nbsp;ваше пространство, по&nbsp;запросу</dd></div>
+  <div><dt>UVALISS</dt><dd><a href="https://uvaliss.ru/contacts">uvaliss.ru/contacts</a></dd></div>
+  <div><dt>SINAIDA</dt><dd><a href="https://sinaida.eu/#contact">sinaida.eu/#contact</a></dd></div>
+</dl>
+
+<p class="abs sig">Je suis le spectre d’une rose que tu portais hier au bal.</p>
+</body>
+</html>

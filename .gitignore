@@ -12,3 +12,4 @@ assets/stairs/*.png
 # the smoke run's one dependency
 tests/node_modules/
 4143884460891284756.mp4
+tools/onepager/.venv/
