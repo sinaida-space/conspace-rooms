@@ -35,7 +35,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-+mly31C+QQSAeXrtrKLIXFjPzAin+3Nu2O5/lqJcZv8=' 'sha256-L9kOBtq0TJtn2ZTGz0ZeIYRwwMPH3pe8xwxpS41w/Is=' 'sha256-Lf6v+Pm1PbFk6diJeAdbevvkSeBpLD78/jG9F/aoJuo=' 'sha256-R10NbPsK6t6c80J9eSBrUAbAWLtC+mXPAvoW1Tbab+s=' 'sha256-fIM2tNckEvj80MQwB/LHHEczWT5oID4vep3FaKkTto8=' 'sha256-iTg4n36bNWS/Z5yAnbrz5PEC3YtEunQvbmxYXsfueB4=' 'sha256-ng6+U971fSX1pY7b3ceS8e0ANb+f+A/Oykp7Ielhb7Q=' 'sha256-xniJZLofnIN9Ptd0eR5vCkypblH5dCBK7bcaVfZEN2E=' 'sha256-zB/j+ZWgyUf3uTnQySeU7A4KDKmFdMLTUHuDgHkFY5M='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
+          "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-+mly31C+QQSAeXrtrKLIXFjPzAin+3Nu2O5/lqJcZv8=' 'sha256-L9kOBtq0TJtn2ZTGz0ZeIYRwwMPH3pe8xwxpS41w/Is=' 'sha256-Lf6v+Pm1PbFk6diJeAdbevvkSeBpLD78/jG9F/aoJuo=' 'sha256-R10NbPsK6t6c80J9eSBrUAbAWLtC+mXPAvoW1Tbab+s=' 'sha256-fIM2tNckEvj80MQwB/LHHEczWT5oID4vep3FaKkTto8=' 'sha256-iTg4n36bNWS/Z5yAnbrz5PEC3YtEunQvbmxYXsfueB4=' 'sha256-ng6+U971fSX1pY7b3ceS8e0ANb+f+A/Oykp7Ielhb7Q=' 'sha256-xniJZLofnIN9Ptd0eR5vCkypblH5dCBK7bcaVfZEN2E=' 'sha256-zB/j+ZWgyUf3uTnQySeU7A4KDKmFdMLTUHuDgHkFY5M='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; frame-src https://www.youtube-nocookie.com; connect-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
         }
       ]
     },
