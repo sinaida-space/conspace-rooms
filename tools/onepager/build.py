@@ -1,7 +1,6 @@
 """Builds the one-page Russian PDF for venues and buyers.
 
-Usage (needs qrcode and pillow, e.g. in a venv):
-    python3 tools/onepager/build.py
+Usage: tools/onepager/build.sh (sets up a venv with qrcode and pillow)
 Output: assets/press/conspace-rooms-ru.pdf
 
 Layout: A4 in points, grid rules from the sinaida-grid-style law (16 pt margin,
