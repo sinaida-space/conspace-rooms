@@ -33,6 +33,7 @@ export function buildCsp() {
     "img-src 'self' data: blob:",
     "media-src 'self' blob:",
     "font-src 'self'",
+    "frame-src https://www.youtube-nocookie.com",   // press.html only: the video facade mounts the player after a click
     "connect-src 'self' blob:",                  // the models' own textures are read back as blobs (GLTFLoader)
     "worker-src 'self' blob:",
     "manifest-src 'self'",

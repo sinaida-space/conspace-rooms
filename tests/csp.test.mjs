@@ -21,7 +21,9 @@ test('no page asks for a script, a style or a file from another host', async () 
 
 test('the policy names no other host and no unsafe script source', () => {
   const csp = buildCsp();
-  assert.ok(!/https?:/.test(csp), csp);
+  // the one host: the press page's click-to-load video player
+  assert.ok(!/https?:/.test(csp.replace('frame-src https://www.youtube-nocookie.com', '')), csp);
+  assert.ok(csp.includes('frame-src https://www.youtube-nocookie.com;'), csp);
   assert.ok(!/script-src[^;]*'unsafe-(inline|eval)'/.test(csp), csp);
   assert.ok(inlineScriptHashes().length > 0);
 });
