@@ -4,8 +4,6 @@
 
 **Live:** https://conspace-rooms.vercel.app/ (RU / EN)
 
-> Production mirror. Development and issue tracking run in a private development environment; releases are published here.
-
 ## Links
 
 | | Main site (Vercel) | Mirror (GitHub Pages) |
@@ -252,3 +250,7 @@ opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 ## Rights
 
 © Sinaida Krivchenko & UVALISS (Alisa Feer). Artworks all rights reserved. The window views (`assets/windows/`), the stairwell pictures (`assets/stairs/`) and the carpet pictures (`assets/carpets/`) are by Sinaida Krivchenko, made in Midjourney; the other carpets and the runners are drawn in code.
+
+This repo is a production mirror.
+
+Development and issue tracking run in a private development environment; releases are published here.
