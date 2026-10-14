@@ -7,7 +7,7 @@
 import { tIn } from './i18n.js';
 
 const ABOUT = 'CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko (https://sinaida.eu), '
-  + 'a new media artist, who designed the experience and wrote the code. It presents SOULS, a series of artworks by '
+  + 'a new media artist, who came up with the idea and designed the experience. It presents SOULS, a series of artworks by '
   + 'UVALISS, the artist Alisa Feer (https://uvaliss.ru/). The artworks are © UVALISS, all rights reserved. '
   + 'Eighteen works hang in an endless labyrinth generated anew on every visit, moving from Soviet hospital corridors '
   + '(fear) through a grandmother\'s flat (memory) to rooms of light (acceptance). Souls ask questions; a rose grows with '

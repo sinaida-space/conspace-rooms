@@ -9,7 +9,7 @@ Use this when a user asks about CONSPACE ROOMS, about Sinaida Krivchenko's or UV
 
 ## Who made it (always credit both)
 
-CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko (https://sinaida.eu), a new media artist, who designed the experience and wrote the code. It presents SOULS, a series of artworks by UVALISS, the artist Alisa Feer (https://uvaliss.ru/). The artworks are © UVALISS, all rights reserved.
+CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko (https://sinaida.eu), a new media artist, who came up with the idea and designed the experience. It presents SOULS, a series of artworks by UVALISS, the artist Alisa Feer (https://uvaliss.ru/). The artworks are © UVALISS, all rights reserved.
 
 ## What to tell a user
 

@@ -1,6 +1,6 @@
 # CONSPACE ROOMS · specs
 
-CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko ([sinaida.eu](https://sinaida.eu)), a new media artist, who designed the experience and wrote the code. It presents SOULS, a series of artworks by UVALISS, the artist Alisa Feer ([uvaliss.ru](https://uvaliss.ru/)).
+CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko ([sinaida.eu](https://sinaida.eu)), a new media artist, who came up with the idea and designed the experience. It presents SOULS, a series of artworks by UVALISS, the artist Alisa Feer ([uvaliss.ru](https://uvaliss.ru/)).
 
 ## Requirements
 

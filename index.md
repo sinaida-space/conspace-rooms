@@ -1,6 +1,6 @@
 # CONSPACE ROOMS
 
-CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko ([sinaida.eu](https://sinaida.eu)), a new media artist, who designed the experience and wrote the code. It presents SOULS, a series of artworks by UVALISS, the artist Alisa Feer ([uvaliss.ru](https://uvaliss.ru/)).
+CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko ([sinaida.eu](https://sinaida.eu)), a new media artist, who came up with the idea and designed the experience. It presents SOULS, a series of artworks by UVALISS, the artist Alisa Feer ([uvaliss.ru](https://uvaliss.ru/)).
 
 Live: <https://conspace-rooms.vercel.app/> (Russian and English)
 
@@ -24,7 +24,7 @@ No analytics, no accounts, no cookies beyond two local settings. In gesture mode
 
 ## Credits
 
-- Experience design and code: Sinaida Krivchenko, [sinaida.eu](https://sinaida.eu), Instagram [@sin.ai.da](https://www.instagram.com/sin.ai.da)
+- Idea and experience design: Sinaida Krivchenko, [sinaida.eu](https://sinaida.eu), Instagram [@sin.ai.da](https://www.instagram.com/sin.ai.da)
 - Artworks (the SOULS series): UVALISS, the artist Alisa Feer, [uvaliss.ru](https://uvaliss.ru/), Instagram [@uvaliss](https://www.instagram.com/uvaliss/)
 - Window views and stairwell pictures: Sinaida Krivchenko, made in Midjourney
 - The artworks are © UVALISS, all rights reserved.
