@@ -1,0 +1,337 @@
+// MediaPipe hand tracking → HandInput. Loaded lazily, only after the user
+// explicitly chooses gesture mode (opt-in). All landmark processing stays in
+// the browser, and the library, its WebAssembly and both models are served
+// from this site (vendor/mediapipe): no other host is asked for anything.
+//
+// iOS/iPadOS Safari constraints (do not regress these — see issue #13):
+//   - the <video> element MUST be attached to document.body. iOS Safari
+//     refuses to decode a detached video (currentTime stays 0 forever).
+//     It stays visually invisible via near-zero size + opacity, NOT via
+//     display:none/visibility:hidden/zero width-height — all three of
+//     those also stop decode on iOS.
+//   - playsInline/muted must be set as both DOM properties AND HTML
+//     attributes (`setAttribute('playsinline', ...)`); iOS only reliably
+//     honours the attribute form.
+//   - the camera MediaStream is requested at click time by the caller
+//     (see issue #12) and handed into start(stream) rather than requested
+//     here — getUserMedia long after the user gesture is unreliable on iOS.
+//   - the GPU delegate is unreliable in iOS Safari, so model creation
+//     retries on the CPU delegate if GPU creation throws.
+//
+// Two-hand vocabulary (callers just read the flags on the emitted state):
+//   one fist (either hand) → walk forward (anyFist)
+//   both fists            → run (bothFists)
+//   one fist carried out to the side → turn that way (turnLeft/turnRight):
+//                            left fist out or right fist in → left,
+//                            right fist out or left fist in → right
+//   both fists carried sideways → runTurn: the caller asks to stop first
+//   a pointing hand still turns too (pointLeft/pointRight), the old way
+//   both palms open (stop) → freezes turning/walking; moving the two open
+//                            palms apart/together zooms in/out (zoomDelta)
+//   thumb-index pinch (either hand) → inspect
+// @mediapipe/tasks-vision 0.10.14 (Apache 2.0), see vendor/mediapipe/README.md
+const MEDIAPIPE = new URL('../vendor/mediapipe/0.10.14/', import.meta.url).href;
+const MODEL_URL = MEDIAPIPE + 'models/hand_landmarker.task';
+const FACE_MODEL_URL = MEDIAPIPE + 'models/blaze_face_short_range.tflite';
+const FACE_EVERY_MS = 250;   // presence needs no more than a few looks a second
+
+const NO_FRAMES_TIMEOUT_MS = 6000;
+// A gesture has to hold for a moment before it counts, and a moment more
+// before it lets go: one misread frame no longer starts or stops the walk.
+const ON_MS = 110, OFF_MS = 200;
+// A fist carried sideways steers. Where it formed is its middle; this far
+// (in frame widths) toward the visitor's right or left turns that way.
+const TURN_OFF = 0.07;
+const TURN_CREEP = 0.04;   // inside the dead zone the middle follows the fist slowly, so it never drifts off
+const WATCHDOG_TIMEOUT_MS = 8000;
+const MAX_CONSECUTIVE_DETECT_FAILURES = 5;
+
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y, (a.z - b.z) || 0); }
+
+// Classify a single hand's landmarks into the gesture primitives we care
+// about. Landmark indices follow MediaPipe's 21-point hand model.
+function classifyHand(l) {
+  const wrist = l[0], mcp = l[9];
+  const size = dist(wrist, mcp) || 1e-4; // scale reference
+  const isCurled = t => dist(l[t], wrist) < dist(l[t - 2], wrist) + size * 0.1;
+  const indexOut = !isCurled(8), middleOut = !isCurled(12), ringOut = !isCurled(16), pinkyOut = !isCurled(20);
+  return {
+    fist: !indexOut && !middleOut && !ringOut && !pinkyOut,
+    openPalm: indexOut && middleOut && ringOut && pinkyOut,
+    pointing: indexOut && !middleOut && !ringOut && !pinkyOut, // index-only "point" gesture
+    pinch: dist(l[4], l[8]) < size * 0.5,
+    center: mcp,
+  };
+}
+
+// a one-word reading of a hand for the bug report
+function handName(g) { return g.fist ? 'fist' : g.openPalm ? 'palm' : g.pointing ? 'point' : g.pinch ? 'pinch' : 'hand'; }
+
+export class HandInput {
+  // faces: also watch for a face (gallery mode), so presence() can tell
+  // whether anyone is standing in front of the screen at all
+  constructor(onUpdate, onError, { faces = false } = {}) {
+    this.onUpdate = onUpdate;
+    this.onError = onError;
+    this.faces = faces;
+    this.lastPresence = 0;           // performance.now() of the last face or hand seen
+    this._faceAt = 0;
+    this.stopped = false;
+    this._errored = false;
+    this.lastVideoTime = -1;
+    this._prevHandDist = null;
+    this._failCount = 0;
+    this._watchdogTimer = null;
+    this._flags = {};                // debounced gesture flags: name -> { on, since }
+    this._anchor = { left: null, right: null };   // where each fist formed (frame x)
+    this._loop = this._loop.bind(this);
+  }
+
+  // Fire onError at most once, and never after stop().
+  _fail(err) {
+    if (this._errored || this.stopped) return;
+    this._errored = true;
+    this._clearWatchdog();
+    if (this.onError) this.onError(err);
+  }
+
+  _clearWatchdog() {
+    if (this._watchdogTimer) {
+      clearTimeout(this._watchdogTimer);
+      this._watchdogTimer = null;
+    }
+  }
+
+  // Debounce one flag: the raw reading must disagree with the held value for
+  // ON_MS (to switch on) or OFF_MS (to switch off) before the value changes.
+  _stable(name, raw, now) {
+    const f = this._flags[name] ||= { on: false, since: now };
+    if (raw === f.on) { f.since = now; return f.on; }
+    if (now - f.since >= (raw ? ON_MS : OFF_MS)) { f.on = raw; f.since = now; }
+    return f.on;
+  }
+
+  // milliseconds since anyone (a face or a hand) was last seen
+  idleMs() { return performance.now() - this.lastPresence; }
+  // a face seen within the last `ms`
+  faceWithin(ms) { return this._faceSeenAt !== undefined && performance.now() - this._faceSeenAt < ms; }
+
+  async start(stream) {
+    // Video element must be created and attached to the DOM before the
+    // stream is wired up — iOS Safari won't decode a detached video.
+    this.video = document.createElement('video');
+    this.video.playsInline = true;
+    this.video.muted = true;
+    this.video.autoplay = true;
+    this.video.setAttribute('playsinline', '');
+    this.video.setAttribute('muted', '');
+    Object.assign(this.video.style, {
+      position: 'fixed', top: '0', left: '0',
+      width: '1px', height: '1px', opacity: '0.01',
+      pointerEvents: 'none', zIndex: '-1',
+    });
+    document.body.appendChild(this.video);
+
+    try {
+      this.stream = stream || await navigator.mediaDevices.getUserMedia({
+        video: { width: 320, height: 240, facingMode: 'user' },
+      });
+      this.video.srcObject = this.stream;
+      try {
+        await this.video.play();
+      } catch (e) {
+        const err = new Error(`camera video failed to play: ${e.message || e}`);
+        this._fail(err);
+        throw err;
+      }
+
+      await this._waitForFrames();
+
+      const vision = await import(`${MEDIAPIPE}vision_bundle.mjs`);
+      const files = await vision.FilesetResolver.forVisionTasks(`${MEDIAPIPE}wasm`);
+      const opts = d => ({ baseOptions: { modelAssetPath: MODEL_URL, delegate: d }, numHands: 2, runningMode: 'VIDEO' });
+      try {
+        this.lm = await vision.HandLandmarker.createFromOptions(files, opts('GPU'));
+      } catch (e) {
+        console.warn('[hands] GPU delegate failed, retrying on CPU', e);
+        this.lm = await vision.HandLandmarker.createFromOptions(files, opts('CPU'));
+      }
+      if (this.faces) {
+        const fopts = d => ({ baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate: d }, runningMode: 'VIDEO', minDetectionConfidence: 0.5 });
+        try { this.fd = await vision.FaceDetector.createFromOptions(files, fopts('GPU')); }
+        catch (e) { this.fd = await vision.FaceDetector.createFromOptions(files, fopts('CPU')); }
+      }
+
+      this._armWatchdog();
+      requestAnimationFrame(this._loop);
+    } catch (e) {
+      this._fail(e instanceof Error ? e : new Error(String(e)));
+      throw e;
+    }
+  }
+
+  // Resolves once the video is actually decoding real frames. iOS can leave
+  // readyState/videoWidth at 0 indefinitely if decode never started, so this
+  // times out rather than hanging forever.
+  _waitForFrames() {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        this.video.removeEventListener('loadedmetadata', check);
+        this.video.removeEventListener('loadeddata', check);
+        clearTimeout(timer);
+        resolve();
+      };
+      const check = () => {
+        if (settled) return;
+        if (this.video.readyState >= 2 && this.video.videoWidth > 0) {
+          finish();
+        } else {
+          requestAnimationFrame(check);
+        }
+      };
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.video.removeEventListener('loadedmetadata', check);
+        this.video.removeEventListener('loadeddata', check);
+        reject(new Error('camera stream produced no frames'));
+      }, NO_FRAMES_TIMEOUT_MS);
+      this.video.addEventListener('loadedmetadata', check);
+      this.video.addEventListener('loadeddata', check);
+      requestAnimationFrame(check);
+    });
+  }
+
+  _armWatchdog() {
+    this._clearWatchdog();
+    this._watchdogTimer = setTimeout(() => {
+      this._watchdogTimer = null;
+      this._fail(new Error('hand tracking produced no results'));
+    }, WATCHDOG_TIMEOUT_MS);
+  }
+
+  _loop(now) {
+    if (this.stopped) return;
+    if (this.video.videoWidth === 0) {
+      requestAnimationFrame(this._loop);
+      return;
+    }
+    if (this.video.currentTime !== this.lastVideoTime) {
+      this.lastVideoTime = this.video.currentTime;
+
+      let res;
+      try {
+        res = this.lm.detectForVideo(this.video, now);
+        this._failCount = 0;
+      } catch (e) {
+        this._failCount++;
+        console.warn('[hands] detectForVideo failed', e);
+        if (this._failCount >= MAX_CONSECUTIVE_DETECT_FAILURES) {
+          this._fail(e instanceof Error ? e : new Error(String(e)));
+          return;
+        }
+        requestAnimationFrame(this._loop);
+        return;
+      }
+
+      // Re-arm rather than clear: a stream that freezes after working for a
+      // while stops producing new currentTime values, so the loop stops
+      // detecting and the sliding watchdog fires the fallback.
+      this._armWatchdog();
+
+      const n = res.landmarks ? res.landmarks.length : 0;
+      if (n) this.lastPresence = now;
+      if (this.fd && now - this._faceAt > FACE_EVERY_MS) {
+        this._faceAt = now;
+        try { if (this.fd.detectForVideo(this.video, now).detections.length) { this.lastPresence = now; this._faceSeenAt = now; } }
+        catch (e) { /* a missed look is fine */ }
+      }
+
+      if (n === 0) {
+        this._prevHandDist = null;
+        for (const k of ['anyFist', 'bothFists', 'bothOpen', 'pointLeft', 'pointRight', 'pinch', 'turnLeft', 'turnRight', 'runTurn']) this._stable(k, false, now);
+        this._anchor.left = this._anchor.right = null;
+        // a hand lost for a frame or two is not a hand taken away
+        if (now - (this._handAt || 0) < OFF_MS && this._last) { this.onUpdate({ ...this._last, zoomDelta: 0 }); requestAnimationFrame(this._loop); return; }
+        this._last = null;
+        this.onUpdate({
+          present: false, anyFist: false, bothFists: false, pointLeft: false, pointRight: false,
+          turnLeft: false, turnRight: false, runTurn: false, stopped: false, pinch: false, zoomDelta: 0,
+        });
+      } else {
+        let left = null, right = null, anyPinch = false;
+        for (let i = 0; i < n; i++) {
+          const g = classifyHand(res.landmarks[i]);
+          if (g.pinch) anyPinch = true;
+          // MediaPipe's handedness label assumes a mirrored (selfie) input
+          // frame; our raw getUserMedia frame isn't mirrored, so the label
+          // already matches the user's physical hand.
+          const rawLabel = res.handednesses?.[i]?.[0]?.categoryName;
+          const side = rawLabel === 'Left' ? 'left' : 'right';
+          if (side === 'left' && !left) left = g;
+          else if (side === 'right' && !right) right = g;
+        }
+
+        this._handAt = now;
+        const anyFist = this._stable('anyFist', !!(left?.fist || right?.fist), now);
+        const bothFists = this._stable('bothFists', !!(left?.fist && right?.fist), now);
+        const bothOpen = this._stable('bothOpen', !!(left?.openPalm && right?.openPalm), now);
+        const pointLeft = this._stable('pointLeft', !!left?.pointing, now);
+        const pointRight = this._stable('pointRight', !!right?.pointing, now);
+        anyPinch = this._stable('pinch', anyPinch, now);
+
+        // steering: how far each fist has moved from where it formed, toward
+        // the visitor's right (+). The frame is not mirrored: their right is smaller x.
+        const off = {};
+        for (const k of ['left', 'right']) {
+          const g = k === 'left' ? left : right;
+          if (!g?.fist) { this._anchor[k] = null; off[k] = 0; continue; }
+          if (this._anchor[k] == null) this._anchor[k] = g.center.x;
+          off[k] = this._anchor[k] - g.center.x;
+          if (Math.abs(off[k]) < TURN_OFF) this._anchor[k] += (g.center.x - this._anchor[k]) * TURN_CREEP;
+        }
+        const oneFist = !!(left?.fist) !== !!(right?.fist);
+        const steer = oneFist ? (left?.fist ? off.left : off.right) : 0;
+        const turnRight = this._stable('turnRight', steer > TURN_OFF, now);
+        const turnLeft = this._stable('turnLeft', steer < -TURN_OFF, now);
+        const runTurn = this._stable('runTurn', !!(left?.fist && right?.fist) && Math.max(Math.abs(off.left), Math.abs(off.right)) > TURN_OFF * 1.5, now);
+
+        let zoomDelta = 0;
+        if (bothOpen && left && right) {
+          const d = dist(left.center, right.center);
+          if (this._prevHandDist != null) zoomDelta = d - this._prevHandDist;
+          this._prevHandDist = d;
+        } else {
+          this._prevHandDist = null;
+        }
+
+        this._last = {
+          present: true, anyFist, bothFists, pointLeft, pointRight, turnLeft, turnRight, runTurn,
+          stopped: bothOpen, pinch: anyPinch, zoomDelta,
+          left: left ? handName(left) : '', right: right ? handName(right) : '',
+        };
+        this.onUpdate(this._last);
+      }
+    }
+    requestAnimationFrame(this._loop);
+  }
+
+  stop() {
+    if (this.stopped) return;
+    this.stopped = true;
+    this._clearWatchdog();
+    if (this.stream) this.stream.getTracks().forEach(t => t.stop());
+    if (this.lm) this.lm.close();
+    if (this.fd) this.fd.close();
+    if (this.video) {
+      this.video.pause();
+      this.video.srcObject = null;
+      if (this.video.parentNode) this.video.parentNode.removeChild(this.video);
+    }
+  }
+}
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

@@ -1,0 +1,592 @@
+// Welcome screen: collab statement, links, machine capability check, mode select.
+import { detectDevice } from './device.js';
+import { keyCode } from './input.js';
+import { t, getLang, setLang, langFromUrl, applyStatic } from './i18n.js';
+import { renderFooter, VERSION } from './footer.js';
+import { calm } from './calm.js';
+import { captions } from './captions.js';
+
+const $ = id => document.getElementById(id);
+const wait = ms => new Promise(res => setTimeout(res, ms));
+
+// Every strip of tape is torn by hand: its own ragged ends, its own slightly
+// crooked long edges, drawn once as a clip-path when it first appears.
+function tearTape(el) {
+  if (el.dataset.torn) return;
+  el.dataset.torn = '1';
+  const r = (a, b) => a + Math.random() * (b - a), pts = [];
+  const end = (x0, inward, down) => {                  // a torn end: 5–8 teeth across the strip
+    const n = 5 + Math.floor(Math.random() * 4);
+    for (let i = 0; i <= n; i++) {
+      const y = down ? i / n * 100 : 100 - i / n * 100;
+      pts.push(`${(x0 + inward * r(0, 5.5)).toFixed(1)}% ${Math.min(100, Math.max(0, y + r(-3, 3))).toFixed(1)}%`);
+    }
+  };
+  pts.push(`${r(2, 7).toFixed(1)}% ${r(0, 6).toFixed(1)}%`);              // the long top edge, a hair off straight
+  pts.push(`${r(30, 70).toFixed(1)}% ${r(0, 3).toFixed(1)}%`);
+  end(100, -1, true);                                                     // right end, top to bottom
+  pts.push(`${r(30, 70).toFixed(1)}% ${r(97, 100).toFixed(1)}%`);         // the long bottom edge
+  end(0, 1, false);                                                       // left end, bottom to top
+  el.style.clipPath = `polygon(${pts.join(', ')})`;
+}
+const TAPES = '.tape, #pad .pad-inspect, #hud-toolbar button';
+function tearAll(root = document) { root.querySelectorAll?.(TAPES).forEach(tearTape); }
+if (typeof document !== 'undefined') {
+  tearAll();
+  new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) { if (n.matches(TAPES)) tearTape(n); tearAll(n); } })
+    .observe(document.documentElement, { childList: true, subtree: true });
+}
+
+// WebGL2 support (hard requirement) + GPU class heuristic + dpr + touch.
+export function detectCapabilities() {
+  let webgl2 = false, gpu = '';
+  try {
+    const c = document.createElement('canvas');
+    const gl = c.getContext('webgl2');
+    webgl2 = !!gl;
+    if (gl) {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      gpu = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '';
+    }
+  } catch (e) { /* no webgl2 */ }
+
+  const dpr = window.devicePixelRatio || 1;
+  const device = detectDevice();
+  const touch = device.isTouch;
+  const isMobile = device.isMobile;
+
+  let gpuClass = 'unknown';
+  if (/(intel|iris|uhd|hd graphics)/i.test(gpu) && !/(arc)/i.test(gpu)) gpuClass = 'low';
+  else if (gpu) gpuClass = 'high';
+
+  let recommendedMode = 'keys';
+  if (!(device.isMobile || device.coarsePointer) && webgl2 && gpuClass !== 'low' && device.hasCamera) recommendedMode = 'hands';
+
+  return { webgl2, gpu, dpr, touch, isMobile, gpuClass, recommendedMode, device };
+}
+
+export class UI {
+  constructor() {
+    this.selectedMode = null;
+  }
+
+  // Language gate: the very first screen. A ?lang= link (or a reload after
+  // choosing) skips it. Nothing is stored; the choice lives in the URL.
+  async gateLanguage() {
+    const gate = $('lang-gate');
+    const preset = langFromUrl();
+    if (preset) {
+      setLang(preset);
+      gate?.classList.add('hidden');
+      applyStatic();
+      renderFooter(getLang());
+      $('welcome-version').textContent = t('versionLine', { v: VERSION.replace(/^v/, '') });
+      return;
+    }
+    const el = $('lang-boot');
+    if (el) await this._typeLine(el, 'C:\\CONSPACE>ВЫБЕРИТЕ ЯЗЫК / SELECT LANGUAGE_');
+    const byBrowser = (navigator.language || '').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+    gate?.querySelector(`[data-lang="${byBrowser}"]`)?.focus({ preventScroll: true });
+    const chosen = await new Promise(res => {
+      gate?.querySelectorAll('[data-lang]').forEach(b =>
+        b.addEventListener('click', () => res(b.dataset.lang), { once: true }));
+    });
+    setLang(chosen);
+    applyStatic();
+    renderFooter(getLang());
+    $('welcome-version').textContent = t('versionLine', { v: VERSION.replace(/^v/, '') });
+    gate?.classList.add('hidden');
+  }
+
+  // Cookie/consent gate: shown once (persisted in localStorage) before the
+  // welcome screen. Resolves immediately if consent was already given.
+  async gateConsent() {
+    let consented = false;
+    try { consented = localStorage.getItem('conspace-consent') === '1'; } catch (e) { /* storage blocked */ }
+    if (consented) {
+      $('cookie-gate')?.classList.add('hidden');
+      return;
+    }
+    $('cookie-gate')?.classList.remove('hidden');
+    await this._typeCookieBoot();
+    await new Promise(res => {
+      $('btn-consent')?.addEventListener('click', () => {
+        try { localStorage.setItem('conspace-consent', '1'); } catch (e) { /* storage blocked */ }
+        document.body.classList.add('tw-read');   // the warning was just read here: the welcome need not repeat it
+        res();
+      }, { once: true });
+    });
+    $('cookie-gate')?.classList.add('hidden');
+  }
+
+  async _typeCookieBoot() {
+    const el = $('cookie-boot');
+    if (!el) return;
+    const lines = t('cookieBoot');
+    for (const line of lines) {
+      await this._typeLine(el, line);
+      await wait(120);
+    }
+  }
+
+  showCapabilityResult(caps) {
+    const el = $('capability-result');
+    if (!el) return;
+    el.classList.remove('hidden');
+    if (!caps.webgl2) {
+      el.textContent = t('noWebgl');
+      return;
+    }
+    el.textContent = t('capability', { gpu: caps.gpuClass, dpr: caps.dpr, touch: t(caps.touch ? 'touchYes' : 'touchNo') });
+  }
+
+  // DOS-style typed boot sequence, run once on load before the capability
+  // line and mode-select settle in. Purely decorative — resolves regardless
+  // of typing state so it never blocks entry.
+  async runBootSequence(caps) {
+    const el = $('boot-sequence');
+    if (!el) return;
+    this._armPacman();
+    const lines = t('boot', { gpu: (caps.gpuClass || 'unknown').toUpperCase() });
+    for (const line of lines) {
+      await this._typeLine(el, line);
+      await wait(120);
+    }
+  }
+
+  _typeLine(el, text) {
+    return new Promise(res => {
+      const row = document.createElement('div');
+      el.appendChild(row);
+      let i = 0;
+      const step = () => {
+        row.textContent = text.slice(0, i);
+        if (i < text.length) { i++; setTimeout(step, 14); }
+        else res();
+      };
+      step();
+    });
+  }
+
+  initModeSelect(recommendedMode, caps = {}) {
+    const isTouch = !!(caps.device?.isTouch ?? caps.touch);
+    if (isTouch && recommendedMode === 'hands') recommendedMode = 'keys';
+    // nothing is chosen for the visitor: ВОЙТИ waits until a way to walk is picked
+    this.selectedMode = null;
+    this._syncTrain();
+    // subtitles for the sounds, chosen here or later in the menu (captions.js)
+    const cc = $('btn-cc-welcome');
+    if (cc) {
+      const sync = () => {
+        cc.setAttribute('aria-checked', String(captions.on));
+        cc.querySelector('.cc-state').textContent = t(captions.on ? 'stateOn' : 'stateOff');
+      };
+      cc.addEventListener('click', () => captions.set(!captions.on));
+      captions.onChange(sync); sync();
+    }
+    const enter = $('btn-enter');
+    if (enter) enter.disabled = true;
+    const buttons = Array.from(document.querySelectorAll('#mode-select button'));
+    const hasWebcam = !!navigator.mediaDevices?.getUserMedia;
+    buttons.forEach(btn => {
+      // one method on every device: a phone gets the on-screen pad legend, no keyboard talk
+      if (btn.dataset.mode === 'keys' && isTouch) btn.querySelector('.mode-legend').textContent = t('legendPad');
+      const isHands = btn.dataset.mode === 'hands';
+      const isRecommended = btn.dataset.mode === recommendedMode && !(isHands && isTouch);
+      if (isRecommended) {
+        const tag = document.createElement('span');
+        tag.className = 'mode-legend';
+        tag.textContent = t('recommended');
+        btn.appendChild(tag);
+      }
+      if (isHands && !hasWebcam) {
+        const tag = document.createElement('span');
+        tag.className = 'mode-legend';
+        tag.textContent = t('noCamKeys');
+        btn.appendChild(tag);
+      }
+      btn.addEventListener('click', () => {
+        buttons.forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        this.selectedMode = btn.dataset.mode;
+        if (enter) enter.disabled = false;
+        this._syncTrain();
+        // the choice is made: bring ВОЙТИ into view
+        $('btn-enter')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+      });
+    });
+  }
+
+  // Тренировка stands beside ВОЙТИ only when gestures are chosen (and a camera exists)
+  _syncTrain() {
+    const on = this.selectedMode === 'hands' && !!navigator.mediaDevices?.getUserMedia;
+    document.querySelector('.welcome-actions')?.classList.toggle('two', on);
+  }
+
+  // Easter egg: clicking the CONSPACE ROOMS wordmark opens a small Pac-Man
+  // in the site's phosphor greens (src/pacman.js, loaded on demand).
+  _armPacman() {
+    if (this._eggArmed) return;
+    this._eggArmed = true;
+    const mark = $('wordmark');
+    if (!mark) return;
+    mark.addEventListener('click', async () => {
+      const { openPacman } = await import('./pacman.js');
+      openPacman();
+    });
+  }
+
+  showWebglError() {
+    $('cookie-gate')?.classList.add('hidden');
+    $('welcome')?.classList.add('hidden');
+    $('webgl-error')?.classList.remove('hidden');
+  }
+
+  // Resolves { mode, cameraStream, training } (training: ТРЕНИРОВКА was pressed). cameraStream is a Promise<MediaStream> or
+  // null, created synchronously inside the click listener (before any await)
+  // so iOS user-activation is still live when getUserMedia is called. A
+  // no-op .catch() is attached so a rejection here is never unhandled; the
+  // caller (main.js) awaits the same promise and handles the real error.
+  waitForEnter() {
+    return new Promise(res => {
+      const go = training => () => {
+        if (!this.selectedMode) return;
+        let cameraStream = null;
+        if (this.selectedMode === 'hands' && navigator.mediaDevices?.getUserMedia) {
+          cameraStream = navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' } });
+          cameraStream.catch(() => {});
+        }
+        res({ mode: this.selectedMode, cameraStream, training: training && this.selectedMode === 'hands' });
+      };
+      $('btn-enter').addEventListener('click', go(false));
+      $('btn-train')?.addEventListener('click', go(true));
+    });
+  }
+
+  hideWelcome() {
+    $('welcome')?.classList.add('hidden');
+  }
+
+  // While the labyrinth builds (and the hands model loads) a line glows in
+  // the dark and changes every couple of seconds; it fades once all is ready.
+  showLoading() {
+    if ($('loading')) return;
+    const el = document.createElement('div');
+    el.id = 'loading';
+    el.setAttribute('role', 'status');
+    const lines = t('loadingLines');
+    let i = 0;
+    el.innerHTML = `<p>${lines[0]}</p>`;
+    document.body.appendChild(el);
+    this._loadingTimer = setInterval(() => { el.firstChild.textContent = lines[++i % lines.length]; }, 2600);
+    this._loadingSince = performance.now();
+  }
+
+  hideLoading() {
+    const el = $('loading');
+    if (!el) return;
+    const wait = Math.max(0, 1400 - (performance.now() - this._loadingSince));   // never a flash
+    setTimeout(() => {
+      clearInterval(this._loadingTimer);
+      el.classList.add('gone');
+      setTimeout(() => el.remove(), 1300);
+    }, wait);
+  }
+
+  // On-screen pad for the buttons mode: arrows hold the same keys the keyboard
+  // does, LOOK CLOSER inspects and wakes up only when an artwork is in reach
+  // (artworks.js sets body.can-inspect).
+  showPad({ keys, pick }) {
+    if ($('pad')) return;
+    const el = document.createElement('div');
+    el.id = 'pad';
+    const labels = t('padLabels');
+    el.innerHTML = `
+      <div class="pad-arrows">
+        <div class="pad-lift"><div class="pad-v tape">
+          <button type="button" data-key="ArrowUp" aria-label="${labels[0]}">▲</button>
+        </div></div>
+        <div class="pad-lift pad-top"><div class="pad-h tape">
+          <button type="button" data-key="ArrowLeft" aria-label="${labels[2]}">◄</button>
+          <button type="button" data-key="ArrowDown" aria-label="${labels[1]}">▼</button>
+          <button type="button" data-key="ArrowRight" aria-label="${labels[3]}">►</button>
+        </div></div>
+      </div>
+      <div class="pad-inspect-lift"><button type="button" class="pad-inspect"><span class="pi-open">${t('padInspect')}</span><span class="pi-close">${t('padBack')}</span></button></div>`;
+    for (const b of el.querySelectorAll('[data-key]')) {
+      const set = v => e => {
+        e.preventDefault();
+        keys()[b.dataset.key] = v; keys().Pad = v && b.dataset.key === 'ArrowUp' ? 1 : 0;
+        b.classList.toggle('held', !!v);
+        if (v) b.setPointerCapture?.(e.pointerId);
+      };
+      b.addEventListener('pointerdown', set(1));
+      for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, set(0));
+    }
+    el.querySelector('.pad-inspect').addEventListener('click', () => { const b = document.body.classList; if (b.contains('can-inspect') || b.contains('inspecting')) pick(); });
+    el.addEventListener('contextmenu', e => e.preventDefault());
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('visible'));
+  }
+
+  // The bottom legend stays on one line, centred between the pad's arrows and
+  // the buttons in the right corner. If it does not fit there it shrinks once,
+  // then steps aside entirely: nothing on screen may overlap. Its height goes
+  // out as --hud-h so the artwork prompt (artworks.js) sits just above it.
+  _trackHudHeight(el) {
+    const fit = () => {
+      el.classList.remove('no-room');
+      el.style.fontSize = '';
+      const room = () => {
+        const band = el.getBoundingClientRect(), mid = innerWidth / 2;
+        let half = mid - 16;
+        for (const sel of ['#pad .pad-arrows', '#pad .pad-inspect', '#btn-mute']) {
+          const o = document.querySelector(sel);
+          if (!o || o.classList.contains('hidden')) continue;
+          const r = o.getBoundingClientRect();
+          if (!r.width || r.bottom < band.top - 8 || r.top > band.bottom + 8) continue;  // not in the legend's band
+          half = Math.min(half, r.left > mid ? r.left - mid - 12 : mid - r.right - 12);
+        }
+        return el.scrollWidth / 2 <= half;
+      };
+      if (room()) return;
+      el.style.fontSize = '0.8em';
+      if (!room()) el.classList.add('no-room');
+    };
+    const watch = new MutationObserver(() => set());
+    const set = () => {
+      if (!el.isConnected) { watch.disconnect(); removeEventListener('resize', set); return; }   // the legend was replaced
+      fit();
+      document.documentElement.style.setProperty('--hud-h', `${el.classList.contains('no-room') ? 0 : el.offsetHeight}px`);
+    };
+    set();
+    addEventListener('resize', set);
+    watch.observe(document.body, { childList: true });   // the pad arrives later
+  }
+
+  // The legend (and the pad's arrows where there is a keyboard instead of a
+  // finger) step back after 20 s of walking and come back once the visitor
+  // has stood idle for 30 s. Called every frame with whether the walk moves.
+  hintsTick(dt, walking, touch) {
+    if (walking) { this._walkT = (this._walkT || 0) + dt; this._idleT = 0; }
+    else if ((this._idleT = (this._idleT || 0) + dt) >= 30) this._walkT = 0;
+    const away = (this._walkT || 0) >= 20;
+    if (away === this._hintsAway) return;
+    this._hintsAway = away;
+    document.body.classList.toggle('hints-away', away);
+    document.body.classList.toggle('pad-away', away && !touch);
+  }
+
+  // Persistent low-opacity key legend for keyboard mode — mirrors the
+  // pad above but stays up (no auto-fade) since keys mode has
+  // more bindings to remember than touch mode.
+  showControlHud() {
+    if ($('control-hud')) return;
+    const el = document.createElement('div');
+    el.id = 'control-hud';
+    el.innerHTML = t('hud').map(s => `<span>${s}</span>`).join('');
+    document.body.appendChild(el);
+    this._trackHudHeight(el);
+    requestAnimationFrame(() => el.classList.add('visible'));
+  }
+
+  // Persistent low-opacity gesture legend for hands mode — mirrors control-hud.
+  showHandLegend() {
+    if ($('hand-legend')) return;
+    const el = document.createElement('div');
+    el.id = 'hand-legend';
+    el.innerHTML = t('handLegend').map(s => `<span>${s}</span>`).join('');
+    document.body.appendChild(el);
+    this._trackHudHeight(el);
+    requestAnimationFrame(() => el.classList.add('visible'));
+  }
+
+  // Fullscreen / main-screen / finish toolbar, shown once the mode is chosen.
+  showExperienceControls({ onFinish, onClip } = {}) {
+    const toolbar = $('hud-toolbar');
+    if (!toolbar) return;
+    toolbar.classList.remove('hidden');
+
+    // the menu opens on its tape and folds away after any choice or a tap elsewhere
+    const menuBtn = $('btn-menu'), menu = $('hud-menu');
+    const items = () => [...menu.querySelectorAll('button, input')].filter(el => el.getClientRects().length);
+    // opened from the keyboard, the first item takes the focus; shut, the keys go back to the walk
+    const setMenu = (open, fromKeys = false) => {
+      menu.classList.toggle('hidden', !open);
+      menuBtn.setAttribute('aria-expanded', String(open));
+      if (open && fromKeys) items()[0]?.focus({ preventScroll: true });
+      else if (!open && toolbar.contains(document.activeElement)) document.activeElement.blur();
+    };
+    // inside the open menu the arrows move between its items, and on the
+    // slider left and right are its own: the walk gets none of them
+    addEventListener('keydown', e => {
+      const at = document.activeElement;
+      if (menu.classList.contains('hidden') || !menu.contains(at)) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        const list = items(), i = list.indexOf(at);
+        list[(i + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length]?.focus({ preventScroll: true });
+      } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && at.type === 'range') e.stopImmediatePropagation();
+    }, true);
+    menuBtn.addEventListener('click', e => { e.stopPropagation(); setMenu(menu.classList.contains('hidden')); });
+    menu.addEventListener('click', () => setMenu(false));
+    addEventListener('pointerdown', e => { if (!toolbar.contains(e.target)) setMenu(false); });
+    addEventListener('keydown', e => { if (e.key === 'Escape') setMenu(false); });
+
+    // hotkeys, physical key so any keyboard layout works: Tab opens/closes the
+    // menu, N/H/C mirror their buttons (N and H work even with the menu shut,
+    // C only once the button itself is available), Q finishes the walk but
+    // only once held a full second — the finish tape fills to show it, and
+    // letting go early cancels
+    const finishBtn = $('btn-finish');
+    let qHeld = false, qRaf = null, qStart = 0;
+    const qCancel = () => {
+      qHeld = false;
+      if (qRaf != null) cancelAnimationFrame(qRaf);
+      qRaf = null;
+      finishBtn?.classList.remove('charging');
+      finishBtn?.style.removeProperty('--charge');
+    };
+    const qStep = now => {
+      if (!qHeld) return;
+      const p = Math.min(1, (now - qStart) / 1000);
+      finishBtn?.style.setProperty('--charge', String(p));
+      if (p >= 1) { qCancel(); onFinish?.(); return; }
+      qRaf = requestAnimationFrame(qStep);
+    };
+    addEventListener('keydown', e => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+      if (keyCode(e) === 'Tab') {
+        e.preventDefault();
+        if (!e.repeat) setMenu(menu.classList.contains('hidden'), true);
+        return;
+      }
+      if (keyCode(e) === 'BracketLeft' || keyCode(e) === 'BracketRight') {   // volume, a step at a time; holding repeats
+        const range = $('vol-range');
+        if (range && !$('vol').classList.contains('hidden')) {
+          range.value = String(+range.value + (keyCode(e) === 'BracketRight' ? 5 : -5));
+          range.dispatchEvent(new Event('input'));
+        }
+        return;
+      }
+      if (keyCode(e) === 'KeyQ') {
+        if (!qHeld) { qHeld = true; qStart = performance.now(); finishBtn?.classList.add('charging'); qRaf = requestAnimationFrame(qStep); }
+        return;
+      }
+      if (e.repeat) return;
+      if (keyCode(e) === 'KeyN') $('btn-mute')?.click();
+      else if (keyCode(e) === 'KeyH') $('btn-main-screen')?.click();
+      else if (keyCode(e) === 'KeyC') { const cb = $('btn-clip'); if (cb && !cb.classList.contains('hidden')) cb.click(); }
+    });
+    addEventListener('keyup', e => { if (keyCode(e) === 'KeyQ') qCancel(); });
+    addEventListener('blur', qCancel);
+
+    // flicker on is the piece as made; off is the calm version (calm.js)
+    const calmBtn = $('btn-calm');
+    const syncCalm = () => {
+      calmBtn.querySelector('span').textContent = t(calm.on ? 'flickerOff' : 'flickerOn');
+      calmBtn.setAttribute('aria-checked', String(!calm.on));
+    };
+    calmBtn?.addEventListener('click', () => calm.set(!calm.on));
+    if (calmBtn) { calm.onChange(syncCalm); syncCalm(); }
+
+    const ccBtn = $('btn-cc');
+    const syncCc = () => {
+      ccBtn.querySelector('span').textContent = t(captions.on ? 'ccOn' : 'ccOff');
+      ccBtn.setAttribute('aria-checked', String(captions.on));
+    };
+    ccBtn?.addEventListener('click', () => captions.set(!captions.on));
+    if (ccBtn) { captions.onChange(syncCc); syncCc(); }
+
+    const fsBtn = $('btn-fullscreen');
+    const syncFsLabel = () => {
+      const active = !!document.fullscreenElement;
+      fsBtn.querySelector('span').textContent = t(active ? 'exitFullscreen' : 'fullscreen');
+    };
+    fsBtn.addEventListener('click', () => {
+      if (document.fullscreenElement) document.exitFullscreen?.();
+      else document.documentElement.requestFullscreen?.().catch(() => {});
+    });
+    document.addEventListener('fullscreenchange', syncFsLabel);
+
+    // In-page confirm: window.confirm() is silently blocked in some embedded
+    // browsers, which left this button doing nothing.
+    $('btn-main-screen').addEventListener('click', async () => {
+      if (await this.confirmDialog(t('confirmLeave'))) location.href = `index.html?lang=${getLang()}${captions.on ? '&cc=1' : ''}`;
+    });
+
+    $('btn-finish').addEventListener('click', () => onFinish?.());
+
+    if (onClip) {
+      $('btn-clip').classList.remove('hidden');
+      $('btn-clip').addEventListener('click', () => onClip());
+    }
+  }
+
+  // Terminal-styled yes/no dialog. Resolves true on Yes/Enter, false on
+  // No/Escape/backdrop click.
+  confirmDialog(text) {
+    return new Promise(res => {
+      const wrap = document.createElement('div');
+      wrap.className = 'dialog';
+      wrap.innerHTML = `<div class="dialog-box" role="alertdialog" aria-modal="true">
+        <p class="dialog-bar">SYSTEM</p><p class="dialog-text"></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn-enter" data-v="1">${t('yes')}</button>
+          <button type="button" class="btn-enter dialog-no" data-v="0">${t('no')}</button>
+        </div></div>`;
+      wrap.querySelector('.dialog-text').textContent = text;
+      document.body.appendChild(wrap);
+      document.exitPointerLock?.();
+      const done = v => { removeEventListener('keydown', onKey, true); wrap.remove(); res(v); };
+      const onKey = e => {
+        if (keyCode(e) === 'Escape') { e.stopPropagation(); done(false); }
+        if (keyCode(e) === 'Enter') { e.stopPropagation(); done(true); }
+      };
+      addEventListener('keydown', onKey, true);
+      wrap.addEventListener('click', e => {
+        const b = e.target.closest('button');
+        if (b) done(b.dataset.v === '1');
+        else if (e.target === wrap) done(false);
+      });
+      wrap.querySelector('[data-v="1"]').focus({ preventScroll: true });
+    });
+  }
+
+  // Farewell screen: one existential-dread question drawn at random each
+  // time, plus credits/links. Purely a DOM overlay — caller is responsible
+  // for pausing movement/audio before calling this.
+  showFarewell() {
+    const questions = t('questions');
+    const q = questions[Math.floor(Math.random() * questions.length)];
+    const qEl = $('farewell-question');
+    if (qEl) qEl.textContent = q;
+    $('hud-toolbar')?.classList.add('hidden');
+    $('btn-mute')?.classList.add('hidden');
+    $('hand-legend')?.remove();
+    $('control-hud')?.remove();
+    $('pad')?.remove();
+    $('roses')?.remove();
+    $('final-card')?.remove();
+    $('farewell')?.classList.remove('hidden');
+    $('btn-walk-again')?.addEventListener('click', () => location.reload(), { once: true });
+  }
+
+  // Small transient message (e.g. webcam-denied fallback notice).
+  showToast(text) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = text;
+    let top = 16;                                       // under the toolbar and the rose, never on them
+    for (const el of [$('hud-toolbar'), $('roses')]) if (el && !el.classList.contains('hidden')) top = Math.max(top, el.getBoundingClientRect().bottom + 12);
+    el.style.setProperty('--toast-top', `${Math.round(top)}px`);
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('visible'));
+    setTimeout(() => {
+      el.classList.remove('visible');
+      setTimeout(() => el.remove(), 600);
+    }, 3500);
+  }
+}
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

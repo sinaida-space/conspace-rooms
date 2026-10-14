@@ -1,0 +1,573 @@
+import * as THREE from 'three';
+import { CELL, solidAtGlobal } from './world.js';
+import { buildLightRays } from './doorway.js';
+
+// ── conspace-rooms · roses.js ───────────────────────────────────────────────
+// The works seen, counted by a rose. A small climbing rose grows out of the
+// top-left corner of the screen: the first works draw its stem and a few
+// leaves, more works add leaves, branches and buds, and every fifth work
+// opens a bud into a flower. With all eighteen the bush is whole and glows.
+//
+// Then the labyrinth answers: the view turns a little, and a couple of steps
+// away a tunnel of rose arches rises out of the floor with light pouring
+// from its far end. Walking through it ends the walk with the card of
+// questions (card.js).
+
+// ── the counter ─────────────────────────────────────────────────────────────
+// One SVG, drawn once; the count only reveals parts of it.
+const STEMS = [                                   // [path, visible from n, whole at n]
+  ['M3 0 C9 12 5 26 15 38 S28 58 24 76', 0.5, 7],
+  ['M11 26 C18 22 26 24 34 18', 2, 4],
+  ['M19 48 C26 48 34 54 44 52', 5, 8],
+];
+const LEAVES = [                                  // [x, y, angle, from n]
+  [7, 10, -30, 1], [10, 22, 40, 2], [14, 34, -35, 3], [19, 44, 35, 4], [23, 60, -40, 6],
+  [22, 24, -60, 7], [29, 21, 30, 9], [26, 49, 60, 11], [36, 53, -30, 12], [25, 68, 45, 14],
+  [4, 16, 20, 5], [17, 40, -70, 8], [31, 19, -40, 10], [40, 55, 50, 13], [27, 72, -20, 16], [12, 30, 80, 17],
+];
+const BUDS = [                                    // [stem, where on it (1 = its tip), side (0 at the tip, ±1 on a short stalk), shows at, opens at]
+  [1, 1, 0, 4, 5], [2, 1, 0, 8, 10], [0, 1, 0, 12, 15], [0, 0.2, 1, 16, 18],
+];
+
+// A rose leaflet, 8 long: serrated edges (each tooth leans toward the tip),
+// a midrib and a few veins running forward from it.
+const LEAF_PATH = (() => {
+  const top = [], bot = [], n = 9;
+  for (let i = 1; i < n; i++) {
+    const t = i / n, x = 8 * t, w = 2.5 * Math.pow(Math.sin(Math.PI * Math.pow(t, 0.85)), 0.9);
+    top.push(`${x.toFixed(2)} ${(-w).toFixed(2)}`, `${(x + 0.45).toFixed(2)} ${(-w * 0.78).toFixed(2)}`);
+    bot.unshift(`${(x + 0.45).toFixed(2)} ${(w * 0.78).toFixed(2)}`, `${x.toFixed(2)} ${w.toFixed(2)}`);
+  }
+  return `M0 0 L${top.join(' L')} L8.3 0 L${bot.join(' L')}Z`;
+})();
+const LEAF_VEINS = 'M0.3 0 L7.7 0 M2 0 L3.1 -1.3 M3.6 0 L4.7 -1.4 M5.2 0 L6.1 -1.1 M2 0 L3.1 1.3 M3.6 0 L4.7 1.4 M5.2 0 L6.1 1.1';
+
+function leaf(x, y, a) {
+  return `<g transform="translate(${x} ${y}) rotate(${a}) scale(1.35)" class="rl-g"><path d="${LEAF_PATH}" class="rl"/><path d="${LEAF_VEINS}" class="rv"/></g>`;
+}
+// a closed bud: layered petals cupped in green sepals with long tips
+function bud(x, y) {
+  return `<g transform="translate(${x} ${y}) scale(1.2)" class="rb">` +
+    `<path d="M0 -3.6 C2.4 -1.8 2.3 1.9 0 2.7 C-2.3 1.9 -2.4 -1.8 0 -3.6Z" class="rp"/>` +
+    `<path d="M0.4 -3.2 C1.9 -1.6 1.6 1.4 0 2.4" class="rpe"/>` +
+    `<path d="M0 3.4 C-1.6 2.6 -2.6 0.6 -2.9 -1.6 C-1.9 -0.4 -1.1 1.2 0 1.9 C1.1 1.2 1.9 -0.4 2.9 -1.6 C2.6 0.6 1.6 2.6 0 3.4Z" class="rs"/>` +
+    `<path d="M0 3.4 L0 4.6" class="rsn"/></g>`;
+}
+// an open rose from above: five outer petals, five inner turned between
+// them, and a tight dark spiral at the heart
+function bloom(x, y) {
+  const petal = (r, s, cls) => `<path d="M0 0 C-2.3 -0.9 -2.6 -4.1 0 -4.8 C2.6 -4.1 2.3 -0.9 0 0Z" transform="rotate(${r}) scale(${s})" class="${cls}"/>`;
+  const outer = [0, 72, 144, 216, 288].map(r => petal(r + 8, 1.05, 'rpo')).join('');
+  const inner = [36, 108, 180, 252, 324].map(r => petal(r, 0.72, 'rpi')).join('');
+  return `<g transform="translate(${x} ${y}) scale(0.9)" class="rf">${outer}${inner}` +
+    `<circle r="1.7" class="rd"/><path d="M0 0 C0.9 -0.7 1.5 0.3 0.7 1 C-0.3 1.6 -1.5 0.6 -1 -0.5 C-0.5 -1.5 1.1 -1.7 1.7 -0.7" class="rc"/></g>`;
+}
+// Gradients and a fine grain for the whole drawing: leaves lit from above,
+// petals deep at the base and bright at the rim, velvet pile over both.
+const DEFS = `<defs>
+  <linearGradient id="rgl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7cc98d"/><stop offset="0.5" stop-color="#4f9e68"/><stop offset="1" stop-color="#2c6a43"/></linearGradient>
+  <linearGradient id="rgs" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5fae77"/><stop offset="1" stop-color="#2b633f"/></linearGradient>
+  <radialGradient id="rgp" cx="0.5" cy="0.95" r="0.95"><stop offset="0" stop-color="#6a0a14"/><stop offset="0.45" stop-color="#b8182a"/><stop offset="0.85" stop-color="#e0485a"/><stop offset="1" stop-color="#f7a4ae" stop-opacity="0.8"/></radialGradient>
+  <radialGradient id="rgb" cx="0.4" cy="0.3" r="0.8"><stop offset="0" stop-color="#e53a44"/><stop offset="0.6" stop-color="#a8101a"/><stop offset="1" stop-color="#5a0609"/></radialGradient>
+  <!-- watercolour: ragged bled edges, a darker rim where the wash dried,
+       pigment settling unevenly into the paper grain -->
+  <filter id="rwc" filterUnits="userSpaceOnUse" x="-6" y="-6" width="66" height="96">
+    <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="3" seed="4" result="warp"/>
+    <feDisplacementMap in="SourceGraphic" in2="warp" scale="2.4" xChannelSelector="R" yChannelSelector="G" result="d"/>
+    <feGaussianBlur in="d" stdDeviation="0.45" result="soft"/>
+    <feMorphology in="soft" operator="erode" radius="0.55" result="inner"/>
+    <feComposite in="soft" in2="inner" operator="out" result="rimA"/>
+    <feColorMatrix in="rimA" type="matrix" values="0.55 0 0 0 0  0 0.55 0 0 0  0 0 0.55 0 0  0 0 0 0.8 0" result="rim"/>
+    <!-- brush strokes: streaky, the pigment thicker and thinner along each drag -->
+    <feTurbulence type="fractalNoise" baseFrequency="0.9 0.12" numOctaves="2" seed="9" result="grain"/>
+    <feColorMatrix in="grain" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 -1.3 1.25" result="grainA"/>
+    <feComposite in="soft" in2="grainA" operator="in" result="pigment"/>
+    <feMerge><feMergeNode in="pigment"/><feMergeNode in="rim"/></feMerge>
+  </filter>
+</defs>`;
+// small thorns along each stem: [stem, where along it 0..1, side ±1]
+const THORNS = [[0, 0.1, 1], [0, 0.2, -1], [0, 0.31, 1], [0, 0.44, -1], [0, 0.55, 1], [0, 0.68, -1], [0, 0.8, 1], [0, 0.9, -1],
+  [1, 0.35, 1], [1, 0.7, -1], [2, 0.3, -1], [2, 0.62, 1]];
+
+// the wheat grain at the stem's root (John 12:24, hidden): closed and whole
+// at n = 0, splits open at the first work, sheds and returns whole at the finale
+export const GRAIN_OPEN_MS = 1000;   // set(1): glow (600 ms) then open (400 ms) — the orchestrator starts sparkles here
+export const SHED_MS = 3000;         // api.shed(): petals fall, leaves dry, stems dim, the grain returns
+function grain() {
+  return `<g class="grain" data-grain>
+    <ellipse class="gr-halo" cx="4" cy="3" rx="15" ry="11"/>
+    <g transform="translate(4 3) rotate(-12) scale(1.8)">
+      <path class="gr-husk gr-husk-l" d="M0 -1.8 A3 1.8 0 0 0 0 1.8Z"/>
+      <path class="gr-husk gr-husk-r" d="M0 -1.8 A3 1.8 0 0 1 0 1.8Z"/>
+      <line class="gr-crease" x1="0" y1="-1.7" x2="0" y2="1.7"/>
+    </g>
+  </g>`;
+}
+
+export function createRoseCounter(total = 18) {
+  const el = document.createElement('div');
+  el.id = 'roses';
+  el.className = 'roses';
+  el.setAttribute('role', 'img');
+  el.innerHTML = `<svg viewBox="-2 -2 54 84" aria-hidden="true">${DEFS}
+    ${grain()}
+    <g filter="url(#rwc)">
+    ${STEMS.map(([d], i) => `<path d="${d}" pathLength="1" class="rstem" data-i="${i}"/><path d="${d}" pathLength="1" class="rstem rstem-hi" data-i="${i}" transform="translate(-0.45 -0.2)"/>`).join('')}
+    <g class="rthorns"></g>
+    </g>
+    <g filter="url(#rwc)">
+    ${LEAVES.map(([x, y, a], i) => `<g data-leaf="${i}">${leaf(x, y, a)}</g>`).join('')}
+    ${BUDS.map((_, i) => `<g data-bud="${i}"><g class="rbp">${bud(0, 0)}</g></g><g data-bloom="${i}"><g class="rbp">${bloom(0, 0)}</g></g>`).join('')}
+    </g>
+  </svg>`;
+  document.body.appendChild(el);
+  // buds and flowers grow out of the stems: at a tip the bud's stalk runs
+  // back along the stem; on the side a short stalk leaves the stem first
+  BUDS.forEach(([si, at, side], i) => {
+    const p = el.querySelectorAll('.rstem:not(.rstem-hi)')[si], L = p.getTotalLength?.() || 0;
+    if (!L) return;
+    const a = p.getPointAtLength(Math.min(L, at * L)), b = p.getPointAtLength(Math.max(0, Math.min(L, at * L) - 0.6));
+    let tx = a.x - b.x, ty = a.y - b.y; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+    let ox = a.x, oy = a.y;
+    if (side) {                                   // a stalk off to one side, leaning forward
+      const nx = -ty * side, ny = tx * side, sx = nx * 0.8 + tx * 0.6, sy = ny * 0.8 + ty * 0.6, sl = Math.hypot(sx, sy);
+      tx = sx / sl; ty = sy / sl;
+      const ex = a.x + tx * 3.2, ey = a.y + ty * 3.2;
+      el.querySelector(`[data-bud="${i}"]`).insertAdjacentHTML('afterbegin', `<path d="M${a.x.toFixed(2)} ${a.y.toFixed(2)} Q${(a.x + tx * 1.8 - ty * 0.6).toFixed(2)} ${(a.y + ty * 1.8 + tx * 0.6).toFixed(2)} ${ex.toFixed(2)} ${ey.toFixed(2)}" class="rsn rstalk"/>`);
+      el.querySelector(`[data-bloom="${i}"]`).insertAdjacentHTML('afterbegin', `<path d="M${a.x.toFixed(2)} ${a.y.toFixed(2)} L${ex.toFixed(2)} ${ey.toFixed(2)}" class="rsn rstalk"/>`);
+      ox = ex; oy = ey;
+    }
+    const rot = Math.atan2(tx, -ty) * 180 / Math.PI;     // the bud's own +y (its stalk) points back down the stem
+    el.querySelector(`[data-bud="${i}"] .rbp`).setAttribute('transform', `translate(${(ox + tx * 5.3).toFixed(2)} ${(oy + ty * 5.3).toFixed(2)}) rotate(${rot.toFixed(1)})`);
+    el.querySelector(`[data-bloom="${i}"] .rbp`).setAttribute('transform', `translate(${(ox + tx * 3.2).toFixed(2)} ${(oy + ty * 3.2).toFixed(2)}) rotate(${rot.toFixed(1)})`);
+  });
+  // thorns sit on the drawn stems: measured once the paths are in the page
+  const thornG = el.querySelector('.rthorns'), stemEls = [...el.querySelectorAll('.rstem:not(.rstem-hi)')];
+  for (const [si, at, side] of THORNS) {
+    const p = stemEls[si], L = p.getTotalLength?.() || 0;
+    if (!L) continue;
+    const a = p.getPointAtLength(at * L), b = p.getPointAtLength(Math.min(L, at * L + 0.5));
+    const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1, tx = dx / l, ty = dy / l;
+    const nx = -ty * side, ny = tx * side;                     // off the stem, to one side
+    const base = 0.55, h = 1.35;                                // a small hooked thorn, leaning back down the stem
+    const d = `M${(a.x - tx * base).toFixed(2)} ${(a.y - ty * base).toFixed(2)} Q${(a.x + nx * h * 0.5).toFixed(2)} ${(a.y + ny * h * 0.5).toFixed(2)} ${(a.x + nx * h - tx * 0.6).toFixed(2)} ${(a.y + ny * h - ty * 0.6).toFixed(2)} L${(a.x + tx * base).toFixed(2)} ${(a.y + ty * base).toFixed(2)}Z`;
+    thornG.insertAdjacentHTML('beforeend', `<path d="${d}" class="rt" data-thorn="${si}" data-at="${at}"/>`);
+  }
+  const grainEl = el.querySelector('.grain');
+  let shown = -1;
+  // reveal the parts for n (the grain itself is handled by set(), below)
+  const draw = n => {
+    const grew = shown >= 0 && n > shown;
+    shown = n;
+    const k = n * 18 / total;                    // the drawing is laid out for eighteen
+    const dim = el.classList.contains('shed') ? 0.25 : 1;   // stems already shed stay dim, even if this draw lands after
+    el.querySelectorAll('.rstem').forEach(p => {
+      const [, from, whole] = STEMS[+p.dataset.i];
+      const f = Math.max(0, Math.min(1, (k - from + 0.5) / (whole - from + 0.5)));
+      p.style.strokeDashoffset = String(1 - f);
+      p.style.opacity = String((f > 0 ? 1 : 0) * dim);           // no round cap dot before it grows
+      if (!p.classList.contains('rstem-hi')) el.querySelectorAll(`[data-thorn="${p.dataset.i}"]`).forEach(th => th.classList.toggle('on', f >= +th.dataset.at + 0.03));
+    });
+    LEAVES.forEach(([, , , from], i) => el.querySelector(`[data-leaf="${i}"]`).classList.toggle('on', k >= from));
+    BUDS.forEach(([, , , shows, opens], i) => {
+      el.querySelector(`[data-bud="${i}"]`).classList.toggle('on', k >= shows && k < opens);
+      el.querySelector(`[data-bloom="${i}"]`).classList.toggle('on', k >= opens);
+    });
+    el.classList.toggle('full', n >= total);
+    if (grew) { el.classList.remove('grew'); void el.offsetWidth; el.classList.add('grew'); }
+  };
+  // a tap on the rose says how many works have been seen, for five seconds
+  let tag = null, tagT = 0;
+  el.style.cursor = 'pointer';
+  el.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!el.title) return;
+    tag ??= Object.assign(document.createElement('div'), { className: 'roses-tag' });
+    tag.textContent = el.title;
+    document.body.appendChild(tag);
+    requestAnimationFrame(() => tag.classList.add('visible'));
+    clearTimeout(tagT);
+    tagT = setTimeout(() => tag.classList.remove('visible'), 5000);
+  });
+  const api = {
+    el,
+    set(n, label) {
+      n = Math.max(0, Math.min(total, n));
+      if (label) el.setAttribute('aria-label', label);
+      el.title = label || '';
+      if (n === shown) return;
+      const firstGrowth = shown === 0 && n > 0;   // the grain wakes for the first work, then opens
+      if (firstGrowth) {
+        grainEl.classList.add('glow');
+        setTimeout(() => grainEl.classList.add('open'), 600);
+        setTimeout(() => draw(n), GRAIN_OPEN_MS);
+        return;
+      }
+      draw(n);
+    },
+    // the finale: the bloom sheds, the leaves dry, the stems dim, one grain returns
+    shed() {
+      el.classList.add('shed');
+      el.querySelectorAll('.rstem').forEach(p => { p.style.opacity = String(parseFloat(p.style.opacity || '1') * 0.25); });
+    },
+    remove() { el.remove(); },
+  };
+  requestAnimationFrame(() => el.classList.add('visible'));
+  return api;
+}
+
+// ── the tunnel ──────────────────────────────────────────────────────────────
+// Eight iron arches in a row make a rose tunnel down a corridor, tied
+// by rails along the top, wound with a vine and heavy with roses. Light pours
+// from its far end toward the visitor. Built in its own frame: the entrance
+// arch stands at z = 0 facing +Z (the visitor), the tunnel runs to z = -LENGTH.
+const HALF = 1.0, POST_H = 1.95, ARCHES = 8, GAP = 0.75, LENGTH = GAP * (ARCHES - 1);
+
+// A velvet rose seen from above, drawn once at 256 px: five rings of cupped
+// petals, each dark and deep at its base and catching the light along its
+// rim the way velvet does, a soft shadow under every petal, a tight spiral
+// at the heart, and a fine grain of pile over all of it. Used as a sprite,
+// so it always faces the eye.
+function roseTexture() {
+  const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.translate(S / 2, S / 2);
+  const petal = (r, w) => {                          // a cupped petal pointing along +y
+    g.beginPath();
+    g.moveTo(0, r * 0.12);
+    g.bezierCurveTo(-r * w, r * 0.18, -r * (w + 0.1), r * 0.9, 0, r);
+    g.bezierCurveTo(r * (w + 0.1), r * 0.9, r * w, r * 0.18, 0, r * 0.12);
+    g.closePath();
+  };
+  const rings = [[120, 5, 0.62, 0.0], [102, 5, 0.6, 0.63], [84, 5, 0.58, 0.2], [66, 4, 0.56, 0.9], [50, 4, 0.52, 0.35], [36, 3, 0.5, 1.2]];
+  rings.forEach(([r, n, w, turn], ring) => {
+    const deep = ring / (rings.length - 1);           // inner rings sit deeper in shadow
+    for (let k = 0; k < n; k++) {
+      g.save();
+      g.rotate(turn + k / n * Math.PI * 2 + (Math.sin(k * 7.3 + ring) * 0.12));
+      g.shadowColor = 'rgba(10, 0, 2, 0.75)'; g.shadowBlur = 10; g.shadowOffsetY = 3;
+      petal(r, w);
+      const grad = g.createLinearGradient(0, r * 0.12, 0, r);
+      grad.addColorStop(0, `rgb(${30 - deep * 14}, 0, ${4})`);          // the base, in the dark of the cup
+      grad.addColorStop(0.45, `rgb(${110 - deep * 30}, 6, ${16})`);
+      grad.addColorStop(0.82, `rgb(${168 - deep * 30}, 14, ${28})`);
+      grad.addColorStop(1, `rgb(${214 - deep * 30}, ${50 - deep * 10}, ${62 - deep * 10})`);  // the velvet rim
+      g.fillStyle = grad; g.fill();
+      g.shadowColor = 'transparent';
+      // sheen along the rim, and the curl where the petal turns back
+      g.strokeStyle = `rgba(255, 120, 132, ${0.28 - deep * 0.12})`; g.lineWidth = 2.2;
+      g.beginPath(); g.moveTo(-r * w * 0.85, r * 0.78); g.quadraticCurveTo(0, r * 1.04, r * w * 0.85, r * 0.78); g.stroke();
+      g.strokeStyle = 'rgba(25, 0, 4, 0.55)'; g.lineWidth = 1.2; petal(r, w); g.stroke();
+      g.restore();
+    }
+  });
+  // the heart: petals still wrapped tight, in a spiral
+  for (let k = 0; k < 9; k++) {
+    const a = k * 2.4, r = 6 + k * 2.4;
+    g.save(); g.rotate(a);
+    g.strokeStyle = `rgba(${60 + k * 12}, 0, 8, 0.95)`; g.lineWidth = 4;
+    g.beginPath(); g.arc(0, 0, r, 0.2, 2.6); g.stroke();
+    g.strokeStyle = 'rgba(240, 90, 104, 0.35)'; g.lineWidth = 1.2;
+    g.beginPath(); g.arc(0, 0, r + 1.6, 0.4, 2.2); g.stroke();
+    g.restore();
+  }
+  g.fillStyle = '#140002'; g.beginPath(); g.arc(0, 0, 4, 0, Math.PI * 2); g.fill();
+  // the pile: a fine grain of light and dark specks, only on the petals
+  g.globalCompositeOperation = 'source-atop';
+  for (let i = 0; i < 5000; i++) {
+    const x = (Math.random() - 0.5) * S, y = (Math.random() - 0.5) * S;
+    g.fillStyle = Math.random() < 0.5 ? `rgba(0, 0, 0, ${Math.random() * 0.18})` : `rgba(255, 150, 160, ${Math.random() * 0.08})`;
+    g.fillRect(x, y, 1.4, 1.4);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+function leafTexture() {
+  const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.translate(S / 2, S / 2); g.rotate(-0.7);
+  // a serrated rose leaf: saw-toothed edge, a midrib and side veins
+  g.beginPath(); g.moveTo(-56, 0);
+  for (let k = 0; k <= 16; k++) { const x = -56 + k * 7, h = Math.sin(k / 16 * Math.PI) * 30; g.lineTo(x, -h + (k % 2 ? 3 : 0)); }
+  for (let k = 16; k >= 0; k--) { const x = -56 + k * 7, h = Math.sin(k / 16 * Math.PI) * 30; g.lineTo(x, h - (k % 2 ? 3 : 0)); }
+  g.closePath();
+  const grad = g.createLinearGradient(0, -30, 0, 30);
+  grad.addColorStop(0, '#2f6a40'); grad.addColorStop(0.5, '#1c4a2a'); grad.addColorStop(1, '#0f2a18');
+  g.fillStyle = grad; g.fill();
+  g.strokeStyle = 'rgba(8, 24, 12, 0.7)'; g.lineWidth = 1.5; g.stroke();
+  g.strokeStyle = 'rgba(150, 210, 160, 0.45)'; g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(-54, 0); g.lineTo(56, 0); g.stroke();
+  g.lineWidth = 0.9;
+  for (let k = 1; k < 7; k++) { const x = -48 + k * 14; for (const sgn of [-1, 1]) { g.beginPath(); g.moveTo(x, 0); g.quadraticCurveTo(x + 6, sgn * 10, x + 12, sgn * 20); g.stroke(); } }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// the outline of one arch opening, for the glow at the far end
+function archShape(half, postH) {
+  const sh = new THREE.Shape();
+  sh.moveTo(-half, 0); sh.lineTo(-half, postH);
+  sh.absarc(0, postH, half, Math.PI, 0, true);
+  sh.lineTo(half, 0); sh.lineTo(-half, 0);
+  return sh;
+}
+
+// the path: brightest down its middle and toward the far light, broken into
+// glints that ride the ripples toward the visitor
+const PATH_VERT = /* glsl */`varying vec2 vP; void main(){ vP = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const PATH_FRAG = /* glsl */`
+uniform float uK, uTime; varying vec2 vP;
+void main(){
+  float across = exp(-vP.x * vP.x / 0.09);                         // soft edges, no hard strip
+  float along = smoothstep(2.8, 0.6, vP.y) * (0.45 + 0.55 * smoothstep(0.0, -${LENGTH.toFixed(2)} - 1.0, vP.y));
+  float wave = vP.y * 7.0 + sin(vP.x * 9.0 + uTime * 1.3) * 1.2 + uTime * 1.6;
+  float glint = pow(0.5 + 0.5 * sin(wave), 6.0) * (0.6 + 0.4 * sin(vP.y * 2.3 - uTime * 0.7));
+  float k = uK * across * along * (0.22 + 0.9 * glint);
+  gl_FragColor = vec4(vec3(1.0, 0.8, 0.52) * k, 1.0);
+}`;
+
+// falling petals: each loops from the roof to the water on its own slow sway
+const FALL_VERT = /* glsl */`
+attribute float aSeed; uniform float uTime, uViewH, uFloor; varying float vA; varying float vR;
+void main(){
+  float fall = 0.16 + 0.1 * aSeed;
+  float h = fract(position.y - uTime * fall / 2.7 + aSeed);          // 0 at the water, 1 at the roof
+  vec3 p = position;
+  p.y = uFloor + 0.02 + h * 2.7;
+  p.x += sin(uTime * (0.6 + aSeed) + aSeed * 40.0) * 0.18;
+  p.z += cos(uTime * 0.5 + aSeed * 17.0) * 0.12;
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mv;
+  gl_PointSize = 0.05 * uViewH / max(0.2, -mv.z);
+  vA = smoothstep(0.0, 0.08, h) * smoothstep(1.0, 0.85, h);           // no pop at either end
+  vR = uTime * (0.8 + aSeed) + aSeed * 6.28;
+}`;
+const FALL_FRAG = /* glsl */`
+uniform float uK; varying float vA; varying float vR;
+void main(){
+  vec2 q = gl_PointCoord - 0.5;
+  float c = cos(vR), s = sin(vR);
+  q = vec2(c * q.x - s * q.y, s * q.x + c * q.y) * vec2(1.0, 1.7 + 0.8 * sin(vR * 1.3));   // it turns as it falls
+  float d = length(q);
+  if (d > 0.5) discard;
+  vec3 col = mix(vec3(0.55, 0.05, 0.12), vec3(0.95, 0.35, 0.42), smoothstep(0.5, 0.0, d));
+  gl_FragColor = vec4(col, uK * vA * smoothstep(0.5, 0.35, d));
+}`;
+
+const GLOW_VERT = /* glsl */`varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const GLOW_FRAG = /* glsl */`
+uniform float uK; varying vec2 vP;
+void main(){
+  float d = length((vP - vec2(0.0, 1.3)) / vec2(0.95, 1.6));
+  gl_FragColor = vec4(vec3(1.0, 0.86, 0.58) * uK * (0.35 + 0.65 * smoothstep(1.1, 0.0, d)), 1.0);
+}`;
+
+export function buildRoseArch() {
+  const g = new THREE.Group();
+  const iron = new THREE.MeshBasicMaterial({ color: 0x151816, fog: true });
+  const vine = new THREE.MeshBasicMaterial({ color: 0x1f4a2e, fog: true });
+  const arches = [];
+  const archPath = z => {                             // up one post, over, down the other
+    const pts = [];
+    for (let k = 0; k <= 10; k++) pts.push(new THREE.Vector3(-HALF, k / 10 * POST_H, z));
+    for (let k = 1; k < 20; k++) { const a = Math.PI - k / 20 * Math.PI; pts.push(new THREE.Vector3(Math.cos(a) * HALF, POST_H + Math.sin(a) * HALF, z)); }
+    for (let k = 10; k >= 0; k--) pts.push(new THREE.Vector3(HALF, k / 10 * POST_H, z));
+    return new THREE.CatmullRomCurve3(pts);
+  };
+  const paths = [];
+  for (let a = 0; a < ARCHES; a++) {
+    const z = -a * GAP, ag = new THREE.Group();
+    ag.userData.mats = [iron.clone(), vine.clone()];    // each arch fades in on its own
+    for (const m of ag.userData.mats) { m.transparent = true; m.opacity = 0; }
+    const [ironA, vineA] = ag.userData.mats;
+    for (const sx of [-1, 1]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, POST_H, 8), ironA); post.position.set(sx * HALF, POST_H / 2, z); ag.add(post); }
+    const top = new THREE.Mesh(new THREE.TorusGeometry(HALF, 0.022, 6, 32, Math.PI), ironA); top.position.set(0, POST_H, z); ag.add(top);
+    const path = archPath(z); paths.push(path);
+    const wind = [];
+    for (let k = 0; k <= 160; k++) { const u = k / 160, p = path.getPointAt(u), w = u * 48 + a; wind.push(p.add(new THREE.Vector3(Math.cos(w) * 0.045, 0, Math.sin(w) * 0.045))); }
+    ag.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(wind), 260, 0.011, 5, false), vineA));
+    g.add(ag); arches.push(ag);
+  }
+  // no rails between the arches: seen down the tunnel they read as sticks across the way
+
+  // roses and leaves as sprites, spread along every arch and over the rails,
+  // ordered to open from the entrance inward
+  const roses = [], leaves = [];
+  const jitter = (s) => (Math.random() - 0.5) * s;
+  paths.forEach((path, a) => {
+    for (let k = 0; k < 44; k++) {
+      const u = Math.random(), p = path.getPointAt(u);
+      roses.push([p.x + jitter(0.14), p.y + jitter(0.12), p.z + jitter(0.2), a]);
+      const q = path.getPointAt(Math.random());
+      leaves.push([q.x + jitter(0.2), q.y + jitter(0.16), q.z + jitter(0.26), a]);
+    }
+  });
+  for (let k = 0; k < 150; k++) {                     // the roof between the arches
+    const u = Math.random(), ang = Math.PI * Math.random(), z = -u * LENGTH;
+    roses.push([Math.cos(ang) * HALF + jitter(0.1), POST_H + Math.sin(ang) * HALF + jitter(0.1), z, u * (ARCHES - 1)]);
+    leaves.push([Math.cos(ang) * HALF + jitter(0.18), POST_H + Math.sin(ang) * HALF + jitter(0.14), z + jitter(0.2), u * (ARCHES - 1)]);
+  }
+  const cloud = (list, tex, size, tint) => {
+    list.sort((a, b) => a[3] - b[3]);
+    const pos = new Float32Array(list.length * 3), col = new Float32Array(list.length * 3);
+    list.forEach(([x, y, z], i) => { pos.set([x, y, z], i * 3); const v = tint(); col.set(v, i * 3); });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setDrawRange(0, 0);
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size, sizeAttenuation: true, vertexColors: true, alphaTest: 0.35, fog: true }));
+    pts.frustumCulled = false;
+    g.add(pts);
+    return pts;
+  };
+  const leafPts = cloud(leaves, leafTexture(), 0.2, () => { const k = 0.7 + Math.random() * 0.5; return [k, k, k]; });
+  const rosePts = cloud(roses, roseTexture(), 0.27, () => { const k = 0.75 + Math.random() * 0.45; return [k, k * (0.85 + Math.random() * 0.2), k]; });
+
+  // light: the far arch glows in its own shape, and shafts pour back through the tunnel
+  const glowU = { uK: { value: 0 } };
+  const glow = new THREE.Mesh(new THREE.ShapeGeometry(archShape(HALF - 0.05, POST_H), 24),
+    new THREE.ShaderMaterial({ uniforms: glowU, vertexShader: GLOW_VERT, fragmentShader: GLOW_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  glow.position.z = -LENGTH - 0.3; g.add(glow);
+  // and beyond it a wall of light filling the corridor: the tunnel has no visible end
+  const haze = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 3.3),
+    new THREE.ShaderMaterial({ uniforms: glowU, vertexShader: GLOW_VERT, fragmentShader: GLOW_FRAG.replace('vec2(0.95, 1.6)', 'vec2(1.5, 2.2)'),
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  haze.position.set(0, 1.65, -LENGTH - 0.9); haze.geometry.translate(0, -1.65 + 1.3, 0); g.add(haze);
+  const rays = buildLightRays(LENGTH + 3.5, { nearW: HALF * 1.8, nearH: POST_H + 0.6, farW: 2.3, farH: 3.1, z0: -LENGTH - 0.25, gapK: 0 });
+  g.add(rays.group);
+
+  // a path of light on the water: from a step before the entrance, through
+  // the tunnel and on into the glow, the way moonlight lies on a lake
+  const pathU = { uK: { value: 0 }, uTime: { value: 0 } };
+  const PATH_NEAR = 2.8, PATH_FAR = LENGTH + 1.2;
+  const path = new THREE.Mesh(new THREE.PlaneGeometry(1.4, PATH_NEAR + PATH_FAR, 1, 1).rotateX(-Math.PI / 2).translate(0, 0, (PATH_NEAR - PATH_FAR) / 2),
+    new THREE.ShaderMaterial({ uniforms: pathU, vertexShader: PATH_VERT, fragmentShader: PATH_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  path.renderOrder = 1;                                 // over the water, which draws first
+  g.add(path);
+  // over the clouds (#96) moonlight cannot show: a warm runner of light
+  // lies under it, gold in the middle, softening to nothing at its edges
+  const trailU = { uTime: pathU.uTime };
+  const trail = new THREE.Mesh(new THREE.PlaneGeometry(1.25, PATH_NEAR + PATH_FAR + 2, 1, 24).rotateX(-Math.PI / 2).translate(0, 0, (PATH_NEAR - PATH_FAR - 2) / 2),
+    new THREE.ShaderMaterial({ uniforms: trailU, transparent: true, depthWrite: false,
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `uniform float uTime; varying vec2 vUv;
+        void main(){
+          float across = 1.0 - smoothstep(0.18, 0.5, abs(vUv.x - 0.5));
+          float ends = smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.8, vUv.y);
+          float shimmer = 0.9 + 0.1 * sin(vUv.y * 60.0 - uTime * 1.6);
+          vec3 col = mix(vec3(0.86, 0.42, 0.36), vec3(1.0, 0.86, 0.6), across);   // rose at the edges, gold down the middle
+          gl_FragColor = vec4(col * shimmer, across * ends * 0.5);   // over water the moonlight path does the rest
+        }` }));
+  trail.position.y = 0.004; trail.renderOrder = 1;
+  g.add(trail);
+
+  // petals come loose from the roof and drift down through the tunnel
+  const N_FALL = 70, fallPos = new Float32Array(N_FALL * 3), fallSeed = new Float32Array(N_FALL);
+  for (let i = 0; i < N_FALL; i++) {
+    fallPos.set([(Math.random() - 0.5) * 1.7, Math.random(), 0.6 - Math.random() * (LENGTH + 1.2)], i * 3);
+    fallSeed[i] = Math.random();
+  }
+  const fallGeo = new THREE.BufferGeometry();
+  fallGeo.setAttribute('position', new THREE.BufferAttribute(fallPos, 3));
+  fallGeo.setAttribute('aSeed', new THREE.BufferAttribute(fallSeed, 1));
+  const fallU = { uK: { value: 0 }, uTime: { value: 0 }, uViewH: { value: 800 }, uFloor: { value: 0 } };
+  const fall = new THREE.Points(fallGeo, new THREE.ShaderMaterial({ uniforms: fallU, vertexShader: FALL_VERT, fragmentShader: FALL_FRAG, transparent: true, depthWrite: false }));
+  fall.frustumCulled = false;
+  g.add(fall);
+
+  let grow = 0;
+  return {
+    group: g,
+    halfWidth: HALF - 0.1,
+    length: LENGTH,
+    // once placed: pull in every rose and leaf that would sink into a wall
+    // (sprites have no depth of their own), toward the tunnel's middle
+    fitToWalls(isSolid) {
+      g.updateMatrixWorld(true);
+      const v = new THREE.Vector3();
+      const blocked = () => {
+        for (const [ox, oz] of [[0, 0], [0.2, 0], [-0.2, 0], [0, 0.2], [0, -0.2]]) if (isSolid(v.x + ox, v.z + oz)) return true;
+        return false;
+      };
+      for (const pts of [rosePts, leafPts]) {
+        const p = pts.geometry.attributes.position;
+        for (let i = 0; i < p.count; i++) {
+          let x = p.getX(i);
+          for (let k = 0; k < 12; k++) {
+            v.set(x, p.getY(i), p.getZ(i)).applyMatrix4(g.matrixWorld);
+            if (!blocked()) break;
+            x *= 0.9;                                    // step in toward the middle
+          }
+          p.setX(i, x);
+        }
+        p.needsUpdate = true;
+      }
+    },
+    // waterY: the surface the path of light lies on
+    update(dt, time, waterY = 0.02) {
+      grow = Math.min(1, grow + dt / 3.2);
+      const lit = Math.max(0, Math.min(1, (grow - 0.4) / 0.6));
+      pathU.uK.value = lit; pathU.uTime.value = time;
+      path.position.y = waterY + 0.006;
+      fallU.uK.value = lit; fallU.uTime.value = time; fallU.uViewH.value = innerHeight; fallU.uFloor.value = waterY;
+      arches.forEach((ag, a) => {                     // the arches rise one after another
+        const k = Math.max(0, Math.min(1, grow * 1.6 - a * 0.12));
+        const o = 1 - (1 - k) ** 3;                   // each arch comes up out of the air where it stands: nothing crosses the way
+        for (const m of ag.userData.mats) { m.opacity = o; m.transparent = o < 0.999; m.depthWrite = o > 0.5; }
+      });
+      const bloom = Math.max(0, (grow - 0.2) / 0.8);
+      rosePts.geometry.setDrawRange(0, Math.floor(rosePts.geometry.attributes.position.count * bloom));
+      leafPts.geometry.setDrawRange(0, Math.floor(leafPts.geometry.attributes.position.count * Math.min(1, bloom * 1.3)));
+      const k = Math.max(0, (grow - 0.35) / 0.65) * (0.85 + 0.15 * Math.sin(time * 1.7));
+      rays.set(k, time); glowU.uK.value = 1.3 * k;
+    },
+    dispose() {
+      g.traverse(o => { o.geometry?.dispose(); for (const m of [].concat(o.material || [])) if (m !== vine && m !== iron) { m.map?.dispose(); m.dispose(); } });
+      vine.dispose(); iron.dispose(); rays.dispose();
+    },
+  };
+}
+
+// Where the tunnel can stand: a couple of steps from the visitor along a
+// corridor axis, on straight open floor wide and long enough for it, as close
+// as possible to where they are already looking. Returns
+// { x, z, dir: [dx, dz], yaw } for the entrance, or null.
+// blocked(x, z): anything else in the way that is not a labyrinth wall
+// (doors, furniture), supplied by the caller.
+export function findArchSpot(px, pz, yaw, blocked = () => false) {
+  const solid = (x, z) => solidAtGlobal(Math.floor(x / CELL), Math.floor(z / CELL)) || blocked(x, z);
+  const open = (x, z) => !solid(x, z);
+  const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].sort((a, b) => (b[0] * fx + b[1] * fz) - (a[0] * fx + a[1] * fz));
+  // further out to the sides last: the light's widened corridors (#80) put the
+  // visitor up to a metre and a half off a corridor's middle
+  const sides = [0, 0.1, -0.1, 0.2, -0.2, 0.3, -0.3, 0.4, -0.4, 0.5, -0.5, 0.6, -0.6, 0.7, -0.7, 0.8, -0.8,
+    1.0, -1.0, 1.2, -1.2, 1.4, -1.4, 1.6, -1.6];
+  const fits = (x, z, dx, dz, corridor) => {
+    const lx = -dz, lz = dx;
+    let walled = 0, n = 0;
+    for (let s = 0; s <= LENGTH + 1.6; s += 0.4, n++) {        // the whole tunnel and a stretch beyond
+      const cx = x + dx * s, cz = z + dz * s;
+      if (!open(cx, cz) || solid(cx + lx * (HALF + 0.08), cz + lz * (HALF + 0.08)) || solid(cx - lx * (HALF + 0.08), cz - lz * (HALF + 0.08))) return false;
+      if (solid(cx + lx * 1.4, cz + lz * 1.4) && solid(cx - lx * 1.4, cz - lz * 1.4)) walled++;
+    }
+    return !corridor || walled >= n * 0.85;          // a corridor: walls close on both sides nearly all the way
+  };
+  for (const corridor of [true, false]) {            // a corridor if there is one, open floor only if not
+    for (const dist of corridor ? [2.4, 3.0, 2.0, 3.6, 4.4, 5.2, 6.0, 7.0, 8.0] : [2.4, 3.0, 2.0, 3.6]) {   // a corridor is worth a few more steps
+      for (const [dx, dz] of dirs) {
+        const lx = -dz, lz = dx;
+        for (const side of sides) {
+          const x = px + dx * dist + lx * side, z = pz + dz * dist + lz * side;
+          if (!fits(x, z, dx, dz, corridor)) continue;
+          let clear = true;
+          for (let s = 0.4; clear && s < dist; s += 0.4) clear = open(px + dx * s + lx * side * s / dist, pz + dz * s + lz * side * s / dist);
+          if (clear) return { x, z, dir: [dx, dz], yaw: Math.atan2(-dx, -dz) };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

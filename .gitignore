@@ -1,0 +1,15 @@
+SOULS by Alsa Feer/
+.DS_Store
+reel/
+dist/
+\!CONSPACE-ROOMS_гайд/
+
+# stairwell sources, the site uses the webp copies
+assets/stairs/*.png
+.claude/worktrees/
+.claude/plans/
+
+# the smoke run's one dependency
+tests/node_modules/
+4143884460891284756.mp4
+tools/onepager/.venv/

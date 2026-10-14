@@ -1,0 +1,12 @@
+{
+  "name": "conspace-rooms-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --import ./register.mjs --test",
+    "smoke": "node smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.55.0"
+  }
+}

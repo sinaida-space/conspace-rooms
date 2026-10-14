@@ -1,0 +1,492 @@
+import * as THREE from 'three';
+import { calm } from './calm.js';
+import { shadowVoice, SHADOW_SOUNDS } from './shadowSound.js';
+import { CELL, CHUNK, solidAtGlobal } from './world.js';
+
+// ── conspace-rooms · events.js ──────────────────────────────────────────────
+// The event director (#43, C4): once every 20-40 s the labyrinth does one
+// thing, picked by the zone the visitor is in. Never two at once, never
+// sooner than 20 s after the last. Anywhere near, not only in view.
+//   FEAR    a figure's shadow walks along a wall, a tube stutters, a creak,
+//           knocks on a pipe, a drip, a clock or a notice comes off its nail
+//   MEMORY  a cat's shadow along the skirting, a lamp blinks, the floor
+//           creaks, a knock on a door, the tap drips, a plate, a portrait
+//           or a calendar falls (wallthings.js)
+//   LIGHT   quiet only: a bird's shadow crosses a wall, the candles shudder
+//           in a draught, a drop falls into the water
+// Shadows keep their own clock (SHADOW_GAP, the first soon after a zone
+// begins) and are thrown only on a wall ahead, inside the view, so a zone
+// shows several. FEAR also has someone standing at the end of a corridor who
+// is gone as the visitor comes near; MEMORY a hand drawn along the wall.
+// Once the fear portal is summoned the shadows lead (LEAD_GAP): they come
+// more often, a figure walks the way the route to the portal goes, with its
+// steps heard going off that way, and the one standing at the end of a
+// corridor stands on the side where the route turns.
+// ?debug=events logs every event; window.__app.events.fire(kind) stages one
+// now; window.__app.events.log keeps them all ({ t, kind, stage, dist }).
+
+const GAP = [20, 40];
+const WEIGHTS = [
+  { flicker: 3, creak: 2, knock: 2, drip: 1, fall: 2 },
+  { flicker: 1, creak: 2, knock: 1, drip: 1, fall: 2 },
+  { shiver: 3, drip: 3 },
+];
+const SHADOW_GAP = [30, 50], SHADOW_FIRST = [8, 15];   // seconds; the first after a zone begins
+const LEAD_GAP = [9, 15];                                // fear and memory: the shadows lead the way the marks go
+const SHADOWS = [{ figure: 2, stander: 1 }, { cat: 1, hand: 1 }, { bird: 1 }];
+const LOOK = Math.cos(0.6);                             // inside ~35° of where the visitor looks
+const DEBUG = /(^|[?&])debug=events/.test(location.search);
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = list => list[Math.floor(Math.random() * list.length)];
+
+// nothing solid on the floor between two points (0.3 m steps on the cell grid)
+function clear(x0, z0, x1, z1) {
+  const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.3);
+  for (let i = 1; i < n; i++) if (solidAtGlobal(Math.floor((x0 + (x1 - x0) * i / n) / CELL), Math.floor((z0 + (z1 - z0) * i / n) / CELL))) return false;
+  return true;
+}
+
+// ── silhouettes, drawn once: a penumbra thrown by a low lamp far off ──
+// The shape is drawn crisp on a scratch canvas, slanted and drawn up a little
+// from its foot (the lamp is low), then laid down twice as a canvas shadow:
+// a wide pale blur and a narrower, denser one. Canvas shadows blur in every
+// browser (ctx.filter does not in older Safari, where the figures came out
+// flat black). PAD leaves room round each frame for the blur to fade out.
+const PAD = 28, OFF = 4096;
+const WALK_FRAMES = 8;
+
+// One frame of a walk, facing right (+x), the foot line at y = 256: a stooped
+// someone in a coat to the knees, head pushed forward, the legs and arms a
+// little too long. phase 0..2π is one stride; the legs swing opposite, the
+// knee folds as a leg comes through, the arms swing against the legs.
+function walker(g, phase) {
+  g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#000';
+  const hip = [62, 146], shoulder = [70, 60];
+  const leg = (p, w) => {
+    const a = 0.46 * Math.sin(p);                                 // thigh: forward is +
+    const knee = 0.12 + 0.75 * Math.max(0, Math.cos(p)) * Math.max(0, Math.sin(p + 0.6));   // folds while it swings through
+    const kx = hip[0] + Math.sin(a) * 58, ky = hip[1] + Math.cos(a) * 58;
+    const b = a - knee;
+    const fx = kx + Math.sin(b) * 60, fy = Math.min(256, ky + Math.cos(b) * 60);
+    g.lineWidth = w; g.beginPath(); g.moveTo(...hip); g.lineTo(kx, ky); g.lineTo(fx, fy); g.lineTo(fx + 11, fy); g.stroke();
+  };
+  const arm = (p, w) => {
+    const a = -0.38 * Math.sin(p) - 0.12;
+    const ex = shoulder[0] + Math.sin(a) * 46, ey = shoulder[1] + Math.cos(a) * 46;
+    const b = a + 0.25 + 0.2 * Math.max(0, -Math.sin(p));
+    g.lineWidth = w; g.beginPath(); g.moveTo(...shoulder); g.lineTo(ex, ey); g.lineTo(ex + Math.sin(b) * 52, ey + Math.cos(b) * 52); g.stroke();
+  };
+  leg(phase + Math.PI, 12); arm(phase, 9);                       // the far side first
+  g.beginPath(); g.moveTo(60, 50); g.lineTo(78, 48); g.lineTo(92, 66); g.lineTo(86, 160); g.lineTo(42, 160); g.lineTo(44, 64); g.closePath(); g.fill();   // the coat, shoulders hunched
+  g.beginPath(); g.ellipse(84, 34, 12, 15, 0.35, 0, Math.PI * 2); g.fill();   // the head, pushed forward
+  leg(phase, 13); arm(phase + Math.PI, 10);
+}
+
+// A mirage in the shadow: the edges waver like air over a stove and the
+// darkness breathes. uMirage is the shadow's own clock (set every frame).
+function mirage(mat, amount) {
+  const u = { value: Math.random() * 100 };
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uMirage = u;
+    sh.fragmentShader = 'uniform float uMirage;\n' + sh.fragmentShader.replace('#include <map_fragment>', `
+#ifdef USE_MAP
+  vec2 mUv = vMapUv;
+  mUv.x += (sin(mUv.y * 38.0 + uMirage * 7.0) * 0.6 + sin(mUv.y * 91.0 - uMirage * 11.0) * 0.4) * ${amount.toFixed(4)};
+  diffuseColor *= texture2D( map, mUv );
+  diffuseColor.a *= 0.82 + 0.18 * sin(uMirage * 13.0 + mUv.y * 6.0);
+#endif`);
+  };
+  mat.customProgramCacheKey = () => 'mirage' + amount;
+  return u;
+}
+function silhouette(kind) {
+  const W = kind === 'figure' ? 128 : 256, H = kind === 'figure' ? 256 : 128;
+  const CW = W + 2 * PAD, CH = H + 2 * PAD;
+  const frames = kind === 'figure' ? WALK_FRAMES : kind === 'cat' || kind === 'bird' ? 2 : 1;
+  const shape = document.createElement('canvas'); shape.width = CW * frames; shape.height = CH;
+  const g = shape.getContext('2d');
+  g.fillStyle = '#000';
+  for (let f = 0; f < frames; f++) {
+    g.save(); g.translate(f * CW + PAD, PAD);
+    g.translate(W / 2, H); g.transform(1, 0, -0.08, 1.07, 0, 0); g.translate(-W / 2, -H);   // slant and stretch from the foot
+    if (kind === 'figure') walker(g, f / frames * Math.PI * 2);   // someone walking past, a step in eight frames
+    else if (kind === 'cat') {                     // a cat along the skirting, tail up; two steps
+      g.beginPath(); g.ellipse(120, 70, 62, 22, 0, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.arc(196, 52, 18, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.moveTo(184, 40); g.lineTo(188, 22); g.lineTo(196, 36); g.lineTo(206, 22); g.lineTo(210, 42); g.fill();
+      g.lineWidth = 9; g.lineCap = 'round'; g.strokeStyle = '#000';
+      g.beginPath(); g.moveTo(62, 64); g.quadraticCurveTo(30, 50, 34, 14); g.stroke();
+      const s = f ? 1 : -1;
+      for (const [x, k] of [[80, 1], [96, -1], [150, 1], [166, -1]]) { g.beginPath(); g.moveTo(x, 84); g.lineTo(x + s * k * 8, 120); g.stroke(); }
+    } else if (kind === 'hand') {                    // a hand laid flat to the wall, long fingers ahead, the arm trailing off
+      g.fillRect(0, 58, 120, 26);
+      g.beginPath(); g.ellipse(142, 70, 30, 22, 0, 0, Math.PI * 2); g.fill();
+      g.lineWidth = 9; g.lineCap = 'round'; g.strokeStyle = '#000';
+      for (const [y, len, bend] of [[54, 78, -6], [64, 90, -2], [74, 86, 2], [84, 70, 6]]) {
+        g.beginPath(); g.moveTo(160, y); g.quadraticCurveTo(160 + len * 0.6, y + bend, 160 + len, y + bend * 2.2); g.stroke();
+      }
+      g.beginPath(); g.moveTo(140, 50); g.quadraticCurveTo(160, 24, 186, 22); g.stroke();   // the thumb
+    } else {                                         // a bird, wings up and wings down
+      g.beginPath(); g.ellipse(128, 66, 34, 10, 0, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.moveTo(160, 60); g.lineTo(178, 64); g.lineTo(160, 70); g.fill();
+      g.beginPath(); g.moveTo(96, 62); g.lineTo(78, 56); g.lineTo(84, 70); g.fill();
+      const up = f === 0;
+      g.beginPath(); g.moveTo(112, 62); g.quadraticCurveTo(120, up ? 10 : 110, up ? 150 : 146, up ? 14 : 116); g.lineTo(140, 64); g.fill();
+    }
+    g.restore();
+  }
+  const c = document.createElement('canvas'); c.width = shape.width; c.height = CH;
+  const s = c.getContext('2d');
+  s.shadowOffsetX = OFF;                              // the shape itself lands off the canvas; only its shadow is seen
+  for (const [blur, a] of [[22, 0.5], [8, 0.45]]) {   // penumbra, then the denser middle
+    s.shadowBlur = blur; s.shadowColor = `rgba(0,0,0,${a})`;
+    s.drawImage(shape, -OFF, 0);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.repeat.set(1 / frames, 1);
+  return { tex, frames, aspect: CW / CH, scale: CH / H };   // scale: the plane's height over the figure's
+}
+
+export class EventDirector {
+  constructor({ scene, world, player, audio, atmo, stage, soul }) {
+    Object.assign(this, { scene, world, player, audio, atmo, stage, soul });
+    this.wait = rand(...GAP);
+    this.log = [];
+    this.t = 0;
+    this.running = [];                                // animations still playing: shadows, falls
+    this.sil = {};
+    this.shadowWait = rand(...SHADOW_FIRST);
+    this.shadows = [];                               // { t, kind, stage, dist } of every shadow thrown (checks)
+  }
+
+  update(dt) {
+    this.t += dt;
+    this.audio ??= window.__app?.audio;               // the engine starts on the first gesture
+    const step = this.hold ? 0 : dt;                  // hold: animations stand still (checks)
+    for (let i = this.running.length - 1; i >= 0; i--) if (!this.running[i](step)) this.running.splice(i, 1);
+    if (this.soul?.finale || document.hidden) return;
+    if (this.stage.stage !== this._shadowStage) { this._shadowStage = this.stage.stage; this.shadowWait = rand(...SHADOW_FIRST); }
+    if ((this.shadowWait -= dt * (1 + 1.5 * (window.__app?.pace?.run ?? 0))) <= 0) {   // hurrying, they come sooner (pace.js)
+      const lead = this._lead();
+      this.shadowWait = this.throwShadow(null, lead) ? rand(...(lead ? LEAD_GAP : SHADOW_GAP)) : 2;   // nowhere ahead: look again soon
+    }
+    this.wait -= dt;
+    if (this.wait > 0) return;
+    const st = this.stage.stage, w = WEIGHTS[st] || WEIGHTS[0];
+    const kinds = Object.keys(w);
+    // a weighted order without repeats; the first that can happen here, happens
+    const order = [];
+    const pool = kinds.map(k => [k, w[k] * (k === this.last ? 0.3 : 1)]);
+    while (pool.length) {
+      let x = Math.random() * pool.reduce((s, [, v]) => s + v, 0), i = 0;
+      while ((x -= pool[i][1]) > 0 && i < pool.length - 1) i++;
+      order.push(pool.splice(i, 1)[0][0]);
+    }
+    for (const k of order) if (this.fire(k)) return;
+    this.wait = 3;                                    // nothing could happen here: look again shortly
+  }
+
+  // stage one event of this kind now; false if there is nowhere for it
+  fire(kind) {
+    const st = this.stage.stage;
+    const r = this['_' + kind]?.(st);
+    if (!r) return false;
+    this.wait = rand(...GAP);
+    this.last = kind;
+    const e = { t: +this.t.toFixed(1), kind, stage: st, dist: r.dist != null ? +r.dist.toFixed(1) : null };
+    this.log.push(e);
+    if (DEBUG) console.info('[events]', e);
+    return true;
+  }
+
+  // one of the zone's shadows, on a wall ahead; false if there is none in view
+  throwShadow(kind, lead = null) {
+    const st = this.stage.stage;
+    if (!kind && lead && st === 1) kind = 'cat';     // grandmother's: her cat runs ahead along the skirting
+    else if (!kind && lead) {                        // looking down the way: someone waits at its end, else one walks it
+      const f = this._ahead();
+      kind = f && f.x * lead.x + f.z * lead.z > 0.6 && Math.random() < 0.4 ? 'stander' : 'figure';
+    }
+    if (!kind) {
+      const w = SHADOWS[st] || SHADOWS[0], ks = Object.keys(w);
+      let x = Math.random() * ks.reduce((u, k) => u + w[k], 0);
+      kind = ks.find(k => (x -= w[k]) <= 0) || ks[0];
+    }
+    const r = kind === 'stander' ? this._stander(lead) : this._shadow(st, kind, lead);
+    if (!r) return false;
+    const e = { t: +this.t.toFixed(1), kind, stage: st, dist: +r.dist.toFixed(1), lead: !!lead };
+    this.shadows.push(e);
+    if (lead) this.ledAt = { t: this.t, x: lead.x, z: lead.z };   // the way the last leading shadow showed (checks)
+    if (DEBUG) console.info('[events] shadow', e);
+    return true;
+  }
+
+  // The way to the summoned fear portal from where the visitor stands, as a
+  // unit vector on the floor, or null when there is nothing to lead to.
+  _lead() {
+    const s = this.soul, st = this.stage.stage;
+    if (st > 1 || !s) return null;                   // the light has its petals; no shadow leads there
+    const way = s.wayDir?.();                        // the way the marks go: an unseen work, what is still to find, a portal
+    if (way) return way;
+    const plan = s.summonedPortals?.[st + 1];
+    const yaw = plan ? s._wayYaw(plan) : null;
+    return yaw == null ? null : { x: -Math.sin(yaw), z: -Math.cos(yaw) };
+  }
+
+  _here() { return { x: this.player.pos.x, z: this.player.pos.y }; }
+  _ahead() { const d = (window.__app?.camera ?? this.player.camera)?.getWorldDirection(new THREE.Vector3()); return d ? { x: d.x / (Math.hypot(d.x, d.z) || 1), z: d.z / (Math.hypot(d.x, d.z) || 1) } : null; }
+
+  // somewhere a few metres off, for a sound
+  _somewhere(min = 3, max = 12) {
+    const a = Math.random() * Math.PI * 2, d = rand(min, max);
+    return { dx: Math.cos(a) * d, dz: Math.sin(a) * d, dist: d };
+  }
+
+  _creak(st) { const s = this._somewhere(); this.audio?.creak(s.dx, s.dz, s.dist, { low: st === 1 }); return s; }
+  _knock(st) { const s = this._somewhere(4, 14); this.audio?.knock(s.dx, s.dz, s.dist, { metal: st === 0 }); return s; }
+  _drip() {
+    const s = this._somewhere(2, 8);
+    for (let k = 0; k < 3; k++) setTimeout(() => this.audio?.drip(s.dx, s.dz, s.dist), k * rand(600, 900));
+    return s;
+  }
+  // calm: a creak somewhere takes the lamp's place, and the candles keep still
+  _flicker(st) { if (st === 2) return null; if (calm.on) return this._creak(st); this.atmo.flicker(st === 0 ? 1 : 0.6); return { dist: null }; }
+  _shiver() { if (calm.on) return null; this.atmo.shiverCandles(rand(1.2, 2)); return { dist: null }; }
+
+  // a wall run near the visitor, long enough to walk a shadow along, whose
+  // middle is inside the view; facing: it must face the visitor head-on
+  // (the wall that closes a corridor ahead)
+  _wallNear(min, max, minLen, facing = false, lead = null) {
+    const p = this._here(), f = this._ahead(), cx = Math.floor(p.x / (CELL * CHUNK)), cz = Math.floor(p.z / (CELL * CHUNK));
+    const cand = [];
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++)
+      for (const sl of this.world.getWallSlots(cx + i, cz + j)) {
+        if (sl.length < minLen) continue;
+        const dx = sl.position.x - p.x, dz = sl.position.z - p.z, d = Math.hypot(dx, dz);
+        if (d < min || d > max) continue;
+        // the visitor must be on the lit side of it, and looking its way
+        if (-dx * sl.normal.x - dz * sl.normal.z <= 0) continue;
+        if (f && (dx * f.x + dz * f.z) / d < LOOK) continue;
+        // seen from the side a corridor wall is a sliver and a shadow on it a black line:
+        // only walls seen more or less face-on (head-on for `facing`)
+        if (-(sl.normal.x * dx + sl.normal.z * dz) / d < (facing ? 0.8 : 0.5)) continue;
+        if (clear(p.x, p.z, sl.position.x + sl.normal.x * 0.3, sl.position.z + sl.normal.z * 0.3)) cand.push({ sl, d });
+      }
+    if (lead && !facing && cand.length) {             // leading: a wall that runs the way the route goes
+      const along = c => Math.abs(-c.sl.normal.z * lead.x + c.sl.normal.x * lead.z);
+      const best = Math.max(...cand.map(along));
+      const runs = cand.filter(c => along(c) > best - 0.2);
+      return runs[Math.floor(Math.random() * runs.length)];
+    }
+    return cand.length ? cand[Math.floor(Math.random() * cand.length)] : null;
+  }
+
+  _shadow(st, kind = ['figure', 'cat', 'bird'][st], lead = null) {
+    const w = this._wallNear(3, st === 2 ? 8 : 12, kind === 'figure' ? 4 : 3, false, lead);
+    if (!w) return null;
+    const sil = this.sil[kind] ||= silhouette(kind);
+    const h = kind === 'figure' ? 2.2 : kind === 'cat' ? 0.6 : kind === 'hand' ? 0.34 : 0.55;
+    const mat = new THREE.MeshBasicMaterial({ map: sil.tex.clone(), transparent: true, opacity: 0, depthWrite: false, fog: true,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    mat.map.needsUpdate = true;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(h * sil.scale * sil.aspect, h * sil.scale), mat);
+    const { sl } = w, n = sl.normal, along = new THREE.Vector3(-n.z, 0, n.x);   // along the wall, to the right as it faces the visitor
+    const half = sl.length * CELL / 2 - 0.3;
+    const dir = lead ? (along.x * lead.x + along.z * lead.z >= 0 ? 1 : -1) : Math.random() < 0.5 ? 1 : -1;
+    mesh.rotation.y = Math.atan2(n.x, n.z);
+    // facing the way it goes: the plane's own +x runs against `along`, and every shape is drawn facing +x
+    const flip = dir > 0;
+    if (flip) { mat.map.repeat.x = -1 / sil.frames; mat.map.offset.x = 1 / sil.frames; }
+    const y0 = kind === 'figure' ? h / 2 + 0.02 : kind === 'cat' ? h / 2 + 0.05 : kind === 'hand' ? rand(1.15, 1.45) : rand(1.7, 2.3);
+    const speed = kind === 'figure' ? 1.1 : kind === 'cat' ? 0.9 : kind === 'hand' ? 0.45 : 3.2, dur = (2 * half) / speed;
+    this.scene.add(mesh);
+    this.lastShadow = mesh;                          // for checks
+    if (lead && kind === 'figure') {                 // someone was walking behind: steps come up from the back, then go off the way it walks
+      const p = this._here(), x0 = sl.position.x - along.x * half * dir, z0 = sl.position.z - along.z * half * dir;
+      const f = this._ahead() || lead;
+      this.audio?.steps?.(-f.x * 4, -f.z * 4, f.x * 1.4, f.z * 1.4, 2.2);
+      setTimeout(() => this.audio?.steps?.(x0 - p.x, z0 - p.z, along.x * dir * speed, along.z * dir * speed, dur + 1.5), 1600);
+    }
+    // Figures and cats are alive: the step is drawn frame by frame and driven
+    // by the ground covered, the weight lands on each step (a lurch), the
+    // figure stops dead now and then and goes on, and the lamp being low and
+    // midway, it is tallest at either end. Their edges waver like a mirage,
+    // and a fainter double follows a breath behind.
+    const living = kind === 'figure' || kind === 'cat';
+    const mir = living ? mirage(mat, kind === 'figure' ? 0.0035 : 0.002) : null;
+    let ghost = null, gmir = null;
+    if (kind === 'figure') {
+      const gm = new THREE.MeshBasicMaterial({ map: sil.tex.clone(), transparent: true, opacity: 0, depthWrite: false, fog: true,
+        polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+      gm.map.needsUpdate = true;
+      gm.map.repeat.x = mat.map.repeat.x; gm.map.offset.x = mat.map.offset.x;
+      gmir = mirage(gm, 0.006);
+      ghost = new THREE.Mesh(mesh.geometry, gm);
+      ghost.rotation.y = mesh.rotation.y;
+      this.scene.add(ghost);
+    }
+    // its sound: a figure one of four at random, the cat meows (shadowSound.js)
+    // creepy sounds belong to fear, meows to grandmother's world, nowhere else
+    const voice = kind === 'figure' && st === 0 ? shadowVoice(this.audio, pick(SHADOW_SOUNDS)) : kind === 'cat' && st === 1 ? shadowVoice(this.audio, 'meow') : null;
+    let footfall = 0;
+    const stride = kind === 'figure' ? 1.35 : 0.45, TAU = Math.PI * 2, hist = [];
+    let t = 0, pos = -half, phase = 0, hold = 0, holdIn = rand(1.2, 2.6);
+    const place = (m, x, y, z, frame, sy) => {
+      m.position.set(x, y, z);
+      m.scale.y = sy;
+      m.material.map.offset.x = (flip ? 1 : 0) / sil.frames + frame / sil.frames;
+    };
+    this.running.push(dt => {
+      t += dt;
+      if (!living) pos = -half + 2 * half * Math.min(1, t / dur);
+      else if (hold > 0) hold -= dt;                 // stopped dead, as if it heard something
+      else {
+        if ((holdIn -= dt) <= 0 && kind === 'figure' && Math.abs(pos) < half * 0.6) { hold = rand(0.5, 1.3); holdIn = rand(2, 4); voice?.halt(); }
+        const v = speed * (0.55 + 0.6 * Math.abs(Math.sin(phase)));
+        pos += v * dt; phase += v * dt / stride * TAU;
+      }
+      const k = Math.min(1, (pos + half) / (2 * half)), sAlong = pos * dir;
+      const frame = living ? Math.floor(phase / TAU * sil.frames) % sil.frames : sil.frames > 1 ? Math.floor(t * (kind === 'bird' ? 7 : 5)) % 2 : 0;
+      const sy = kind === 'figure' ? 1 + 0.22 * (2 * k - 1) ** 2 : 1;
+      const bob = kind === 'figure' ? Math.abs(Math.sin(phase)) * 0.025 : kind === 'bird' ? Math.sin(t * 2) * 0.12 : kind === 'hand' ? Math.sin(t * 0.9) * 0.05 : 0;
+      const y = kind === 'figure' || kind === 'cat' ? (y0 - 0.02) * sy + 0.02 + bob : y0 + bob;
+      const x = sl.position.x + n.x * 0.03 + along.x * sAlong, z = sl.position.z + n.z * 0.03 + along.z * sAlong;
+      place(mesh, x, y, z, frame, sy);
+      if (voice) {
+        const p = this._here();
+        voice.update(x - p.x, z - p.z);
+        const ff = Math.floor(phase / Math.PI);         // a foot lands every half stride
+        if (ff !== footfall) { footfall = ff; voice.step(); }
+      }
+      if (hold > 0) mesh.scale.x = 1 + 0.015 * Math.sin(t * 3.3);   // standing, it breathes
+      else mesh.scale.x = 1;
+      const fade = Math.max(0, Math.min(1, t / 0.5, (1 - k) * 2 * half / 0.6));
+      mat.opacity = fade * (kind === 'bird' ? 0.5 : 0.65);   // the texture is a penumbra already: under 0.5 at its middle
+      if (mir) mir.value = t;
+      if (ghost) {                                   // the double: where the figure was a breath ago
+        hist.push([t, x, y, z, frame, sy]);
+        while (hist.length > 2 && hist[1][0] < t - 0.22) hist.shift();
+        const [, gx, gy, gz, gf, gsy] = hist[0];
+        place(ghost, gx + n.x * 0.005, gy, gz + n.z * 0.005, gf, gsy * 1.03);
+        ghost.material.opacity = fade * 0.22;
+        gmir.value = t * 1.3 + 5;
+      }
+      if (k < 1) return true;
+      voice?.stop();
+      this.scene.remove(mesh); mesh.geometry.dispose(); mat.map.dispose(); mat.dispose();
+      if (ghost) { this.scene.remove(ghost); ghost.material.map.dispose(); ghost.material.dispose(); }
+      return false;
+    });
+    return { dist: w.d };
+  }
+
+  // Someone standing at the end of the corridor ahead, still; gone in a
+  // breath when the visitor comes within a few metres, or after a while
+  _stander(lead = null) {
+    const w = this._wallNear(6, 20, 2, true);
+    if (!w) return null;
+    const sil = this.sil.figure ||= silhouette('figure');
+    const h = 2.15, mat = new THREE.MeshBasicMaterial({ map: sil.tex, transparent: true, opacity: 0, depthWrite: false, fog: true,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const mir = mirage(mat, 0.003);
+    const voice = this.stage.stage === 0 ? shadowVoice(this.audio, pick(['whisper', 'warp'])) : null;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(h * sil.scale * sil.aspect, h * sil.scale), mat);
+    const { sl } = w, n = sl.normal, along = new THREE.Vector3(-n.z, 0, n.x);
+    const off = lead ? Math.sign(along.x * lead.x + along.z * lead.z || 1) * rand(0.4, Math.max(0.5, sl.length * CELL / 2 - 0.5)) : rand(-0.4, 0.4);   // on the side the way turns
+    mesh.rotation.y = Math.atan2(n.x, n.z);
+    mesh.position.set(sl.position.x + n.x * 0.03 + along.x * off, h / 2 + 0.02, sl.position.z + n.z * 0.03 + along.z * off);
+    this.scene.add(mesh);
+    this.lastShadow = mesh;
+    let t = 0, going = -1;
+    this.running.push(dt => {
+      t += dt;
+      const d = Math.hypot(mesh.position.x - this.player.pos.x, mesh.position.z - this.player.pos.y);
+      if (going < 0 && (d < 5 || t > 10)) going = t;
+      const k = going < 0 ? Math.min(1, t / 1.2) : 1 - (t - going) / 0.25;
+      mat.opacity = Math.max(0, k) * 0.65;
+      mesh.scale.x = 1 + Math.sin(t * 0.7) * 0.015;  // it breathes
+      mir.value = t;
+      if (voice) { const p = this._here(); voice.update(mesh.position.x - p.x, mesh.position.z - p.z); }
+      if (going < 0 || k > 0) return true;
+      voice?.stop();
+      this.scene.remove(mesh); mesh.geometry.dispose(); mat.dispose();
+      return false;
+    });
+    return { dist: w.d };
+  }
+
+  // Where a hung thing would come to rest: out from the wall by `out`, along it
+  // by `slide`, at least CLEAR from every candle and every thing already down
+  // in its chunk and the ones round it. Null when no such spot is left.
+  _landing(h) {
+    const CLEAR = 0.38, m = h.mesh, near = [];
+    for (const s of this.soul.chunkStuff.values()) {
+      for (const it of s.scatter?.items || []) if (!it.gone) near.push(it);
+      for (const o of s.props?.hung || []) if (o.fallen && o !== h) near.push(o.mesh.position);
+    }
+    for (let tries = 0; tries < 8; tries++) {
+      const out = rand(0.18, 0.4), slide = tries ? rand(-0.35, 0.35) : 0;
+      const x = m.position.x + h.nx * out - h.nz * slide, z = m.position.z + h.nz * out + h.nx * slide;
+      if (near.every(q => Math.hypot(q.x - x, q.z - z) > CLEAR)) return { out, slide };
+    }
+    return null;
+  }
+
+  // a thing on a wall nearby comes off its nail: a shiver, the drop, the knock
+  _fall(st) {
+    const p = this._here(), cand = [];
+    for (const s of this.soul.chunkStuff.values()) for (const h of s.props?.hung || []) {
+      if (h.fallen || !h.mesh.parent) continue;
+      const d = Math.hypot(h.mesh.position.x - p.x, h.mesh.position.z - p.z);
+      if (d > 1.5 && d < 16) cand.push({ h, d });
+    }
+    if (!cand.length) return null;
+    // it lands only where the floor is clear: never on a candle, a boat or another fallen thing
+    let h, d, out, slide;
+    for (let n = cand.length; n > 0 && !h; n--) {
+      const i = Math.floor(Math.random() * n), c = cand[i];
+      cand[i] = cand[n - 1];
+      const spot = this._landing(c.h);
+      if (spot) ({ h, d } = c), ({ out, slide } = spot);
+    }
+    if (!h) return null;
+    h.fallen = true;
+    this.lastFall = h;                               // for checks
+    const m = h.mesh, x0 = m.position.x, y0 = m.position.y, z0 = m.position.z, z0rot = m.rotation.z;
+    const water = window.__app?.water?.level ?? 0, wet = water > 0.03;
+    const spin = rand(-0.6, 0.6), glass = /Clock|notice|photo/.test(h.kind);
+    let t = 0, v = 0, y = y0, landed = false, sink = 0;
+    const WOBBLE = 0.45;
+    this.running.push(dt => {
+      if (!m.parent) return false;                    // the chunk went away meanwhile
+      t += dt;
+      if (t < WOBBLE) { m.rotation.z = z0rot + Math.sin(t * 40) * 0.05 * (t / WOBBLE); return true; }
+      if (!landed) {
+        v += 9.8 * dt; y -= v * dt;
+        const k = Math.min(1, (y0 - y) / Math.max(0.3, y0 - 0.02));
+        m.rotation.x = -Math.PI / 2 * k;                          // tips forward, face up by the floor
+        m.rotation.z = z0rot + spin * k;
+        m.position.set(x0 + (h.nx * out - h.nz * slide) * k, Math.max(y, wet ? water : 0.004), z0 + (h.nz * out + h.nx * slide) * k);
+        if (y <= (wet ? water : 0.004)) {
+          landed = true;
+          const dx = m.position.x - p.x, dz = m.position.z - p.z;
+          this.audio?.fall(dx, dz, Math.hypot(dx, dz), { glass: glass && !wet, wet });
+          if (!wet) m.position.y = 0.004;
+        }
+        return true;
+      }
+      if (wet && sink < 1) {                          // it settles to the flooded floor
+        sink = Math.min(1, sink + dt / 2.5);
+        m.position.y = water + (0.004 - water) * sink;
+        return true;
+      }
+      // where it lies, for the chunk to remember if it is built again (soulpath.js)
+      if (h.home) (this.soul._fallen ??= new Map()).set(h.home, { pos: m.position.clone(), rot: m.rotation.clone() });
+      return false;
+    });
+    return { dist: d };
+  }
+}
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

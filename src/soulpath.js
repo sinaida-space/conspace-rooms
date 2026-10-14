@@ -1,0 +1,3971 @@
+import * as THREE from 'three';
+import { sketchParam } from './device.js';
+import { keyCode } from './input.js';
+import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, chunkRooms, hash2i, mulberry32, setCorridorWidth, corridorWidth, isBandCell } from './world.js';
+import { zoneWeights, ORIGIN } from './zones.js';
+import { t, getLang } from './i18n.js';
+import { boardTexture, rugTexture, runnerTexture, boardPaintJobs } from './boards.js';
+import { wearCarpet, pickCarpet } from './carpets.js';
+import { createChandeliers } from './chandeliers.js';
+import { EYE_HEIGHT } from './player.js';
+import { buildKitchen, createKitchenRig, buildScatter, tickCandles, shadeOf } from './kitchen.js';
+import { baroqueFrame } from './frames.js';
+import { buildDoorway, buildLightRays } from './doorway.js';
+import { artworkSlots, artworkBusy, setArtSize, CLEAR as ART_CLEAR } from './artworks.js';
+import { createWardKit, wardPlan, bedsPlan, reserveSlot, reserveAround, cellKey } from './ward.js';
+import { buildClockNook } from './eggs.js';
+import { createRoseCounter, buildRoseArch, findArchSpot, GRAIN_OPEN_MS } from './roses.js';
+import { showCard } from './card.js';
+import { createPetals } from './petals.js';
+import { createGlowPetals } from './glowPetals.js';
+import { setShadowLight } from './shadows.js';
+import { createPropKit } from './props.js';
+import { buildHallPlants, warmPlants, ROOM_PLANTS, footBox } from './plants.js';
+import { buildIvy } from './ivy.js';
+import { createWallThings } from './wallthings.js';
+import { TROPICS } from './tropics.js';
+const LIGHT_PLANTS = ['monstera', ...TROPICS];
+import { AlisaVoices, VOICED } from './alisa.js';
+import { createDrowned } from './drowned.js';
+import { mountOrDrop } from './placement.js';
+import { buildStairwell } from './stairwell.js';
+import { TUNNEL_TIMES } from './tunnel.js';
+import { createBeacon } from './beacon.js';
+import { createCloudSea } from './cloudsea.js';
+
+// ── conspace-rooms · soulpath.js ────────────────────────────────────────────
+// Everything that makes the labyrinth respond to the visitor on the way from
+// fear to acceptance. All state lives in memory only and is gone on reload.
+//
+//   red scratches   the only red in the world: a few scratch marks on the
+//                   walls at hand height, slanted the way to go, leading to the
+//                   nearest SOULS piece not yet seen, and once all nearby ones
+//                   are seen, onward, away from where you started
+//   wall writings   scrawled at a child's height, one per some chunks, voiced
+//                   by the zone; turn around and some of them have changed
+//   presence doors  very rarely a corridor crossing is shut by a door; stand
+//                   still in front of it and it gives way: light pours out,
+//                   the music clears, "not yet", and it slams shut for good
+//   portals         shimmering doorways further out; walking through one moves
+//                   the whole world to the next stage (fear → memory → light).
+//                   Nothing else changes the stage.
+//   souls           in grandmother's room three lights drift: the soul of
+//                   someone close (gold), of a child (green), of a grown-up
+//                   (deep red). Walk into one and it scatters; its question
+//                   types itself on the television and across the screen.
+//   posters         the walls' questions: notice boards in the hospital
+//                   (boards.js), each
+//                   asking one question
+//   roses           every work seen grows the rose in the top-left corner;
+//                   with all of them an arch of roses opens a couple of steps
+//                   away, and walking through it ends the walk with the card
+//                   of every question the souls asked (roses.js, card.js)
+//   secrets         walk backwards long enough and you shrink to a child's
+//                   height; grandmother's kitchen hides in the memory zone
+//
+// Integration: new SoulPath({...}) once the world exists, then update() every
+// frame after player/artworks updates.
+
+const MARK_COLOR = 0xb3141a;
+const MARK_Y = 1.1;              // hand height, metres
+const ROUTE_CELLS = 30;          // how much of the route gets marks (~36 m)
+const MARK_EVERY = 2;            // cells between marks
+const MARK_POOL = 28;             // marks stay where they were scratched, so the pool is larger
+const CANDLE_NEAR = 12;          // metres: candles within this of a work tell whether it is seen
+const CANDLE_FILL = 1.8;          // metres: no stretch of wall further than this from a candle
+const CANDLE_CURTAIN_GAP = 1.4;  // metres: no flame this close to a window and its curtains
+const CANDLE_DIE = 2.6;          // seconds a candle gutters before it is only an ember
+const EMBER = new THREE.Color(0x2e0c04);
+const MARK_FADE = 2.5;           // seconds a mark takes to fade once its work is seen
+const MARK_KEEP = 32;            // metres: marks further behind than this go back to the pool
+const REPATH_EVERY = 0.4;        // seconds
+const SEEN_DIST = 3.2;           // metres: an artwork this close and in view counts as seen
+
+const WRITING_Y = 0.72;          // child's height
+const DOOR_WAIT = 2.0;           // seconds of stillness that open a door
+const DOOR_REACH = 4.5;          // metres: standing still this far from a door is enough
+const DOOR_EVERY = 0.0625;       // chance per chunk edge: about one door in eight chunks
+const DOOR_SWING = 1.15;         // radians the door gives way
+const DOOR_HOLD = 4.2;           // seconds the light pours out before the door slams
+const DOOR_SLAM = 0.22;          // seconds to slam shut
+const PORTAL_SEEN_FEAR = 5;      // works seen in fear before its portal is summoned; fear shows no more than these
+const FEAR_START = 2;            // works hanging in the first corridor, so nobody is lost at the start
+const FEAR_FIND_3 = { writings: 2, things: 3 };   // scrawls and boards, things lying about: then the third work
+const FEAR_TURNS = 2;            // turns of the corridor after the third, before the door and the portal
+const FIND_NEAR = 3.0;           // metres: passing this close, looking its way, a thing counts as found
+const KEEP_STILL = 3, KEEP_LINGER = 9, KEEP_FALLBACK = 3;   // a question kept: seconds still, seconds it stays after; none kept: the last three asked
+const ROOM_STILL = 6;            // seconds standing still in grandmother's room before the clock strikes for you
+const TOUR_SPEED = 4.5;          // m/s: the testers' tour (PPPPP), a brisk run
+const WAY_COL = [null, new THREE.Color(1, 0.16, 0.10), new THREE.Color(1, 0.9, 0.8)];   // the light a portal opens onto: the red rooms, the light
+const PORTAL_SEEN_MEMORY = 5;    // works seen in memory (past the room) before the way into the light
+const PORTAL_NEAR = 8;           // metres: a summoned portal never lands closer than this
+const PORTAL_FAR = 24;           // metres: nor further than this
+const APPEAR = 2.6;              // seconds: a portal coming out of the dark the first time it is seen
+const LOST_FAR = 30;             // metres: a way on (a portal, a work of fear) further than this, out of sight...
+const LOST_FOR = 20;             // seconds: ...for this long, goes out and comes again near the walk
+const FINALE_T = { look: 2.5, rise: 4, say: 5.5, fly: 11, part: 18, arch: 27 };   // seconds into the ending: turn, clouds, the plate, flight, the clouds part, the walk through the arch (#96); slow, one unbroken shot
+const FINALE_PULL_AT = 3;         // seconds after the arch shows before it starts drawing the visitor in
+const FINALE_PULL_IN = 3;         // seconds the pull takes to reach its pace
+const FINALE_CARRY = 0.55;        // m/s through the tunnel: slow enough to look up at the roses
+const FINALE_LEAD = 1.4;          // m ahead on the middle line the carry aims for
+const DREAM_PREVIEW = sketchParam('dream') !== null;
+const STAIR_NIGHTMARE = true;     // false: the calm version, only the door, fog and light, no zoom, no sound, no blackout
+const STAIR_NEAR = 3.2;          // metres: this close, the metal door gives way, each time the visitor passes
+const STAIR_OPEN = 1.3;          // seconds: it swings open
+const STAIR_HOLD = 5.0;          // seconds held, with the light pouring out
+const STAIR_SLAM = 0.2;          // seconds: it slams shut
+const STAIR_SWING = 1.15;        // radians: how far it gives way, as the other doors do
+const STAIR_FLY = 1.0;           // seconds the view takes to fly to the doorway
+const STAIR_FREE = 0.175;        // radians (10°) the view may be turned while it is held
+const STAIR_TURN = 1.0;          // seconds the view takes to come round onto the way on
+const STAIR_BEFORE_MIN = 4.8;      // metres before the portal a metal door may stand
+const STAIR_BEFORE_MAX = 30;
+const CHILD_AFTER = 30;          // seconds of walking backwards
+const CHILD_EYE = 0.98;
+const SOUL_HOLD = 5;             // seconds a soul's question stays before another may open
+const SOUL_WALK = 3;             // metres walked between two souls
+const SOUL_STOP = 1.6;           // a soul drawn to a still visitor halts this far off
+const BOARD_NEAR = 2.4;          // metres: on hands, passing a notice board this close stops the walk before it
+const BOARD_FIST = 3;            // seconds of a held fist before the walk turns back and goes on
+const BOARD_FOV = 34;            // degrees: close enough to read the board's question
+
+const SEED_WRITING = CONSPACE_SEED ^ 0x77a1;
+const SEED_DOOR = CONSPACE_SEED ^ 0x0d00;
+const SEED_KITCHEN = CONSPACE_SEED ^ 0x4b17;
+const SEED_SCATTER = CONSPACE_SEED ^ 0x5ca7;
+const SEED_POSTER = CONSPACE_SEED ^ 0x7057;
+const SEED_SOULQ = CONSPACE_SEED ^ 0x50a1;
+const SEED_EGG = CONSPACE_SEED ^ 0xe66c;
+const SEED_PROPS = CONSPACE_SEED ^ 0x9e05;
+const SEED_STAIR = CONSPACE_SEED ^ 0x57a1;
+const STAIR_PICS = 85;           // assets/stairs/stairs_1..85.webp
+const EGG_BAND = new Set([4, 5, 10, 11]);   // the corridor lattice, mirrored from world.js
+const mod16 = v => ((v % CHUNK) + CHUNK) % CHUNK;   // a global cell's position on that lattice
+const SKY = '#cfe6ff';                              // the questions of the light, pale sky blue
+const SOUL_COLORS = [0xffd27a, 0x5dff8a, 0xd0202a]; // someone close · a child · a grown-up
+const FEAR_SOUL = 0x4f7dff;      // the souls of the hospital: blue, half see-through
+const FEAR_SOUL_PEAK = 0.5;      // their brightest; the corridor shows through them
+const BALLOON_READ = 4;          // seconds a balloon waits, its question read, before it lets go
+const BALLOON_PAUSE = 45;        // seconds before the next balloon turns up: they come rarely
+
+// Portals no longer sit at fixed, distance-rolled spots: the fear portal and
+// the one into the light are each summoned once, at a corridor crossing near
+// wherever the visitor happens to be when they have earned it (see
+// _summonPortal). this.summonedPortals holds the one plan per target stage.
+
+// Grandmother's room of one chunk (or null), as a pure function: a big enough
+// room, about one chunk in two, anywhere past the first steps, so the red
+// rooms soon lead to one and the souls come out.
+// The light keeps a copy of about one room in two of them (#94, kitchen.js veil)
+const veiledPlan = (cx, cz) => (hash2i(SEED_KITCHEN ^ 0x11f, cx, cz) & 1) === 0 ? kitchenPlan(cx, cz) : null;
+function kitchenPlan(cx, cz) {
+  const room = chunkRooms(cx, cz).find(r => r.x1 - r.x0 >= 4 && r.y1 - r.y0 >= 4);
+  if (!room || hash2i(SEED_KITCHEN, cx, cz) % 2 !== 0) return null;
+  const x = (cx * CHUNK + (room.x0 + room.x1 + 1) / 2) * CELL;
+  const z = (cz * CHUNK + (room.y0 + room.y1 + 1) / 2) * CELL;
+  if (Math.hypot(x - ORIGIN.x, z - ORIGIN.z) < 14) return null;   // not in the very first room
+  return {
+    x, z,
+    minX: (cx * CHUNK + room.x0) * CELL, maxX: (cx * CHUNK + room.x1 + 1) * CELL,
+    minZ: (cz * CHUNK + room.y0) * CELL, maxZ: (cz * CHUNK + room.y1 + 1) * CELL,
+  };
+}
+
+// A quiet nightstand and clock, memory ring only: about one chunk in three,
+// tucked against a wall on the corridor lattice, clear of any chunk edge
+// (where presence doors live) and of anything already reserved (artwork
+// walls, writings, posters). Pure function of the chunk and the visit's seed.
+function clockPlan(cx, cz, reserved) {
+  const cxm = (cx * CHUNK + 8) * CELL, czm = (cz * CHUNK + 8) * CELL;
+  if (zoneWeights(cxm, czm).memory <= 0.3) return null;   // as deep as the kitchen
+  const re = mulberry32(hash2i(SEED_EGG, cx, cz));
+  if (re() > 1 / 3) return null;
+  const gi0 = cx * CHUNK, gj0 = cz * CHUNK;
+  const sites = [];
+  for (let j = 1; j < CHUNK - 1; j++) for (let i = 1; i < CHUNK - 1; i++) {
+    if (!EGG_BAND.has(i) && !EGG_BAND.has(j)) continue;              // corridor lattice only
+    const gi = gi0 + i, gj = gj0 + j;
+    if (solidAtGlobal(gi, gj) || reserved.has(cellKey(gi, gj))) continue;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+      if (solidAtGlobal(gi + di, gj + dj)) sites.push({ gi, gj, nx: -di, nz: -dj });
+  }
+  if (!sites.length) return null;
+  const s = sites[Math.floor(re() * sites.length)];
+  return { x: centreOf(s.gi) - s.nx * 0.38, z: centreOf(s.gj) - s.nz * 0.38, rot: Math.atan2(s.nx, s.nz) };   // back 2 cm off the wall face (CELL/2 − depth/2)
+}
+
+// ── small helpers ───────────────────────────────────────────────────────────
+const cellOf = v => Math.floor(v / CELL);
+const centreOf = g => (g + 0.5) * CELL;
+
+// The holy free zone: nothing stands within five steps (3.6 m) of a corridor
+// crossing. cornerDist is the distance in metres from a point to the nearest
+// crossing square of the 2-cell corridor lattice (bands 4-5 and 10-11 of a
+// 16-cell chunk, along both axes).
+const CORNER_FREE = 3.6;
+const PROP_FREE = 2.4;           // things, scrawls and drowned things: three steps; a corridor run between crossings is only 3 m from either
+const BAND_SPANS = [[-6, -4], [4, 6], [10, 12], [20, 22]];
+function bandGap(u) {
+  const m = ((u % CHUNK) + CHUNK) % CHUNK;
+  let d = Infinity;
+  for (const [lo, hi] of BAND_SPANS) d = Math.min(d, Math.max(0, lo - m, m - hi));
+  return d;
+}
+const cornerDist = (x, z) => Math.hypot(bandGap(x / CELL), bandGap(z / CELL)) * CELL;
+
+function pick(list, r) { return list[Math.floor(r * list.length) % list.length]; }
+
+// Whether a getWallSlots() run passes by the open cell (gi, gj) — i.e. that
+// cell sits against the run's wall face, within its length.
+function slotNearCell(slot, gi, gj) {
+  const cx = centreOf(gi), cz = centreOf(gj), half = slot.length * CELL / 2;
+  if (slot.normal.x !== 0) {
+    if (Math.abs(cx - (slot.position.x + slot.normal.x * CELL / 2)) > CELL * 0.15) return false;
+    return cz > slot.position.z - half - 0.05 && cz < slot.position.z + half + 0.05;
+  }
+  if (Math.abs(cz - (slot.position.z + slot.normal.z * CELL / 2)) > CELL * 0.15) return false;
+  return cx > slot.position.x - half - 0.05 && cx < slot.position.x + half + 0.05;
+}
+
+// Chalk / pencil scrawl on a transparent canvas: each letter jittered and
+// tilted a little, the stroke roughened, so it reads as written by hand.
+function scrawlTexture(text, zone) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 96;
+  const ctx = c.getContext('2d');
+  const ink = zone.memory > 0.5 ? 'rgba(40,30,22,0.85)'        // pencil on wallpaper
+    : zone.accept > 0.5 ? 'rgba(90,96,88,0.7)'                 // faint graphite on pale plaster
+      : 'rgba(225,232,220,0.8)';                               // chalk on green paint
+  ctx.fillStyle = ink;
+  ctx.textBaseline = 'middle';
+  // never cut short: a long phrase breaks at the space nearest its middle
+  // (non-breaking spaces hold), and each line shrinks until it fits the plank
+  const room = c.width - 40, SPREAD = 1.06;           // the widest the jittered spacing can get
+  ctx.font = '34px "Departure Mono", monospace';
+  let lines = [text];
+  if (ctx.measureText(text).width * SPREAD > room) {
+    const mid = text.length / 2;
+    let cut = -1;
+    for (let i = 0; i < text.length; i++) if (text[i] === ' ' && (cut < 0 || Math.abs(i - mid) < Math.abs(cut - mid))) cut = i;
+    if (cut > 0) lines = [text.slice(0, cut), text.slice(cut + 1)];
+  }
+  let size = lines.length > 1 ? 30 : 34;
+  ctx.font = `${size}px "Departure Mono", monospace`;
+  const widest = Math.max(...lines.map(l => ctx.measureText(l).width)) * SPREAD;
+  if (widest > room) { size = Math.floor(size * room / widest); ctx.font = `${size}px "Departure Mono", monospace`; }
+  const rows = lines.length > 1 ? [30, 68] : [48];
+  lines.forEach((line, li) => {
+    let x = 14;
+    for (const ch of line) {
+      const w = ctx.measureText(ch).width;
+      ctx.save();
+      ctx.translate(x + w / 2, rows[li] + (Math.random() - 0.5) * 6);
+      ctx.rotate((Math.random() - 0.5) * 0.22);
+      ctx.fillText(ch, -w / 2, 0);
+      ctx.restore();
+      x += w * (0.92 + Math.random() * 0.14);
+    }
+  });
+  // rub some of it away
+  ctx.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 260; i++) {
+    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.5})`;
+    ctx.fillRect(Math.random() * c.width, Math.random() * c.height, 1 + Math.random() * 3, 1 + Math.random() * 2);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+
+
+// Three or four thin scratches, slanted up and to the right, as if a nail was
+// dragged along the plaster in the direction of travel.
+function scratchTexture() {
+  // three nail scratches dragged along the plaster toward the right: each
+  // starts as a hairline and bites deeper as it goes, ending in a small
+  // chipped gouge. The way reads only to someone looking for it.
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.strokeStyle = '#ffffff'; ctx.fillStyle = '#ffffff';
+  ctx.lineCap = 'round';
+  for (let k = 0; k < 3; k++) {
+    let x = 30 + k * 10 + Math.random() * 8, y = 48 + k * 15 + Math.random() * 4;
+    const end = 190 + k * 8 + Math.random() * 18;
+    while (x < end) {                                   // tapering: hairline to gouge
+      const t = (x - 30) / (end - 30);
+      const nx = x + 5 + Math.random() * 5, ny = y - 0.5 + (Math.random() - 0.5) * 1.8;
+      ctx.lineWidth = 0.6 + t * t * 4.2;
+      ctx.globalAlpha = 0.25 + t * 0.65;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(nx, ny); ctx.stroke();
+      x = nx; y = ny;
+    }
+    ctx.globalAlpha = 0.8;                              // the chip where the nail stopped
+    ctx.beginPath(); ctx.ellipse(x + 1, y + 1, 3.2, 2, 0.4, 0, 7); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// A small cloud: a few overlapping soft puffs with a brighter crown and a
+// greyer belly, feathered all round so nothing reads as an edge.
+let CLOUD = null;
+function cloudTexture() {
+  if (CLOUD) return CLOUD;
+  const W = 256, H = 160, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const puff = (x, y, r, a) => {
+    const gr = g.createRadialGradient(x, y - r * 0.25, r * 0.1, x, y, r);
+    gr.addColorStop(0, `rgba(255,255,255,${a})`); gr.addColorStop(0.6, `rgba(236,240,236,${a * 0.6})`); gr.addColorStop(1, 'rgba(210,216,214,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill();
+  };
+  for (const [x, y, r, a] of [[128, 92, 62, 0.8], [86, 96, 48, 0.75], [170, 98, 50, 0.75], [108, 70, 44, 0.7], [150, 68, 40, 0.7], [58, 108, 30, 0.6], [200, 110, 32, 0.6]]) puff(x, y, r, a);
+  const belly = g.createLinearGradient(0, 70, 0, 150);        // a greyer underside
+  belly.addColorStop(0, 'rgba(120,130,135,0)'); belly.addColorStop(1, 'rgba(120,130,135,0.35)');
+  g.globalCompositeOperation = 'source-atop'; g.fillStyle = belly; g.fillRect(0, 0, W, H);
+  CLOUD = new THREE.CanvasTexture(c);
+  return CLOUD;
+}
+
+let GLOW = null;
+// In the grandmother's rooms the way is shown by what she kept pressed in a
+// book: a dried sprig of lily of the valley, head first, or a few faded rose
+// petals scattered the way to go. Drawn pointing to +x.
+function driedTexture(kind) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 128;
+  const g = c.getContext('2d');
+  const rnd = mulberry32(kind * 977 + 5);
+  if (kind === 0) {
+    g.strokeStyle = '#7d7448'; g.lineWidth = 3; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(20, 78); g.bezierCurveTo(80, 70, 150, 60, 222, 44); g.stroke();   // the stem, arching on
+    for (const [x, y, a] of [[60, 86, 0.25], [96, 52, -0.3]]) {                                  // two long leaves, dry and curled
+      g.save(); g.translate(x, y); g.rotate(a);
+      g.fillStyle = 'rgba(118,116,70,0.9)'; g.beginPath(); g.ellipse(0, 0, 58, 9, 0, 0, 6.29); g.fill();
+      g.strokeStyle = 'rgba(80,74,44,0.8)'; g.lineWidth = 1; g.beginPath(); g.moveTo(-54, 0); g.lineTo(54, 0); g.stroke();
+      g.restore();
+    }
+    for (let i = 0; i < 9; i++) {                                                                  // the bells, gone ivory and brown at the rims
+      const u = 0.35 + i * 0.075, x = 20 + u * 202, y = 78 - u * 34 + (i % 2 ? 11 : -9);
+      g.strokeStyle = '#7d7448'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x, 78 - u * 34); g.lineTo(x, y); g.stroke();
+      const r = 6.5 - i * 0.3;
+      const gr = g.createRadialGradient(x - 1, y - 1, 0, x, y, r);
+      gr.addColorStop(0, '#f4ecd4'); gr.addColorStop(0.7, '#e2d3a8'); gr.addColorStop(1, '#9a7c4a');
+      g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 6.29); g.fill();
+    }
+  } else {
+    for (let i = 0; i < 11; i++) {                                                                 // petals, most of them further on
+      const u = Math.pow(rnd(), 0.6), x = 24 + u * 210, y = 64 + (rnd() - 0.5) * 70, r = 9 + rnd() * 7;
+      g.save(); g.translate(x, y); g.rotate(rnd() * 6.28);
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, r);
+      gr.addColorStop(0, '#c9a08e'); gr.addColorStop(0.75, '#a87468'); gr.addColorStop(1, '#6e4a3e');
+      g.fillStyle = gr; g.beginPath(); g.ellipse(0, 0, r, r * 0.7, 0, 0, 6.29); g.fill();
+      g.strokeStyle = 'rgba(90,60,50,0.5)'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(-r * 0.6, 0); g.lineTo(r * 0.5, 0); g.stroke();
+      g.restore();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  return tex;
+}
+
+function glowTexture() {
+  if (GLOW) return GLOW;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.2, 'rgba(255,255,255,0.6)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+  GLOW = new THREE.CanvasTexture(c);
+  return GLOW;
+}
+
+// ── SoulPath ────────────────────────────────────────────────────────────────
+
+// A balloon's skin: pale blue latex. The light comes through it (brighter
+// and paler where the skin faces the eye, deeper and denser toward the rim,
+// where the eye looks through more rubber), a sharp window glint from the
+// high light and a soft second one, the neck gathered into fine creases
+// by the knot.
+const LATEX_VERT = /* glsl */`
+varying vec3 vN, vW, vL;
+#include <fog_pars_vertex>
+void main(){
+  vL = position;
+  vN = normalize(mat3(modelMatrix) * normal);
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  vW = w.xyz;
+  vec4 mvPosition = viewMatrix * w;
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}`;
+const LATEX_FRAG = /* glsl */`
+varying vec3 vN, vW, vL;
+#include <fog_pars_fragment>
+void main(){
+  vec3 N = normalize(vN), V = normalize(cameraPosition - vW);
+  float neck = smoothstep(-0.12, -0.2, vL.y);                               // toward the knot
+  float crease = neck * (0.5 + 0.5 * sin(atan(vL.x, vL.z) * 22.0)) * 0.35;   // the rubber gathered at the neck
+  N = normalize(N + vec3(vL.z, 0.0, -vL.x) * crease * 2.0);
+  float facing = clamp(dot(N, V), 0.0, 1.0);
+  vec3 core = vec3(0.86, 0.93, 1.0);                                        // light through thin latex
+  vec3 rim  = vec3(0.52, 0.68, 0.86);                                       // more rubber along the eye's path
+  vec3 col = mix(rim, core, pow(facing, 0.7));
+  col *= 0.7 + 0.24 * (0.5 + 0.5 * N.y);                                    // the sky above, the room below: never blown to white
+  col = mix(col, rim * 0.85, neck * 0.5);
+  // the key light sits up and to the left of the eye, so the glint is always there to see
+  vec3 side = normalize(cross(vec3(0.0, 1.0, 0.0), V));
+  vec3 K = normalize(V + vec3(0.0, 1.1, 0.0) - side * 0.7);
+  vec3 H = normalize(V + K);
+  float nh = max(dot(N, H), 0.0);
+  float glint = smoothstep(0.985, 0.992, nh) * 1.4;                        // a small bright window, hard-edged like a real reflection
+  float soft = pow(nh, 18.0) * 0.22;
+  vec3 K2 = normalize(V - vec3(0.0, 0.6, 0.0) + side * 0.9);               // a faint second glint, low on the other side
+  float glint2 = smoothstep(0.992, 0.996, max(dot(N, normalize(V + K2)), 0.0)) * 0.5;
+  float fres = pow(1.0 - facing, 4.0) * 0.25;                               // the skin shines where it turns away
+  col += vec3(1.0) * (glint + glint2 + soft) + vec3(0.95, 0.97, 1.0) * fres;
+  gl_FragColor = vec4(col, 1.0);
+  #include <fog_fragment>
+}`;
+function latexMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
+    vertexShader: LATEX_VERT, fragmentShader: LATEX_FRAG, fog: true,
+  });
+}
+
+
+// A balloon's shadow: a soft lilac blot multiplied into whatever it lies
+// on, the floor's water or a wall. Never black in the light.
+const BLOT_VERT = /* glsl */`
+varying vec2 vUv;
+varying float vDist;
+void main(){
+  vUv = uv;
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  vDist = distance(w.xyz, cameraPosition);
+  gl_Position = projectionMatrix * viewMatrix * w;
+}`;
+const BLOT_FRAG = /* glsl */`
+uniform float uK;
+varying vec2 vUv;
+varying float vDist;
+void main(){
+  float d = length((vUv - 0.5) * vec2(2.0, 2.0));
+  float a = pow(max(0.0, 1.0 - d), 1.7) * uK * (1.0 - smoothstep(10.0, 22.0, vDist));
+  gl_FragColor = vec4(mix(vec3(1.0), vec3(0.56, 0.52, 0.66), a), 1.0);
+}`;
+function blotMesh(scene) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
+    uniforms: { uK: { value: 0 } }, vertexShader: BLOT_VERT, fragmentShader: BLOT_FRAG,
+    transparent: true, depthWrite: false,
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.DstColorFactor, blendDst: THREE.ZeroFactor,
+    polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+  }));
+  m.renderOrder = 6; m.visible = false; m.frustumCulled = false;
+  scene.add(m);
+  return m;
+}
+
+export class SoulPath {
+  constructor({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo }) {
+    Object.assign(this, { scene, world, player, camera, artworks, audio, post, quality, stage, atmo });
+    this._renderer = renderer;                    // for compiling the next stage's shaders under the tunnel (_warmShaders)
+    this.ward = createWardKit(atmo, quality);   // what the hospital left behind (fear stage only)
+    this._wardCells = new Map();                // chunk key -> cells the island owns
+    this._lastStage = stage.stage;
+    this._prevPos = { x: player.pos.x, z: player.pos.y };
+    this.kitchenRig = createKitchenRig(scene, renderer, quality);
+    this._paint = [];               // canvases waiting to be painted, one a frame (_stepPaint)
+    this.seen = new Set();          // art ids seen this visit
+    this.asked = [];                // what the souls asked, in order
+    this.kept = [];                 // the questions the visitor stood still with: the card (or the last three asked)
+    this.total = new Set((artworks.list || []).map(a => a.id)).size || 18;
+    // in the light, a wall that would take a work already seen takes one
+    // still unseen instead: the last few come to meet the walk wherever it
+    // wanders, rather than hanging only in their own far chunks
+    // In grandmother's zone a seen work mostly gives way to an unseen one
+    // too, so repeats stay rare, until the zone's five are seen: from then on
+    // its walls hang only works already seen, and the rest wait for the light.
+    artworks.swap = (art, cx, cz) => {
+      const st = this.stage.stage, h = hash2i(SEED_STAIR ^ 0x7e11, cx, cz);
+      if (st === 1 && this.stageSeen[1] >= PORTAL_SEEN_MEMORY) {
+        if (this.seen.has(art.id)) return art;
+        const seen = artworks.list.filter(a => this.seen.has(a.id));
+        return seen.length ? seen[h % seen.length] : art;
+      }
+      if (st === 0 || !this.seen.has(art.id) || (st === 1 && (h & 7) < 2)) return art;   // a repeat in one wall of four
+      const unseen = artworks.list.filter(a => !this.seen.has(a.id));
+      if (!unseen.length) return art;
+      return unseen[h % unseen.length];
+    };
+    this.roses = createRoseCounter(this.total);
+    this.petals = createPetals(scene, camera, quality);
+    this.glowPetals = createGlowPetals(scene);   // the light's way-marks: petals on the water
+    this.props = createPropKit(atmo, quality);
+    this.wallThings = createWallThings(atmo);
+    this.drowned = createDrowned(atmo, quality);   // what the water on the floor uncovers, acceptance stage only
+    this.chandeliers = createChandeliers(scene);   // grandmother's ice-glass chandeliers, red rooms only   // what each stage leaves along its corridors
+    this.roses.set(0, t('rosesLabel', { n: 0, total: this.total }));
+    this.finale = null;
+    this.chunkStuff = new Map();    // chunk key -> { group, writings[], doors[], kitchen }
+    // summoned portals: one plan per target stage (1 fear→memory, 2 →light),
+    // set once by _summonPortal and rebuilt into whichever chunk owns it
+    this.stageSeen = [0, 0, 0];     // works seen while in each stage (#34)
+    this._stageSeenIds = new Set(); // ids already counted into stageSeen
+    // the light opens (#80): chunks first met there get wider corridors the
+    // more of its works the visitor has noticed (world.js corridorWidth)
+    setCorridorWidth(() => this._widthLevel());
+    // and its works grow on the same share, 1.5 m to 2.5 m (#94, artworks.js)
+    setArtSize(() => this.stage?.stage === 2 ? 1.6 + 1.6 * this._acceptShare() : null);   // 1.6 m at the portal, 3.2 m by the last (#96)
+    this.summonedPortals = {};      // target -> { x, z, west, cx, cz }
+    this.stairwellPlan = null;      // the fear-stage metal door's plan, once summoned
+    this._stairDone = false;        // the dream line is said the first time only
+    this.doorsOpen = new Set();     // door keys opened this visit (none now: doors only give way for a moment)
+    this.doorsDone = new Set();     // doors that already gave way and slammed: they stay shut
+    this._doorLights = [];          // light from a door ajar, for the walls to catch
+    this.textures = [];
+
+    // red scratches: a small pool of wall decals, re-placed along the route
+    this.markMat = new THREE.MeshBasicMaterial({
+      map: scratchTexture(), color: MARK_COLOR, transparent: true, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, fog: true,
+    });
+    const markGeo = new THREE.PlaneGeometry(0.5, 0.25);
+    const driedGeo = new THREE.PlaneGeometry(0.72, 0.36);
+    const driedMats = [0, 1].map(k => new THREE.MeshBasicMaterial({ map: driedTexture(k), color: 0xd8cfbe, fog: false, transparent: true,   // pale like paper in the half-dark
+      alphaTest: 0.15, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+    this.marks = Array.from({ length: MARK_POOL }, () => {
+      const m = new THREE.Mesh(markGeo, this.markMat.clone());   // own opacity, shared texture
+      m.visible = false;
+      m.userData = { key: null, goal: null, fadeAt: 0 };
+      scene.add(m);
+      // in the light the same mark sends glowing petals down the water (glowPetals.js)
+      // in the grandmother's rooms, dried flowers on the floor by the wall
+      const dried = new THREE.Mesh(driedGeo, driedMats[m.id % 2]);
+      dried.visible = false; dried.renderOrder = 1;
+      scene.add(dried);
+      m.userData.dried = dried;
+      return m;
+    });
+    this._repathT = 0;
+    this._pathKey = '';
+
+    // turn-around detection (yaw history over the last ~1.5 s)
+    this._yawHist = [];
+
+    // secrets
+    this._backT = 0; this._fwdT = 0; this.child = false;
+    this._inKitchen = false;
+    this._soulIdx = [0, 0, 0];            // next question per soul
+    this._soulAt = -1e9; this._walked = SOUL_WALK; this._lastPos = null; // gate between souls
+    // MMMMM (any layout, any case: the physical key), the authors' way on:
+    // in fear and in grandmother's zone the next portal is summoned now if it
+    // is not there yet (grandmother's room counts as found) and chevrons on
+    // the floor lead to it; again, they go out. In the light the whole of its
+    // ending plays: every work counts as seen, the roses in the corner shed,
+    // the walls part and the way out rises.
+    this.guide = null; this._mTimes = [];
+    addEventListener('keydown', e => {
+      if (keyCode(e) !== 'KeyM' || e.repeat) return;
+      const now = performance.now();
+      this._mTimes = this._mTimes.filter(tm => now - tm < 2500).concat(now);
+      if (this._mTimes.length < 5) return;
+      this._mTimes = [];
+      // in the light the ending plays, chevrons or not: the ones lit on the way
+      // here have nothing left to lead to, and go out
+      if (this.stage.stage === 2) { if (this.guide) this._toggleGuide(); this._cheatFinale(); return; }
+      if (!this.guide) {
+        if (this.stage.stage === 1) this.visitedRoom = true;
+        const next = this.stage.stage + 1;
+        if (!this.summonedPortals[next]) this._summonPortal(next, this._time ?? 0);
+      }
+      this._toggleGuide();
+    });
+    // PPPPP (the physical key, any layout): the testers' tour (#96). A
+    // glowing line on the floor and a run along it, by itself, to every work
+    // in turn and through every portal, to the end. Again: it stops.
+    this.tour = null; this._fTimes = [];
+    addEventListener('keydown', e => {
+      if (keyCode(e) !== 'KeyP' || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      const now = performance.now();
+      this._fTimes = this._fTimes.filter(tm => now - tm < 2500).concat(now);
+      if (this._fTimes.length < 5) return;
+      this._fTimes = [];
+      this._toggleTour();
+      this.post?.burst(1.4);
+    });
+    // five presses of one digit within 3 s: 1 fear, 2 the grandmother's
+    // zone, 3 acceptance, 0 acceptance and straight into the finale. Each
+    // answers with a flash even when the visitor is already there.
+    this._codeKey = null; this._codeTimes = [];
+    const CODES = { Digit1: 0, Digit2: 1, Digit3: 2, Digit0: 'finale' };
+    addEventListener('keydown', e => {
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = keyCode(e).replace('Numpad', 'Digit');
+      if (!(k in CODES)) { this._codeTimes = []; return; }
+      const now = performance.now();
+      if (k !== this._codeKey) { this._codeKey = k; this._codeTimes = []; }
+      this._codeTimes = this._codeTimes.filter(tm => now - tm < 3000).concat(now);
+      if (this._codeTimes.length < 5) return;
+      this._codeTimes = [];
+      const c = CODES[k];
+      if (c === 'finale') this._cheatFinale();
+      else { this.stage.set(c); this.post?.burst(1.4); }
+    });
+
+    // doors take part in collision: wrap World's wall query once
+    const orig = world.wallSegmentsNear.bind(world);
+    world.wallSegmentsNear = (x, z) => {
+      const segs = orig(x, z);
+      for (const d of this._doorsNear(x, z)) { segs.push(...d.walls); if (!d.open) segs.push(d.seg); }
+      if (this.stage.stage === 0) for (const st of this.chunkStuff.values()) for (const b of (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || []))
+        if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
+      if (this.stage.stage === 1) for (const st of this.chunkStuff.values()) for (const b of st.toyBoxes || [])
+        if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
+      for (const st of this.chunkStuff.values()) for (const b of st.props?.boxes || [])
+        if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
+      return segs;
+    };
+  }
+
+  // The water task's rig (water.js), or a stand-in while it hasn't landed:
+  // shallow everywhere, calm, so the acceptance stage still shows its work.
+  _water() {
+    return window.__app?.water || { level: 0.1, heightAt: () => 0.1, calm: 1, tide: 0 };
+  }
+
+  // Open floor cells on the corridor lattice for drowned.js: at least
+  // 0.5 m clear of every wall (a cell is 1.2 m, so a cell with no solid
+  // neighbour already clears that), not reserved, not the hospital's own
+  // islands. drowned.js itself nudges each 0.3–0.5 m off the corridor's
+  // middle line, so what it drops is never quite underfoot.
+  _drownSpots(cx, cz, reserved) {
+    const ward = this._wardCells.get(cx + ':' + cz);
+    const out = [];
+    for (let j = 1; j < CHUNK - 1; j++) for (let i = 1; i < CHUNK - 1; i++) {
+      if (!EGG_BAND.has(i) && !EGG_BAND.has(j)) continue;
+      const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+      if (solidAtGlobal(gi, gj) || reserved.has(cellKey(gi, gj)) || ward?.has(cellKey(gi, gj))) continue;
+      if (cornerDist(centreOf(gi), centreOf(gj)) < PROP_FREE) continue;
+      let clear = true;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (solidAtGlobal(gi + di, gj + dj)) clear = false;
+      if (clear && !this._keepOut(cx, cz, centreOf(gi), centreOf(gj), 0.5)) out.push({ x: centreOf(gi), z: centreOf(gj) });
+    }
+    return out;
+  }
+
+  // ── chunk lifecycle (mirrors World) ────────────────────────────────────
+  // New chunks of the world get their things one a frame, nearest first (a
+  // chunk takes some tens of milliseconds and the world adds a row of them at
+  // once, far off in the fog); the first build, and the visitor's own chunk,
+  // at once.
+  _sync() {
+    const P = this.player.pos, span = CHUNK * CELL, first = !this.chunkStuff.size;
+    let next = null, nd = Infinity;
+    // the first chunks are painted as they are built, behind the loading screen;
+    // after that every canvas waits its turn (_stepPaint)
+    this._deferPaint = !first;
+    const dress = (key, cx, cz) => { this.chunkStuff.set(key, this._buildChunk(cx, cz)); this._dressed = true; };
+    for (const key of this.world.chunks.keys()) {
+      if (this.chunkStuff.has(key)) continue;
+      const [cx, cz] = key.split(':').map(Number);
+      const d = Math.hypot((cx + 0.5) * span - P.x, (cz + 0.5) * span - P.y);
+      if (first || d < span * 0.75) { dress(key, cx, cz); continue; }
+      if (d < nd) { nd = d; next = [key, cx, cz]; }
+    }
+    // not in the frame in which the world itself laid a new row of chunks
+    const moved = this.world._cx !== this._wcx || this.world._cz !== this._wcz;
+    this._wcx = this.world._cx; this._wcz = this.world._cz;
+    if (next && !(moved && !first)) dress(...next);
+    // the clock nook only exists in the memory stage, like the ward's islands
+    // in the fear stage; re-check every frame, cheap since it is one flag
+    const memStage = this.stage.stage === 1;
+    for (const stuff of this.chunkStuff.values()) if (stuff.egg) stuff.egg.group.visible = memStage;
+    for (const [key, stuff] of this.chunkStuff) {
+      if (this.world.chunks.has(key)) continue;
+      this.scene.remove(stuff.group);
+      stuff.group.userData.gone = true;               // a model still loading must not land here
+      if (stuff.ward) stuff.ward.group.userData.gone = true;
+      if (stuff.beds) stuff.beds.group.userData.gone = true;
+      this._wardCells.delete(key);
+      this._wallBusy?.delete(key);
+      stuff.group.traverse(o => {
+        if (o.userData.keep) return;                  // shared scatter geometry and materials
+        o.geometry?.dispose();
+        if (o.material && o.material !== this.markMat && !this.marks.includes(o) && !o.userData.keepMaterial) { o.material.map?.dispose(); o.material.uniforms?.uMap?.value?.dispose?.(); o.material.dispose(); }
+      });
+      this.chunkStuff.delete(key);
+    }
+  }
+
+  _buildChunk(cx, cz) {
+    this._preplaceStairwell(cx, cz);
+    const group = new THREE.Group();
+    group.name = 'soul_' + cx + '_' + cz;
+    this.scene.add(group);
+    const stuff = { group, writings: [], doors: [], kitchen: null, portals: [], egg: null, wallBusy: [] };
+    // what hangs flat on a wall and how far along it (x, z its middle on the
+    // face, nx, nz the face, hw half its width): the props keep off all of it
+    (this._wallBusy ||= new Map()).set(cx + ':' + cz, stuff.wallBusy);
+
+    // ── writings: about half the chunks get one, on a deterministic wall run
+    const rw = mulberry32(hash2i(SEED_WRITING, cx, cz));
+    if (rw() < 0.55) {
+      const slots = this.world.getWallSlots(cx, cz).filter(s => s.length >= 2 && cornerDist(s.position.x, s.position.z) >= PROP_FREE);
+      if (slots.length) {
+        const slot = slots[Math.floor(rw() * slots.length)];
+        const along = (rw() - 0.5) * (slot.length - 1.6) * CELL; // slide along the run
+        const pos = new THREE.Vector3(
+          slot.position.x + slot.normal.x * 0.012 + (slot.normal.x === 0 ? along : 0),
+          WRITING_Y,
+          slot.position.z + slot.normal.z * 0.012 + (slot.normal.z === 0 ? along : 0));
+        if (this._wallFree(cx, cz, stuff.wallBusy, pos.x, pos.z, slot.normal.x, slot.normal.z, 0.75)) {
+        const zone = this.stage.weights();
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.28),
+          new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }));
+        mesh.position.copy(pos);
+        mesh.rotation.y = Math.atan2(slot.normal.x, slot.normal.z);
+        group.add(mesh);
+        mountOrDrop(mesh, { x: pos.x, z: pos.z, nx: slot.normal.x, nz: slot.normal.z, y: WRITING_Y, kind: 'writing', w: 0.75 });
+        stuff.taken = [[pos.x, pos.z, 1.3]];
+        stuff.wallBusy.push({ x: pos.x, z: pos.z, nx: slot.normal.x, nz: slot.normal.z, hw: 0.75 });
+        const w = { mesh, zone, seed: rw(), behindT: 0 };
+        this._writeOn(w);
+        stuff.writings.push(w);
+        }
+      }
+    }
+
+    // ── portals: each one is summoned once, at a crossing near wherever the
+    // visitor is when they have earned it (_summonPortal); if it landed in
+    // this chunk, build it here so it survives the chunk unloading later.
+    const usedEdges = new Set();
+    this._ensurePortalsFor(cx, cz, group, stuff);
+    this._ensureStairwellFor(cx, cz, group, stuff);
+
+    // ── the walls' questions: a notice board in the hospital (boards.js),
+    // one or two a chunk, never on a work's wall. And a Soviet carpet on some walls of the red rooms.
+    const rpo = mulberry32(hash2i(SEED_POSTER, cx, cz));
+    stuff.posters = []; stuff.carpets = [];
+    const hung = new Set(artworkSlots(cx, cz, this.world.getWallSlots(cx, cz)).map(sl => sl.cellKey));
+    const long = this.world.getWallSlots(cx, cz).filter(sl => sl.length >= 4 && !hung.has(sl.cellKey));
+    for (let i = long.length - 1; i > 0; i--) { const j = Math.floor(rpo() * (i + 1)); [long[i], long[j]] = [long[j], long[i]]; }
+    const nPost = rpo() < 0.85 ? (rpo() < 0.45 ? 2 : 1) : 0;
+    const onWall = (sl, w, h, y, off, mat = this.atmo.prop({ rust: 0 })) => {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+      mesh.position.set(
+        sl.position.x + sl.normal.x * 0.014 + (sl.normal.x === 0 ? off : 0), y,
+        sl.position.z + sl.normal.z * 0.014 + (sl.normal.z === 0 ? off : 0));
+      mesh.rotation.set(0, Math.atan2(sl.normal.x, sl.normal.z), 0);
+      group.add(mesh);
+      return mesh;
+    };
+    const hangOrDrop = (mesh, sl, kind, w) => mountOrDrop(mesh, { x: mesh.position.x, z: mesh.position.z, nx: sl.normal.x, nz: sl.normal.z, y: mesh.position.y, kind, w });
+    const freeAt = (sl, off, hw) => this._wallFree(cx, cz, stuff.wallBusy,
+      sl.position.x + (sl.normal.x === 0 ? off : 0), sl.position.z + (sl.normal.z === 0 ? off : 0), sl.normal.x, sl.normal.z, hw);
+    long.slice(0, nPost).forEach(sl => {
+      const off = (rpo() < 0.5 ? -1 : 1) * (sl.length * CELL / 2 - 0.9);
+      if (!freeAt(sl, off, 0.62)) return;
+      const mesh = onWall(sl, 0.78, 1.04, 1.6, off);
+      mesh.rotation.z = (rpo() - 0.5) * 0.04;              // hung a little crooked
+      (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.0]);
+      stuff.wallBusy.push({ x: mesh.position.x, z: mesh.position.z, nx: sl.normal.x, nz: sl.normal.z, hw: 0.62 });
+      const p = { mesh, q: Math.floor(rpo() * 1000) };
+      this._printPoster(p);
+      hangOrDrop(mesh, sl, 'poster', 0.62);                // after the print: the board is scaled wide by then
+      stuff.posters.push(p);
+    });
+    // Soviet carpets on two or three more of the long walls, each a woven
+    // picture (carpets.js), never one hung or laid within twenty metres
+    stuff.carpetIds = [];
+    const carpetsNear = () => [...this.chunkStuff.values()].flatMap(st => st.carpetIds || []).concat(stuff.carpetIds);
+    const carpetMat = (w, h) => this.atmo.prop({ rust: 0, pile: [w, h] });
+    long.slice(nPost, nPost + (rpo() < 0.5 ? 2 : 3)).forEach(carpetWall => {
+      if (!freeAt(carpetWall, 0, 1.05)) return;
+      const mesh = onWall(carpetWall, 2.1, 1.4, 1.62, 0, carpetMat(2.1, 1.4));     // landscape, as they hung over a sofa
+      const id = pickCarpet(rpo, mesh.position.x, mesh.position.z, carpetsNear());
+      stuff.carpetIds.push({ id, x: mesh.position.x, z: mesh.position.z });
+      mesh.userData.paint = () => wearCarpet(mesh.material, id);
+      this._showMemory(mesh);
+      hangOrDrop(mesh, carpetWall, 'wall carpet', 1.05);
+      stuff.carpets.push(mesh);
+      (stuff.taken ||= []).push([mesh.position.x, mesh.position.z, 1.2]);
+      stuff.wallBusy.push({ x: mesh.position.x, z: mesh.position.z, nx: carpetWall.normal.x, nz: carpetWall.normal.z, hw: 1.05 });
+    });
+
+    // ── rugs on the parquet of the red rooms: one or two a chunk, 1.8 by
+    // 3 metres, turned a little, wherever the floor is open enough round them
+    stuff.rugs = [];
+    const rr = mulberry32(hash2i(SEED_POSTER ^ 0x7a9, cx, cz));
+    const kRoom = kitchenPlan(cx, cz);
+    // pal: the lampshade's colours or a runner, painted (boards.js); else a woven picture, its long side across
+    const addRug = (x, z, w, d, rot, pal = null) => {
+      const seed = Math.floor(rr() * 1e6), woven = !pal;
+      if (woven) { [w, d] = [d, w]; rot += Math.PI / 2; }
+      const mat = this.atmo.prop({ rust: 0, pile: [w, d] });
+      mat.polygonOffset = true; mat.polygonOffsetFactor = -1; mat.polygonOffsetUnits = -1;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), mat);
+      mesh.position.set(x, 0.003, z); mesh.rotation.y = rot;
+      const id = woven ? pickCarpet(rr, x, z, carpetsNear()) : 0;
+      if (woven) stuff.carpetIds.push({ id, x, z });
+      mesh.userData.paint = () => {
+        if (woven) return wearCarpet(mat, id);
+        mat.uniforms.uMap.value = pal.runner ? runnerTexture(seed) : rugTexture(seed, pal); mat.uniforms.uHasMap.value = 1;
+      };
+      group.add(mesh);
+      this._showMemory(mesh);
+      stuff.rugs.push(mesh);
+    };
+    // under most of grandmother's rooms a big one, the television and table on it
+    const bigRug = kRoom && rr() < 0.7;                 // laid below, once the room shows where its television stands
+    for (let k = 0, n = stuff.rugs.length + (rr() < 0.6 ? 1 : 0); k < 12 && stuff.rugs.length < n; k++) {   // one rug, and not in every chunk
+      const gi = cx * CHUNK + 3 + Math.floor(rr() * (CHUNK - 6)), gj = cz * CHUNK + 3 + Math.floor(rr() * (CHUNK - 6));   // clear of the chunk's edges: no rug meets a neighbour's
+      let open = true;
+      for (let b = -2; b <= 2 && open; b++) for (let a = -1; a <= 1 && open; a++) if (solidAtGlobal(gi + a, gj + b)) open = false;
+      if (!open || (kRoom && Math.hypot(centreOf(gi) - kRoom.x, centreOf(gj) - kRoom.z) < 4.5)) continue;
+      if (stuff.rugs.some(m => Math.abs(m.position.x - centreOf(gi)) < 2.6 && Math.abs(m.position.z - centreOf(gj)) < 3.8)) continue;   // never over another rug   // not over grandmother's room
+      const rx = centreOf(gi), rz = centreOf(gj);
+      addRug(rx, rz, 1.8, 3.0, (rr() - 0.5) * 0.3);   // long side along z, where the room is open
+      // and a child's things on it and round it, as if play had just stopped
+      const names = ['nevalyashka', 'pyramid', 'yula', 'matryoshki', 'ball'];
+      const toys = [];
+      for (let t = 0, n = 3 + Math.floor(rr() * 3); t < n; t++) {
+        const name = names[Math.floor(rr() * names.length)];
+        const on = t < 2;                                  // a couple on the rug, the rest strayed off it
+        const x = rx + (rr() - 0.5) * (on ? 1.2 : 2.8), z = rz + (rr() - 0.5) * (on ? 2.2 : 4.0);
+        if (solidAtGlobal(cellOf(x), cellOf(z)) || toys.some(o => Math.hypot(o.x - x, o.z - z) < 0.5)) continue;
+        toys.push({ name, x, z, yaw: rr() * 6.283 });
+      }
+      const tk = this.props.toys(group, toys);
+      stuff.toys = (stuff.toys || []).concat(tk.meshes);
+      for (const m of tk.meshes) m.visible = this.stage.stage === 1;
+      stuff.toyBoxes = (stuff.toyBoxes || []).concat(tk.boxes);
+    }
+
+    // ── the hospital's leftovers: one small island in some rooms, off the
+    // walls that carry a work, a poster or a writing
+    const taken = new Set();
+    for (const sl of artworkSlots(cx, cz, this.world.getWallSlots(cx, cz))) reserveSlot(taken, sl);
+    for (const [x, z, r] of stuff.taken || []) reserveAround(taken, x, z, r);
+    const plan = wardPlan(cx, cz, taken, this.ward.withModels);
+    if (plan) {
+      const wg = new THREE.Group();
+      group.add(wg);
+      this.ward.build(wg, plan);
+      wg.visible = this.stage.stage === 0;
+      stuff.ward = { group: wg, plan };
+      this._wardCells.set(cx + ':' + cz, plan.cells);
+      for (const c of plan.cells) taken.add(c);
+    }
+    // ── a row of beds wherever a room opens wide (hospital only)
+    const bp = bedsPlan(cx, cz, taken);
+    if (bp) {
+      const bg = new THREE.Group();
+      group.add(bg);
+      this.ward.buildBeds(bg, bp);
+      bg.visible = this.stage.stage === 0;
+      stuff.beds = { group: bg, plan: bp };
+      for (const c of bp.cells) taken.add(c);
+      const wc = this._wardCells.get(cx + ':' + cz) || new Set();   // candles and props keep off the beds too
+      for (const c of bp.cells) wc.add(c);
+      this._wardCells.set(cx + ':' + cz, wc);
+    }
+
+    // ── the clock nook: a nightstand against a corridor wall, memory ring only
+    const cp = clockPlan(cx, cz, taken);
+    if (cp) {
+      const eg = new THREE.Group();
+      group.add(eg);
+      buildClockNook(eg, cp.x, cp.z, cp.rot, this.atmo);
+      eg.visible = this.stage.stage === 1;
+      stuff.egg = { group: eg, x: cp.x, z: cp.z };
+    }
+
+    // ── scattered things: candles, teapots, cups. The closer the portal into
+    // the next stage, the more of them, so they thicken into a trail.
+    // props first: their windows and curtains tell the candles where not to burn
+    stuff.reserved = taken;
+    if (cp) taken.add(cellKey(cellOf(cp.x), cellOf(cp.z)));
+    stuff.props = this._buildProps(group, cx, cz, taken);
+    this._snuffNear(cx, cz);
+    stuff.scatter = this._buildScatter(group, cx, cz);
+    stuff.drown = this.stage.stage === 2 ? this.drowned.build(group, cx, cz, this._drownSpots(cx, cz, taken)) : null;
+
+    // ── presence doors on this chunk's west and north edge crossings.
+    // Never in the spawn chunk, so nobody starts boxed in.
+    if (!(cx === 0 && cz === 0)) {
+      const rd = mulberry32(hash2i(SEED_DOOR, cx, cz));
+      for (const edge of ['west', 'north']) {
+        const band = rd() < 0.5 ? 4 : 10;
+        if (rd() > DOOR_EVERY || usedEdges.has(edge)) continue;
+        const key = `${cx}:${cz}:${edge}`;
+        stuff.doors.push(this._makeDoor(group, cx, cz, edge, band, key));
+      }
+      for (const d of stuff.doors) d.group.visible = this.stage.stage === 0;   // doors belong to fear alone
+    }
+
+    // ── grandmother's room: rare, only deep in the memory ring
+    const kp = kitchenPlan(cx, cz);
+    if (kp) {
+      const kg = new THREE.Group();                   // only exists in the memory stage
+      group.add(kg);
+      // The room is some forty milliseconds of building and only the memory
+      // stage shows it: its place is kept from the start (the candles keep
+      // out of it), the room itself is built when that stage wants it, in a
+      // frame of its own (_wantRoom).
+      stuff.kitchen = { ...kp, group: kg, room: null, wisps: null };
+      stuff.kitchen.build = () => {
+        if (group.userData.gone || stuff.kitchen.room) return;
+        stuff.kitchen.room = buildKitchen(kg, kp.x, kp.z, [...this._wallBusy.values()].flat().concat(artworkBusy(cx, cz)));
+        if (bigRug) {                                     // the table and the television both on it, in the lampshade's colours
+          const tv = stuff.kitchen.room.tv, m = 1.35;          // room.tv is half a metre before the set: reach past it
+          const x0 = Math.max(kp.minX + 0.3, Math.min(kp.x - 1.3, tv.x - m)), x1 = Math.min(kp.maxX - 0.3, Math.max(kp.x + 1.3, tv.x + m));
+          const z0 = Math.max(kp.minZ + 0.3, Math.min(kp.z - 1.3, tv.z - m)), z1 = Math.min(kp.maxZ - 0.3, Math.max(kp.z + 1.3, tv.z + m));
+          const sh = shadeOf(kp.x, kp.z), hex = n => '#' + n.toString(16).padStart(6, '0');
+          if (x1 - x0 > 1.5 && z1 - z0 > 1.5) addRug((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, 0, { field: sh.v[1], dark: sh.v[0], light: hex(sh.fringe) });
+        }
+        // a woven runner up to the table (#38): along the most open way that is
+        // not the television's, starting past the big rug, stopping short of the wall
+        {
+          const big = bigRug ? stuff.rugs[stuff.rugs.length - 1] : null, tv = stuff.kitchen.room.tv;
+          let best = null;
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            if (((tv.x - kp.x) * dx + (tv.z - kp.z) * dz) > 0.5) continue;             // not toward the set
+            let s0 = 0.95;
+            if (big) { const p = big.geometry.parameters; s0 = Math.max(s0, (dx ? Math.abs(big.position.x + dx * p.width / 2 - kp.x) : Math.abs(big.position.z + dz * p.height / 2 - kp.z)) + 0.05); }
+            let s1 = s0;
+            while (s1 < s0 + 4.5 && !solidAtGlobal(cellOf(kp.x + dx * (s1 + 0.3)), cellOf(kp.z + dz * (s1 + 0.3)))
+              && !solidAtGlobal(cellOf(kp.x + dx * s1 - dz * 0.45), cellOf(kp.z + dz * s1 + dx * 0.45)) && !solidAtGlobal(cellOf(kp.x + dx * s1 + dz * 0.45), cellOf(kp.z + dz * s1 - dx * 0.45))) s1 += 0.1;
+            if (s1 - s0 >= 2 && (!best || s1 - s0 > best.len)) best = { dx, dz, s0, len: s1 - s0 };
+          }
+          if (best) {
+            const mid = best.s0 + best.len / 2, len = Math.min(best.len, 4.5);
+            addRug(kp.x + best.dx * mid, kp.z + best.dz * mid, 0.8, len, best.dx ? Math.PI / 2 : 0, { runner: true });
+          }
+        }
+        stuff.kitchen.wisps = [0, 1, 2, 0, 1, 2].map(cat => {
+          const color = SOUL_COLORS[cat];
+          const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: glowTexture(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+          }));
+          sprite.scale.set(0.35, 0.35, 1);
+          kg.add(sprite);
+          // a faint tail of smaller lights that lag behind, so it reads as alive
+          const tail = [0.6, 0.42, 0.28].map(k => {
+            const tsp = new THREE.Sprite(new THREE.SpriteMaterial({
+              map: glowTexture(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: k,
+            }));
+            tsp.scale.set(0.35 * k, 0.35 * k, 1);
+            kg.add(tsp);
+            return tsp;
+          });
+          const w = { sprite, tail, cat, gone: false, back: 0, seed: Math.random() * 10, pull: new THREE.Vector3() };
+          this._placeWisp(w, stuff.kitchen);
+          return w;
+        });
+      };
+      this._wantRoom(stuff.kitchen);
+    }
+    // and its copy in the light, built when the light wants it (update)
+    const vp = veiledPlan(cx, cz);
+    if (vp) {
+      const vg = new THREE.Group();
+      vg.visible = false;
+      group.add(vg);
+      stuff.veiled = { ...vp, group: vg, room: null };
+      stuff.veiled.build = () => { stuff.veiled.room = buildKitchen(vg, vp.x, vp.z, [...this._wallBusy.values()].flat().concat(artworkBusy(cx, cz)), { veil: true }); };
+    }
+    // whatever the walls took on where the metal door stands comes down before anyone sees it
+    const sp = this.stairwellPlan;
+    if (sp && sp.cx === cx && sp.cz === cz) this._clearAround(sp.x, sp.z, 2.4);
+    return stuff;
+  }
+
+  _printPoster(p) {
+    const st = this.stage.stage, u = p.mesh.material.uniforms;
+    p.mesh.visible = st === 0;                        // past the hospital the souls, clouds and balloons ask
+    if (st !== 0) return;
+    p.mesh.scale.set(1.55, 0.85, 1);                  // a wide board
+    const paint = () => {
+      const host = p.mesh.parent;
+      if (this.stage.stage !== 0 || !host || host.userData.gone) return;   // the world moved on, or the chunk is gone
+      const list = t('fearQuestions').concat(t('posterQuestions'));
+      const old = u.uMap.value;
+      u.uMap.value = boardTexture(list[p.q % list.length], p.q + 1, getLang());
+      u.uHasMap.value = 1;
+      old?.dispose();
+    };
+    if (this._deferPaint) this._paint.push(paint); else paint();
+  }
+
+  // The new stage's things are built in the portal's flight but first drawn
+  // as the throat opens: their shaders would compile in that frame (150 ms
+  // and more). Under cover they are compiled off the main thread where the
+  // browser can: the scene once, the frame after the swap, and each of
+  // grandmother's rooms as it is built (shown for the call: only what is
+  // visible is compiled).
+  _warmShaders() {
+    if (!this._warmPending || !window.__app?.tunnel?.covering) return;
+    this._warmPending = false;
+    this._warm(this.scene);
+  }
+  _warm(obj) {
+    const r = this._renderer;
+    if (!r?.compileAsync) return;
+    const was = obj.visible;
+    obj.visible = true;
+    r.compileAsync(obj, this.camera, this.scene).catch(() => {});
+    obj.visible = was;
+  }
+
+  // ── painting on canvases, a little a frame ─────────────────────────────
+  // A notice board, a carpet or a rug is a canvas painted in JavaScript, ten
+  // to twenty milliseconds each: painted as a chunk was dressed, they were
+  // most of the long frames at every chunk crossing. Mid-walk they wait here
+  // and are painted a few milliseconds a frame, never in a frame that has
+  // just dressed a chunk; the chunk is still far off in the fog by then.
+  _stepPaint() {
+    if (this._dressed) { this._dressed = false; return; }
+    const until = performance.now() + (window.__app?.tunnel?.covering ? 12 : 4);   // in the portal's flight nothing is drawn: paint more
+    while (this._paint.length && performance.now() < until) this._paint.shift()();
+  }
+
+  // Grandmother's room, built once the memory stage wants it: at once behind
+  // the loading screen, otherwise in its turn, like the canvases.
+  _wantRoom(k) {
+    if (this.stage.stage !== 1 || k.room || k.queued) return;
+    if (!this._deferPaint) { k.build(); return; }
+    k.queued = true;
+    this._paint.push(() => { k.build(); if (k.room) this._warm(k.group); });
+  }
+
+  // A thing of grandmother's stage whose canvas is painted only when that
+  // stage shows it (in the hospital nobody sees a carpet): shown at once when
+  // the painting is done or may be done now, otherwise after its turn.
+  _showMemory(mesh) {
+    const on = this.stage.stage === 1, paint = mesh.userData.paint;
+    if (!on || !paint) { mesh.visible = on; return; }
+    mesh.userData.paint = null;
+    if (!this._deferPaint) { paint(); mesh.visible = true; return; }
+    mesh.visible = false;
+    this._paint.push(() => {
+      if (!mesh.parent || mesh.parent.userData.gone) return;
+      paint();
+      mesh.visible = this.stage.stage === 1;
+    });
+  }
+
+  // Somewhere inside the room, at chest height, away from the walls.
+  _placeWisp(w, k) {
+    const m = 0.8;
+    w.home = new THREE.Vector3(
+      k.minX + m + Math.random() * Math.max(0.1, k.maxX - k.minX - 2 * m),
+      1.2 + Math.random() * 0.6,
+      k.minZ + m + Math.random() * Math.max(0.1, k.maxZ - k.minZ - 2 * m));
+    w.sprite.position.copy(w.home);
+  }
+
+  // A soul scattered: its question types itself on the television and across
+  // the screen, under a whisper.
+  // Another soul may speak only once the last question has held and the
+  // visitor has walked a few steps since.
+  _soulReady(time) { return time - this._soulAt >= SOUL_HOLD && this._walked >= SOUL_WALK; }
+
+  // Each soul asks its questions in an order shuffled by the visit's seed.
+  _soulOrder(cat, n) {
+    this._soulOrders ??= [];
+    let o = this._soulOrders[cat];
+    if (!o || o.length !== n) {
+      o = Array.from({ length: n }, (_, i) => i);
+      const r = mulberry32(hash2i(SEED_SOULQ, cat, n));
+      for (let i = n - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; }
+      this._soulOrders[cat] = o;
+    }
+    return o;
+  }
+
+  _askSoul(cat, room, time) {
+    if (this.finale) return;                            // the tunnel has risen: no more questions
+    this._soulAt = time; this._walked = 0;
+    const qs = t('soulQuestions')[cat];
+    const order = this._soulOrder(cat, qs.length);
+    const text = qs[order[this._soulIdx[cat]++ % qs.length]];
+    if (!this.asked.includes(text)) this.asked.push(text);
+    const label = t('soulLabels')[cat];
+    this.audio?.whisper?.();
+    this._say(label, text, '#' + new THREE.Color(SOUL_COLORS[cat]).lerp(new THREE.Color(0xffffff), 0.3).getHexString());   // in the soul's own colour
+  }
+
+  // ── the finale ─────────────────────────────────────────────────────────
+  // The view turns a little toward open floor, and a couple of steps away an
+  // arch of roses grows out of it with light pouring through.
+  // The ending (#96). The last work is seen and stays where it hangs; the
+  // view lingers on it, then turns to the corridor. Clouds well up from the
+  // floor all round and the walls come apart behind them; then there is only
+  // cloud, and the visitor flies on through it. The clouds slow, and out of
+  // them the arch of roses rises with its path of light; a light plate: it is
+  // time to move on. The walk is drawn through the roses to the card.
+  _beginFinale() {
+    this.roses.shed(); this.audio?.finale?.(this._lastFound ? parseInt(this._lastFound, 10) - 1 : null);   // its own sound after the waltz's tonic (#94)
+    const P = this.player;
+    // doors, the hospital's furniture and the props stand in the way too
+    const segDist = (x, z, a, b) => {
+      const ex = b.x - a.x, ez = b.z - a.z, l = ex * ex + ez * ez || 1;
+      const u = Math.max(0, Math.min(1, ((x - a.x) * ex + (z - a.z) * ez) / l));
+      return Math.hypot(x - a.x - ex * u, z - a.z - ez * u);
+    };
+    const blocked = (x, z) => {
+      for (const st of this.chunkStuff.values()) {
+        for (const d of st.doors) for (const sg of [d.seg, ...d.walls]) if (segDist(x, z, sg.a, sg.b) < 0.6) return true;
+        for (const b of (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || [])) if (Math.hypot(b.x - x, b.z - z) < b.r + 0.3) return true;
+        for (const b of st.props?.boxes || []) if (Math.hypot(b.x - x, b.z - z) < b.r + 0.3) return true;
+      }
+      return false;
+    };
+    let spot = findArchSpot(P.pos.x, P.pos.y, P.yaw, blocked);
+    if (!spot) {                                        // nowhere better: along the longest open way from here, never into a wall
+      let best = null;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        let run = 0;
+        while (run < 12 && !solidAtGlobal(cellOf(P.pos.x + dx * (run + 0.4)), cellOf(P.pos.y + dz * (run + 0.4)))) run += 0.4;
+        if (!best || run > best.run) best = { run, dx, dz };
+      }
+      const { dx, dz } = best;
+      spot = { x: P.pos.x + dx * 2.2, z: P.pos.y + dz * 2.2, dir: [dx, dz] };
+    }
+    const arch = buildRoseArch();
+    arch.group.position.set(spot.x, 0, spot.z);
+    arch.group.rotation.y = Math.atan2(-spot.dir[0], -spot.dir[1]);   // its face toward the visitor
+    this.scene.add(arch.group);
+    arch.fitToWalls((x, z) => solidAtGlobal(cellOf(x), cellOf(z)));
+    arch.group.visible = false;                         // it rises out of the clouds later
+    // the things come apart with the walls, so nothing left in the tunnel may stop the carry
+    {
+      const [dx, dz] = spot.dir, L = arch.length + 0.6, R = arch.halfWidth + 0.7;
+      const inArch = (x, z) => { const u = (x - spot.x) * dx + (z - spot.z) * dz, v = (x - spot.x) * dz - (z - spot.z) * dx; return Math.abs(u) < L && Math.abs(v) < R; };
+      for (const st of this.chunkStuff.values()) if (st.props?.boxes) st.props.boxes = st.props.boxes.filter(b => !inArch(b.x, b.z));
+    }
+    if (this.artworks.inspecting) this.artworks._closeInspect();
+    this._board = null;
+    P.auto = { kind: 'finale', yaw: P.yaw, vel: new THREE.Vector2(), hold: true };
+    this._clouds ||= createCloudSea(this.scene, this.camera);
+    this.finale = { arch, spot, dir: spot.dir, t: 0, yaw: Math.atan2(-spot.dir[0], -spot.dir[1]), eye: P.eyeTarget,
+      clouds: false, flown: false, risen: false, said: false, side: null, shown: 0 };
+  }
+
+  // Two rows of tall candles leading into the arch over the water (#96):
+  // one instanced draw for the candles, a soft halo sprite each for the haze
+  // round a flame, and their lights handed to the walls' and water's shader
+  // (the eight nearest), so they glint in the water like the rest.
+  _finaleCandles(f) {
+    const [dx, dz] = f.spot.dir, items = [], R = f.arch.halfWidth - 0.22;
+    for (let k = 0; k < 10; k++) for (const sgn of [-1, 1]) {   // from just before the mouth to the far end, inside the posts
+      const u = -1.4 + k * 0.72 + (k % 2) * 0.12, v = sgn * (R + 0.06 * Math.sin(k * 2.3 + sgn));
+      items.push({ type: 'candle', x: f.spot.x + dx * u - dz * v, z: f.spot.z + dz * u + dx * v, rot: k * 1.7, flame: new THREE.Color(0xffc970).multiplyScalar(1.5), wax: new THREE.Color(0xf0e6d2), spent: false, tgx: 0, tgz: 0 });
+    }
+    const group = new THREE.Group();
+    this.scene.add(group);
+    const sc = buildScatter(group, items);
+    if (!this._haloTex) {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      r.addColorStop(0, 'rgba(255,214,150,1)'); r.addColorStop(0.35, 'rgba(255,170,110,0.35)'); r.addColorStop(1, 'rgba(255,150,110,0)');
+      g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+      this._haloTex = new THREE.CanvasTexture(c);
+    }
+    const halos = items.map(it => {
+      const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: this._haloTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0, fog: false }));
+      h.position.set(it.x, 0.34, it.z); h.scale.setScalar(1.1);
+      group.add(h);
+      return h;
+    });
+    f.candles = { group, halos, lights: sc.lights };
+  }
+
+  // The camera in the ending (#96). In the flight it sways and banks a
+  // little over the clouds; when they part it swings on a Catmull-Rom curve
+  // out over the water, round the candles and down onto the path before the
+  // arch, looking at the roses all the way, and hands back to the walk there.
+  _finaleCamera(f, time, ease) {
+    const T = FINALE_T, cam = this.camera, P = this.player;
+    if (f.t < T.fly || f.t > T.arch) return;
+    const [dx, dz] = f.dir, sx = -dz, sz = dx;
+    const at = (u, v, y) => new THREE.Vector3(P.pos.x + dx * u + sx * v, P.eye + y, P.pos.y + dz * u + sz * v);
+    const sway = ease(T.fly, T.fly + 4) * (1 - ease(T.part - 3, T.part));
+    if (f.t < T.part) {
+      cam.position.add(new THREE.Vector3(sx, 0, sz).multiplyScalar(0.45 * Math.sin(time * 0.35) * sway)).add(new THREE.Vector3(0, 0.25 * Math.sin(time * 0.5) * sway, 0));
+      cam.rotation.z += 0.035 * Math.sin(time * 0.35 + 0.6) * sway;   // banking into the sway
+      return;
+    }
+    // the swing starts exactly where the flight left the camera and turns from
+    // its gaze, so the shot never cuts
+    if (!f.curve) {
+      f.q0 = cam.quaternion.clone();
+      P.eye = P.eyeTarget = f.eye; P.pitch = 0;      // the camera is the swing's now; the walk takes it back at this height
+      f.curve = new THREE.CatmullRomCurve3([cam.position.clone(), at(-3.2, 3.0, 2.2), at(-4.2, -2.4, 1.0), at(-1.8, 1.0, 0.3), at(0, 0, 0)], false, 'centripetal');
+    }
+    const k = ease(T.part, T.arch);
+    cam.position.copy(f.curve.getPointAt(k));
+    const mid = new THREE.Vector3(f.spot.x + dx * f.arch.length * 0.4, 1.3, f.spot.z + dz * f.arch.length * 0.4);
+    const ahead = at(10, 0, 0);
+    cam.lookAt(mid.lerp(ahead, ease(T.arch - 3, T.arch)));
+    cam.rotateZ(0.05 * Math.sin(k * Math.PI) * Math.sin(k * 4));   // a little roll as it swings
+    cam.quaternion.slerpQuaternions(f.q0, cam.quaternion.clone(), ease(T.part, T.part + 4));
+  }
+
+  _updateFinale(dt, time) {
+    const f = this.finale, P = this.player;
+    f.t += dt;
+    const T = FINALE_T, ease = (a, b) => { const k = Math.max(0, Math.min(1, (f.t - a) / (b - a))); return k * k * (3 - 2 * k); };
+    const auto = P.auto?.kind === 'finale' ? P.auto : (P.auto = { kind: 'finale', yaw: P.yaw, vel: new THREE.Vector2(), hold: true });
+    if (f.t > T.look && f.t < T.arch) auto.yaw = f.yaw;   // away from the work, down the corridor
+    if (!f.clouds && f.t > T.rise) { f.clouds = true; this._clouds.start({ x: P.pos.x, z: P.pos.y }, f.dir); }
+    const rise = ease(T.rise, T.rise + 6), fly = ease(T.fly, T.fly + 4.5) * (1 - ease(T.part - 3, T.part + 2));
+    this._clouds.update(dt, time, { rise, alpha: Math.min(1, rise * 1.4), fly: 2.6 * fly, clear: ease(T.part - 2, T.part + 6) });
+    // under the clouds the walls come apart, the works with them, then the floor and the water
+    const v = ease(T.rise + 3, T.rise + 8);
+    this.atmo.setVanish?.(v);
+    window.__app.vanish = v;
+    if (v > 0.6 && !f.gone) {                           // deep in the cloud: the world under it goes whole, floor and water too
+      f.gone = true;
+      for (const g of this.artworks.chunkGroups?.values() || []) if (g) g.visible = false;
+      for (const st of this.chunkStuff.values()) if (st.group) st.group.visible = false;
+      const keep = this._clouds.mesh;                   // everything else in sight goes: rooms, lamps, sprites (the petals are not out yet)
+      for (const c of this.scene.children) if (c.visible && c !== keep && !c.isLight) c.visible = false;
+      this.atmo.setFloor?.(false);
+      if (window.__app.water) window.__app.water.hidden = true;
+    }
+    // the plate: centred, while the walls are still going, gone before the arch shows
+    if (!f.said && f.t > T.say) { f.said = true; f.unsay = this._say(null, t('moveOn'), null, { keep: true, light: true }); }
+    if (f.unsay && f.t > T.part - 2.5) { f.unsay(); f.unsay = null; }
+    if (!f.flown && f.t > T.fly) { f.flown = true; P.eyeTarget = 3.2; }   // lifted a little over the sea of it
+    // the clouds part on still water: the arch of roses rises out of them, its candles, its path of light
+    // (already under the last of the cloud, so it is there as the cloud thins)
+    if (!f.risen && f.t > T.part - 2) {
+      f.risen = true;
+      f.arch.group.visible = true;
+      const W = window.__app.water;
+      if (W) { W.hidden = false; W.stirred = true; }   // and alive, never glass
+      this._finaleCandles(f);
+    }
+    if (!f.petals && f.t > T.part + 4) { f.petals = true; this.petals.stream({ x: f.spot.x, z: f.spot.z, dir: f.spot.dir, length: f.arch.length }); }   // once the roses are up
+    window.__app.finaleFog = 1 + 0.3 * ease(T.part - 2, T.part + 6);
+    if (f.risen) {
+      f.arch.group.position.y = -3 * (1 - ease(T.part - 1, T.part + 7));
+      if (f.candles) {                                 // they come up with the arch; their halos breathe in the haze
+        const up = ease(T.part + 2, T.part + 7);
+        const lv = this._water().level ?? 0.02;
+        f.candles.group.position.y = lv - 0.5 * (1 - up);
+        f.candles.halos.forEach((h, i) => { h.material.opacity = up * (0.55 + 0.12 * Math.sin(time * 7 + i * 1.7) + 0.06 * Math.sin(time * 17 + i)); });
+        // now and then a drop off a flame's wax rings the water
+        if (up > 0.5 && Math.random() < dt * 1.6) { const c = f.candles.lights[Math.floor(Math.random() * f.candles.lights.length)]; window.__app.water?.addRipple?.(c.x, c.z, 0.5); }
+      }
+      f.arch.update(dt, time, 0.02);
+    }
+    this._finaleCamera(f, time, ease);
+    // under everything a slow follow: whatever the camera is asked to do, it
+    // glides there, then lets go to the walk a few seconds after the arch
+    const tau = 0.7 * (1 - ease(T.arch + 2, T.arch + 6));
+    if (!f.cp) { f.cp = this.camera.position.clone(); f.cq = this.camera.quaternion.clone(); }
+    if (tau > 0.01) {
+      const a = 1 - Math.exp(-dt / tau);
+      f.cp.lerp(this.camera.position, a); f.cq.slerp(this.camera.quaternion, a);
+      this.camera.position.copy(f.cp); this.camera.quaternion.copy(f.cq);
+    }
+    if (f.t < T.arch) return;
+    if (f.done) return;
+    // the carry (from T.arch): aim at a point on the tunnel's middle line a little ahead
+    // of the visitor, so they come onto the line softly and then ride it
+    // through to the light. The view turns first, then the pull eases in
+    f.shown += dt;
+    const [ax, az] = f.spot.dir;
+    const u = (P.pos.x - f.spot.x) * ax + (P.pos.y - f.spot.z) * az;          // along the tunnel, 0 at its mouth
+    const aim = Math.max(u, -FINALE_LEAD) + FINALE_LEAD;
+    const tx = f.spot.x + ax * aim - P.pos.x, tz = f.spot.z + az * aim - P.pos.y, tl = Math.hypot(tx, tz) || 1;
+    auto.yaw = P.yaw + Math.atan2(Math.sin(Math.atan2(-tx, -tz) - P.yaw), Math.cos(Math.atan2(-tx, -tz) - P.yaw));
+    const pull = Math.max(0, Math.min(1, (f.shown - FINALE_PULL_AT) / FINALE_PULL_IN));
+    const facing = Math.max(0, Math.cos(auto.yaw - P.yaw));                     // no walking sideways into it
+    auto.vel.set(tx / tl, tz / tl).multiplyScalar(FINALE_CARRY * pull * pull * (3 - 2 * pull) * facing);
+    // through the far end of the tunnel: the card
+    const [dx, dz] = f.spot.dir, rx = P.pos.x - (f.spot.x + dx * f.arch.length), rz = P.pos.y - (f.spot.z + dz * f.arch.length);
+    const side = -(rx * dx + rz * dz), across = Math.abs(rx * -dz + rz * dx);
+    if ((f.side !== null && f.side > 0 && side <= 0 && across < f.arch.halfWidth) || f.t > T.arch + 40) { if (!this._carded) this._endWalk(); }
+    f.side = side;
+  }
+
+  _endWalk() {
+    this._carded = true;
+    document.getElementById('soul-q')?.remove();       // the plate goes with the clouds
+    if (this.finale) this.finale.done = true;
+    if (this.player.auto?.kind === 'finale') this.player.auto = null;
+    this.player.locked = true;
+    this.audio?.silence?.();
+    showCard({
+      questions: this.kept.length ? this.kept : this.asked.slice(-KEEP_FALLBACK),
+      strings: {
+        heading: t('cardHeading'), empty: t('cardEmpty'), boot: t('cardBoot'),
+        save: t('cardSave'), finish: t('cardFinish'),
+        palette: t('cardPalette'), palettes: t('cardPalettes'),
+        thanks: t('finThanks'), farewells: t('finLines'),
+        credits: { head: t('finCredits'), roleMe: t('finRoleMe'), bioMe: t('finBioMe'), roleAlisa: t('finRoleAlisa'),
+          alisa: getLang() === 'ru' ? 'Алиса Феер' : 'Alisa Feer', bioAlisa: t('finBioAlisa'), souls: t('finSouls') },
+      },
+    });
+  }
+
+  // A line typed across the lower screen, then gone.
+  // color: the asker's own colour for the words (a soul's, a pale sky blue
+  // in the light); without it the screen's phosphor green
+  _say(label, text, color = null, { keep = false, onGone = null, light = false } = {}) {
+    if (label !== null) {                               // the television shows exactly what a soul says
+      this._tvText = text;
+      this._tvUntil = performance.now() + 11000;
+      this._tvDirty = true;
+    }
+    document.getElementById('soul-q')?.remove();
+    const el = document.createElement('div');
+    el.id = 'soul-q';
+    el.innerHTML = `<p class="sq-label"></p><p class="sq-text"></p>`;
+    if (color) el.style.setProperty('--q', color);
+    if (light) el.classList.add('sq-light');            // the ending's plate: light, not the screen's green
+    if (label) el.querySelector('.sq-label').textContent = label; else el.querySelector('.sq-label').remove();
+    document.body.appendChild(el);
+    const tEl = el.querySelector('.sq-text');
+    let i = 0;
+    const type = setInterval(() => { tEl.textContent = text.slice(0, ++i); if (i >= text.length) clearInterval(type); }, 45);
+    requestAnimationFrame(() => el.classList.add('visible'));
+    // a tap anywhere but the controls puts it away; otherwise it fades on its own
+    const close = () => {
+      removeEventListener('pointerdown', onTap, true);
+      clearInterval(type);
+      el.classList.remove('visible'); setTimeout(() => el.remove(), 1200);
+      onGone?.();
+    };
+    const onTap = e => { if (!e.target.closest?.('button, #pad, #hud-toolbar, a')) close(); };
+    setTimeout(() => { if (el.isConnected) addEventListener('pointerdown', onTap, true); }, 400);   // not the tap that set it off
+    const fade = () => { if (el.isConnected && el.classList.contains('visible')) close(); };
+    let timer = keep ? 0 : setTimeout(fade, 11000);
+    // a question can be kept: standing still while it is on screen (update)
+    this._onScreen = this.asked.includes(text) && !this.kept.includes(text)
+      ? { text, el, still: 0, keep: () => { clearTimeout(timer); if (!keep) timer = setTimeout(fade, KEEP_LINGER * 1000); } }
+      : null;
+    return close;
+  }
+
+  _boardZoom(fov) {
+    const P = this.player;
+    P.fov = fov; P.camera.fov = fov; P.camera.updateProjectionMatrix();
+  }
+
+  // In fear, on hands: passing a notice board stops the walk, turns the view
+  // to it and leans in until its question can be read. Hands lowered, it
+  // stays; a fist held for BOARD_FIST seconds turns the view back the way it
+  // was going and the walk goes on. Each board asks once.
+  _updateBoards(dt) {
+    const P = this.player, b = this._board;
+    if (b) {
+      if (P.auto !== b.auto) { this._boardZoom(b.fov0); this._board = null; return; }   // the keys took over, or Space
+      // the view leans in on the board while it asks, and back out as the walk turns away
+      const want = b.phase === 'hold' ? BOARD_FOV : b.fov0;
+      this._boardZoom(P.fov + (want - P.fov) * Math.min(1, dt * 2.4));
+      if (b.phase === 'hold') {
+        b.auto.yaw = Math.atan2(-(b.x - P.pos.x), -(b.z - P.pos.y));   // at the board itself, as the walk comes to rest
+        b.fist = P.hand.present && P.hand.anyFist ? b.fist + dt : 0;
+        if (b.fist >= BOARD_FIST) { b.phase = 'back'; b.auto.yaw = b.back; }
+      } else if (Math.abs(Math.atan2(Math.sin(b.back - P.yaw), Math.cos(b.back - P.yaw))) < 0.06) {
+        this._boardZoom(b.fov0);
+        P.auto = null; this._board = null;
+      }
+      return;
+    }
+    if (this.stage.stage !== 0 || P.mode !== 'hands' || !P.hand.present || P.auto || P.locked || this.finale || window.__app?.training) return;
+    if (P.vel.length() < 0.3) return;                   // only a walk passing by, not someone standing near
+    this._boardsAsked ||= new Set();
+    for (const st of this.chunkStuff.values()) for (const p of st.posters || []) {
+      const m = p.mesh;
+      if (!m.visible) continue;
+      const key = `${m.position.x.toFixed(1)},${m.position.z.toFixed(1)}`;
+      if (this._boardsAsked.has(key)) continue;
+      const nx = Math.sin(m.rotation.y), nz = Math.cos(m.rotation.y);   // the board faces into the corridor
+      const dx = P.pos.x - m.position.x, dz = P.pos.y - m.position.z;
+      if (Math.hypot(dx, dz) > BOARD_NEAR || dx * nx + dz * nz < 0.2) continue;
+      if (-(dx * -Math.sin(P.yaw) + dz * -Math.cos(P.yaw)) < -0.4 * Math.hypot(dx, dz)) continue;   // one already behind is let be
+      if (!this._lineOfSight(P.pos.x, P.pos.y, m.position.x + nx * 0.3, m.position.z + nz * 0.3)) continue;
+      this._boardsAsked.add(key);
+      const auto = { kind: 'board', yaw: Math.atan2(dx, dz) };
+      P.auto = auto;
+      this._board = { auto, back: P.yaw, phase: 'hold', fist: 0, fov0: P.fov, x: m.position.x, z: m.position.z };   // the question is on the board itself
+      return;
+    }
+  }
+
+  _writeOn(w) {
+    const listKey = w.zone.accept > 0.5 ? 'wallAccept' : w.zone.memory > 0.5 ? 'wallMemory' : 'wallFear';
+    const text = pick(t(listKey), w.seed);
+    const old = w.mesh.material.map;
+    w.mesh.material.map = scrawlTexture(text, w.zone);
+    w.mesh.material.needsUpdate = true;
+    old?.dispose();
+  }
+
+  _makeDoor(group, cx, cz, edge, band, key) {
+    // The corridor crosses the edge through cells band, band+1 (2.4 m wide):
+    // it gets closed by a piece of wall with a real door in it.
+    const span = 2 * CELL, west = edge === 'west';
+    const x = west ? cx * CHUNK * CELL : (cx * CHUNK + band) * CELL + span / 2;
+    const z = west ? (cz * CHUNK + band) * CELL + span / 2 : cz * CHUNK * CELL;
+    const d = buildDoorway(span, this.world.mat.wall, this.stage.stage, t('doorWait'));
+    d.group.position.set(x, 0, z);
+    d.group.rotation.y = west ? Math.PI / 2 : 0;
+    group.add(d.group);
+    // collision: the two wall pieces always, the door gap while closed
+    const segAlong = (u0, u1) => west
+      ? { a: { x, z: z + u0 }, b: { x, z: z + u1 }, nx: 1, nz: 0 }
+      : { a: { x: x + u0, z }, b: { x: x + u1, z }, nx: 0, nz: 1 };
+    const walls = [segAlong(-span / 2, -d.gap / 2), segAlong(d.gap / 2, span / 2)];
+    const seg = segAlong(-d.gap / 2, d.gap / 2);
+    const routeSeg = segAlong(-span / 2, span / 2);   // path-finding treats the closed crossing as shut
+    return { key, group: d.group, pivot: d.pivot, leaf: d.door, walls, seg, routeSeg, x, z, waitT: 0, t: 0, open: false,
+      phase: this.doorsDone.has(key) ? 'done' : 'wait', rays: null, dir: 1 };   // open stays false: a door never lets you through
+  }
+
+
+  // A doorway of light across a 2.4 m corridor crossing: a baroque frame
+  // and a shimmering veil in the colours of the stage it leads to. x, z: the
+  // crossing's centre; west: true if the visitor crosses it by moving in x
+  // (the frame spans z), false if they cross it moving in z (frame spans x).
+  _makePortal(group, x, z, west, target) {
+    const span = 2 * CELL;
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    g.rotation.y = west ? Math.PI / 2 : 0;
+    // a walk-through baroque picture frame, gilt scratched down to the bole
+    const openW = span - 0.6, openH = CEIL_H - 0.72;
+    g.add(baroqueFrame(openW, openH, 0.3));
+    const veil = new THREE.Mesh(new THREE.PlaneGeometry(openW, openH - 0.06), new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+      uniforms: {
+        uTime: { value: 0 }, uFade: { value: 1 },
+        uA: { value: new THREE.Color(target === 2 ? 0xfff6e0 : 0x9b0f14) },
+        uB: { value: new THREE.Color(target === 2 ? 0xbfd6c8 : 0x1f6b3a) },
+      },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform float uTime, uFade; uniform vec3 uA, uB; varying vec2 vUv;
+        float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+        void main(){
+          // two layers of slow noise flowing upward, bright at the core, fading to the frame
+          float a = n(vUv * vec2(4.0, 7.0) + vec2(0.0, -uTime * 0.35));
+          float b = n(vUv * vec2(9.0, 3.0) + vec2(uTime * 0.2, -uTime * 0.6));
+          float edge = smoothstep(0.0, 0.18, vUv.x) * smoothstep(1.0, 0.82, vUv.x) * smoothstep(0.0, 0.08, vUv.y) * smoothstep(1.0, 0.9, vUv.y);
+          vec3 c = mix(uB, uA, a) * (0.35 + 0.65 * b);
+          gl_FragColor = vec4(c * edge * uFade * 1.8, edge * 0.9 * uFade);
+        }`,
+    }));
+    veil.position.set(0, 0.06 + openH / 2, 0);
+    g.add(veil);
+    group.add(g);
+    const frameMats = [];
+    g.traverse(o => { if (o.isMesh && o !== veil) { o.material.transparent = true; frameMats.push(o.material); } });
+    const p = { x, z, west, span: openW, target, veil, group: g, frameMats };
+    this._portalLight(p, this.summonedPortals[target]?.appear ?? 1);
+    return p;
+  }
+
+  // How far a portal has come out of the dark, 0..1: the frame first, from
+  // black to its gilt, then the veil kindles. At 1 the frame is opaque again.
+  _portalLight(p, k) {
+    const f = Math.min(1, k / 0.75), frame = f * f * (3 - 2 * f);
+    const v = Math.max(0, Math.min(1, (k - 0.35) / 0.65)), veil = v * v * (3 - 2 * v);
+    for (const m of p.frameMats) {
+      m.color.setScalar(frame);
+      m.opacity = Math.min(1, frame * 1.6);
+      const solid = k >= 1;
+      if (m.transparent === solid && !m.alphaTest) { m.transparent = !solid; m.needsUpdate = true; }
+    }
+    p.veil.material.uniforms.uFade.value = veil;
+  }
+
+  // A portal comes out of the dark the first time it is in view, never
+  // before (it is summoned out of sight when it can be): the whisper and a
+  // breath of the post then, the frame and the veil over APPEAR seconds.
+  _portalAppear(dt) {
+    const plan = this.summonedPortals[this.stage.stage + 1], P = this.player;
+    if (!plan || plan.appear >= 1) return;
+    if (!plan.appear) {
+      const dx = plan.x - P.pos.x, dz = plan.z - P.pos.y, d = Math.hypot(dx, dz) || 1;
+      const ahead = (-Math.sin(P.yaw) * dx - Math.cos(P.yaw) * dz) / d;
+      if (ahead < 0.45 || d > PORTAL_FAR + 6 || !this._lineOfSight(P.pos.x, P.pos.y, plan.x, plan.z)) return;
+      this.post?.burst(0.4);
+      this.audio?.whisper?.();
+    }
+    plan.appear = Math.min(1, (plan.appear || 0) + dt / APPEAR);
+    for (const st of this.chunkStuff.values()) for (const p of st.portals) if (p.target === plan.target) this._portalLight(p, plan.appear);
+  }
+
+  // Walking through a portal: the side of its plane the visitor is on flips
+  // while they are inside its span.
+  _checkPortals(prev, cur) {
+    for (const st of this.chunkStuff.values()) for (const p of st.portals) {
+      if (Math.abs(p.x - cur.x) > 3 || Math.abs(p.z - cur.z) > 3) continue;
+      const a0 = p.west ? prev.x - p.x : prev.z - p.z, a1 = p.west ? cur.x - p.x : cur.z - p.z;
+      const along = p.west ? cur.z - p.z : cur.x - p.x;
+      if (!p.group.visible) continue;
+      if (Math.sign(a0) !== Math.sign(a1) && Math.abs(along) < p.span / 2 && p.target > this.stage.stage && !this._crossing) this._cross(p.target);
+    }
+  }
+
+  // The crossing: the tunnel closes in over the world (tunnel.js), the stage
+  // changes while it hides everything, the walk is held still, and the throat
+  // opens onto the new stage. Without the tunnel (no WebGL extras) at once.
+  _cross(target) {
+    const tunnel = window.__app?.tunnel, P = this.player;
+    if (!tunnel) { this.audio?.chime(); if (this.stage.go(target)) this.post?.burst(1.6); return; }
+    this.audio?.crossing(target, TUNNEL_TIMES);           // inhale, heartbeats, exhale, and the new place answers
+    this._crossing = true;
+    if (this.artworks.inspecting) this.artworks._closeInspect();
+    const held = !P.locked;
+    if (held) { P.locked = true; P.vel.set(0, 0); }
+    this.post?.burst(0.8);
+    tunnel.start(this.stage.stage, target, () => {
+      if (this.stage.go(target)) this.stage.t = 0.4;      // most of the blend happens unseen: the throat opens onto the new look
+      this.post?.burst(1.2);
+    }, () => {
+      if (held) P.locked = false;
+      this._crossing = false;
+      this._prevPos = { x: P.pos.x, z: P.pos.y };
+    });
+  }
+
+  // The one portal leading past the current stage, if it has been summoned
+  // yet — as a list, so candles and props can keep treating it as "portals".
+  _nextPortals() {
+    const p = this.summonedPortals[this.stage.stage + 1];
+    return p ? [p] : [];
+  }
+
+  // If a portal (or the stairwell's door) was summoned into this chunk,
+  // build it now — called both when the chunk is first built and, later,
+  // if it is rebuilt after unloading with the plan already in hand.
+  _ensurePortalsFor(cx, cz, group, stuff) {
+    for (const target of [1, 2]) {
+      const plan = this.summonedPortals[target];
+      if (!plan || plan.cx !== cx || plan.cz !== cz) continue;
+      if (stuff.portals.some(p => p.target === target)) continue;
+      stuff.portals.push(this._makePortal(group, plan.x, plan.z, plan.west, target));
+    }
+  }
+  // The stairwells behind the rusty door: a deck of all of them, shuffled
+  // by the visit's seed (the date and the second the visit began), dealt one
+  // per opening; none comes twice until the deck runs out, then it is
+  // shuffled again, never starting on the one just seen.
+  _nextStair() {
+    if (!this._stairDeck?.length) {
+      const r = mulberry32(SEED_STAIR + (this._stairDeals = (this._stairDeals || 0) + 1));
+      const deck = Array.from({ length: STAIR_PICS }, (_, i) => i + 1);
+      for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+      if (deck[deck.length - 1] === this._stairLast) [deck[0], deck[deck.length - 1]] = [deck[deck.length - 1], deck[0]];
+      this._stairDeck = deck;
+    }
+    return (this._stairLast = this._stairDeck.pop());
+  }
+
+  _ensureStairwellFor(cx, cz, group, stuff) {
+    const plan = this.stairwellPlan;
+    if (!plan || plan.cx !== cx || plan.cz !== cz || stuff.stairwell || this.stage.stage !== 0) return;
+    const idx = this._nextStair();
+    const sw = buildStairwell(this.atmo, `assets/stairs/stairs_${idx}.webp`);
+    sw.group.position.set(plan.x, 0, plan.z);
+    sw.group.rotation.y = plan.rotY;
+    group.add(sw.group);
+    sw.phase = 'wait';
+    sw.pic = idx;
+    sw.t = 0;
+    stuff.stairwell = sw;
+  }
+
+  // Spots for a portal: the exact centre line of a plain 2-cell corridor,
+  // never a crossing, never where a room opens onto it — solid wall on both
+  // sides of the cell and of the cells either side of it along the corridor.
+  // Returns the centre of the 2-cell width, and whether the visitor crosses
+  // the frame moving in x (west) or in z. Cells the visitor cannot yet walk
+  // to (behind a closed presence door) are left out.
+  _latticeCrossings(gi0, gj0, near, far, reach) {
+    const out = [];
+    const R = Math.ceil(far / CELL) + 1;
+    const bandLow = v => { const m = mod16(v); return m === 4 || m === 10; };   // first cell of a 2-cell band
+    for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
+      const gi = gi0 + di, gj = gj0 + dj;
+      if (solidAtGlobal(gi, gj)) continue;
+      const inI = EGG_BAND.has(mod16(gi)), inJ = EGG_BAND.has(mod16(gj));
+      if (inI === inJ) continue;                       // a crossing or a room cell, not a plain corridor
+      let x, z, west;
+      if (inI) {                                       // a corridor running along z: walls at i-1 and i+2
+        const lo = bandLow(gi) ? gi : gi - 1;
+        if ([-1, 0, 1].some(k => !solidAtGlobal(lo - 1, gj + k) || !solidAtGlobal(lo + 2, gj + k))) continue;
+        if (gi !== lo) continue;                       // one candidate per corridor cell row
+        x = (lo + 1) * CELL; z = centreOf(gj); west = false;
+      } else {                                         // a corridor running along x
+        const lo = bandLow(gj) ? gj : gj - 1;
+        if ([-1, 0, 1].some(k => !solidAtGlobal(gi + k, lo - 1) || !solidAtGlobal(gi + k, lo + 2))) continue;
+        if (gj !== lo) continue;
+        x = centreOf(gi); z = (lo + 1) * CELL; west = true;
+      }
+      const d = Math.hypot(x - centreOf(gi0), z - centreOf(gj0));
+      if (d < near || d > far) continue;
+      if (cornerDist(x, z) < CORNER_FREE) continue;    // never near a corner
+      if (reach && !reach.has(gi + ',' + gj)) continue;
+      out.push({ gi, gj, x, z, d, west });
+    }
+    return out;
+  }
+
+  // A crossing 8–16 m out becomes the next portal, once enough works have
+  // been seen: preferring one ahead of the view, always one the visitor can
+  // actually walk to.
+  _summonPortal(target, time) {
+    const P = this.player;
+    const gi0 = cellOf(P.pos.x), gj0 = cellOf(P.pos.y);
+    const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+    const reach = this._reachableSet(gi0, gj0);
+    const cands = this._latticeCrossings(gi0, gj0, PORTAL_NEAR, PORTAL_FAR, reach);
+    if (!cands.length) return false;                     // nothing in reach yet: try again next frame
+    for (const c of cands) {
+      c.ahead = (fx * (c.x - P.pos.x) + fz * (c.z - P.pos.y)) / (c.d || 1);
+      c.hidden = !this._lineOfSight(P.pos.x, P.pos.y, c.x, c.z);   // round a corner: it is not seen being made
+    }
+    cands.sort((a, b) => b.hidden - a.hidden || b.ahead - a.ahead || a.d - b.d);
+    const c = cands[0];
+    const plan = { x: c.x, z: c.z, west: c.west, target, cx: Math.floor(c.gi / CHUNK), cz: Math.floor(c.gj / CHUNK), appear: 0 };
+    this.summonedPortals[target] = plan;
+    const stuff = this.chunkStuff.get(plan.cx + ':' + plan.cz);
+    this._clearAround(plan.x, plan.z, 2.4);
+    if (stuff) { stuff.portals.push(this._makePortal(stuff.group, plan.x, plan.z, plan.west, target)); this._rebuildChunkProps(plan.cx, plan.cz, stuff); }
+    this._rebuildScatter();                              // no candle left standing in its way, in any chunk
+    if (target === 1) this._summonStairwell(plan, gi0, gj0);
+    return true;
+  }
+
+  // A portal the walk has left far behind, out of sight for a while, is not
+  // lost for good: it goes out and is summoned again at a crossing near
+  // wherever the visitor is now, with the same whisper (#53).
+  _keepPortalNear(time) {
+    const target = this.stage.stage + 1, plan = this.summonedPortals[target], P = this.player;
+    if (!plan || this._crossing || this.finale || P.locked) { this._portalLostAt = null; return; }
+    if (Math.hypot(plan.x - P.pos.x, plan.z - P.pos.y) < LOST_FAR || this._lineOfSight(P.pos.x, P.pos.y, plan.x, plan.z)) { this._portalLostAt = null; return; }
+    this._portalLostAt ??= time;
+    if (time - this._portalLostAt < LOST_FOR) return;
+    this._portalLostAt = null;
+    delete this.summonedPortals[target];
+    if (!this._summonPortal(target, time)) { this.summonedPortals[target] = plan; return; }   // nowhere near yet: it stays where it was
+    const stuff = this.chunkStuff.get(plan.cx + ':' + plan.cz);
+    if (!stuff) return;
+    stuff.portals = stuff.portals.filter(p => {
+      if (p.target !== target || p.x !== plan.x || p.z !== plan.z) return true;   // the new one may share the chunk
+      p.group.parent?.remove(p.group); p.veil.geometry.dispose(); p.veil.material.dispose();
+      return false;
+    });
+  }
+
+  // Breadth-first: every open cell the visitor can reach without crossing a
+  // shut presence door, as a Set of "gi,gj" keys.
+  _reachableSet(gi0, gj0, maxNodes = 4000) {
+    const key = (i, j) => i + ',' + j;
+    const seen = new Set([key(gi0, gj0)]);
+    const q = [[gi0, gj0]];
+    for (let head = 0; head < q.length && head < maxNodes; head++) {
+      const [i, j] = q[head];
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di, nj = j + dj, k = key(ni, nj);
+        if (seen.has(k) || solidAtGlobal(ni, nj) || this._doorBlocks(i, j, ni, nj)) continue;
+        seen.add(k); q.push([ni, nj]);
+      }
+    }
+    return seen;
+  }
+
+  // The metal door onto the ruined stairwell: once, in fear, somewhere on
+  // the route between the visitor and the portal just summoned, 2–5 m
+  // before it — a wall slot at least 2 cells long, never one already
+  // carrying a work.
+  _summonStairwell(portal, gi0, gj0) {
+    if (this.stairwellPlan) return;
+    const goalGi = cellOf(portal.x - 0.01), goalGz = cellOf(portal.z - 0.01);
+    const path = this._route((i, j) => (Math.abs(i - goalGi) <= 1 && Math.abs(j - goalGz) <= 1 ? Infinity : -Math.hypot(i - goalGi, j - goalGz)), gi0, gj0, 20000);
+    if (path.length < 2) return;
+    let d = 0;
+    const zone = [];
+    for (let k = path.length - 1; k > 0; k--) {
+      const [i, j] = path[k], [pi, pj] = path[k - 1];
+      d += Math.hypot(i - pi, j - pj) * CELL;
+      if (d >= STAIR_BEFORE_MIN && d <= STAIR_BEFORE_MAX) zone.push({ gi: pi, gj: pj });
+      if (d > STAIR_BEFORE_MAX) break;
+    }
+    this._placeStairwell(zone, portal);
+  }
+
+  // The metal door on the first turn after the first work is seen: along the
+  // corridor the visitor has just turned into, 4 to 14 m ahead, on a side wall.
+  _summonStairwellAhead(quiet = false) {
+    if (this.stairwellPlan) return;
+    const P = this.player, fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+    const ax = Math.abs(fx) > Math.abs(fz) ? Math.sign(fx) : 0, az = ax ? 0 : Math.sign(fz);
+    const zone = [];
+    for (let d = 0.6; d < 14; d += CELL) {
+      const x = P.pos.x + ax * d, z = P.pos.y + az * d;
+      if (!this.world.isWalkable(x, z)) break;
+      if (d >= 4) zone.push({ gi: cellOf(x), gj: cellOf(z) });
+    }
+    this._placeStairwell(zone, { x: P.pos.x, z: P.pos.y }, quiet);
+  }
+
+  // The metal door is always set down before the chunk it stands in is built,
+  // so nothing is ever redrawn round it: the first in the first new chunk
+  // built ahead after the first work is seen, the second, once the first has
+  // left, the same way after the third, well inside it, beyond sight.
+  _preplaceStairwell(cx, cz) {
+    if (this.stage.stage !== 0 || this.stairwellPlan) return;
+    const n = this._stairCount || 0;
+    if ((n === 0 && this.stageSeen[0] >= 1) || (n === 1 && this.stageSeen[0] === 3)) {
+      // only a chunk ahead of the visitor, where the walk is going
+      const P = this.player, mx = (cx + 0.5) * CHUNK * CELL - P.pos.x, mz = (cz + 0.5) * CHUNK * CELL - P.pos.y;
+      if ((-Math.sin(P.yaw) * mx - Math.cos(P.yaw) * mz) / (Math.hypot(mx, mz) || 1) < 0.5) return;
+      const zone = [];
+      for (let j = 3; j < CHUNK - 3; j++) for (let i = 3; i < CHUNK - 3; i++) {
+        const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+        if (!solidAtGlobal(gi, gj)) zone.push({ gi, gj });
+      }
+      this._placeStairwell(zone, { x: this.player.pos.x, z: this.player.pos.y }, true);
+    }
+  }
+
+  // The first metal door, done with or never met, leaves once it is well out
+  // of sight, so the second can open somewhere ahead.
+  _retireStairwell() {
+    const plan = this.stairwellPlan;
+    if (!plan) return;
+    const stuff = this.chunkStuff.get(plan.cx + ':' + plan.cz), sw = stuff?.stairwell;
+    if (sw && !['wait', 'cool'].includes(sw.phase)) return;          // mid-dream: let it finish
+    const P = this.player;
+    if (Math.hypot(plan.x - P.pos.x, plan.z - P.pos.y) < 14 || this._lineOfSight(P.pos.x, P.pos.y, plan.x + Math.sin(plan.rotY) * 0.3, plan.z + Math.cos(plan.rotY) * 0.3)) return;   // never vanishes in view
+    if (sw) { sw.group.parent?.remove(sw.group); sw.dispose?.(); stuff.stairwell = null; }
+    this.stairwellPlan = null;
+  }
+
+  // The metal door is fear's alone: once the stage has left fear it is taken
+  // away at once, wherever it stands (the crossing hides it) (#43).
+  _dropStairwell() {
+    const plan = this.stairwellPlan;
+    if (!plan) return;
+    const stuff = this.chunkStuff.get(plan.cx + ':' + plan.cz), sw = stuff?.stairwell;
+    if (sw) { sw.group.parent?.remove(sw.group); sw.dispose?.(); stuff.stairwell = null; }
+    this.stairwellPlan = null;
+  }
+
+  // Find a wall run beside one of the zone's cells for the metal door, clear
+  // of corners, of works and of `away` (a portal, or the visitor), and set it there.
+  _placeStairwell(zone, away, quiet = false) {
+    const portal = away;
+    for (const clear of [CORNER_FREE, 1.8]) {          // the holy zone first; only if no slot at all, a smaller one
+      for (const w of zone) {
+        const cx = Math.floor(w.gi / CHUNK), cz = Math.floor(w.gj / CHUNK);
+        const wallSlots = this.world.getWallSlots(cx, cz);
+        const hung = new Set(artworkSlots(cx, cz, wallSlots).map(sl => sl.cellKey));
+        // the door may slide along a run of wall, off its middle, to stand clear of the corners
+        let slot = null, at = null;
+        for (const sl of wallSlots) {
+          if (sl.length < 2 || hung.has(sl.cellKey) || !slotNearCell(sl, w.gi, w.gj)) continue;
+          const tx = Math.abs(sl.normal.z), tz = Math.abs(sl.normal.x), reach = sl.length * CELL / 2 - 0.9;
+          for (let off = 0; off <= reach + 1e-6 && !at; off += 0.3) for (const sgn of off ? [1, -1] : [1]) {
+            const x = sl.position.x + tx * off * sgn, z = sl.position.z + tz * off * sgn;
+            if (cornerDist(x, z) >= clear && Math.hypot(x - portal.x, z - portal.z) >= 4.8) { slot = sl; at = { x, z }; break; }
+          }
+          if (at) break;
+        }
+        if (!slot) continue;
+        this.stairwellPlan = { x: at.x, z: at.z, rotY: Math.atan2(slot.normal.x, slot.normal.z), cx, cz };
+        this._stairCount = (this._stairCount || 0) + 1;
+        for (const m of this.marks) if (m.visible && Math.hypot(m.position.x - at.x, m.position.z - at.z) < 1) { m.visible = false; m.userData.key = null; m.userData.fadeAt = 0; }   // a scratch already there goes with the wall
+        if (quiet) return;                               // its chunk is not built yet: it will be built round the door
+        this._clearAround(at.x, at.z, 2.4);
+        const stuff = this.chunkStuff.get(cx + ':' + cz);
+        if (stuff) {
+          this._ensureStairwellFor(cx, cz, stuff.group, stuff);
+          this._rebuildChunkProps(cx, cz, stuff);          // whatever already stood there makes way for the door
+        }
+        this._rebuildScatter();                          // candles in the chunks around it too
+        return;
+      }
+    }
+  }
+
+
+  // The heading that looks straight down the route to a portal: toward the
+  // route's cell a few steps ahead, so it follows the corridor rather than
+  // cutting across corners. null when there is no portal or no route.
+  _wayYaw(portal) {
+    if (!portal) return null;
+    const P = this.player;
+    const gi = cellOf(portal.x - 0.01), gj = cellOf(portal.z - 0.01);
+    const path = this._route((i, j) => (Math.abs(i - gi) <= 1 && Math.abs(j - gj) <= 1 ? Infinity : -Math.hypot(i - gi, j - gj)), cellOf(P.pos.x), cellOf(P.pos.y), 20000);
+    if (path.length < 2) return null;
+    const [ti, tj] = path[Math.min(4, path.length - 1)];
+    return Math.atan2(-(centreOf(ti) - P.pos.x), -(centreOf(tj) - P.pos.y));
+  }
+
+  // ── fear, paced ────────────────────────────────────────────────────────
+  // Fear shows five works. Two hang in the first corridor, so the walk has
+  // something to hold on to from the start. The third comes only once the
+  // walk has taken in a few scrawls on the walls and a few of the hospital's
+  // things (beds, chairs, trolleys), and appears on a wall somewhere out of
+  // sight, never before the visitor's eyes; the fourth and the fifth each
+  // once the one before is seen. After the fifth
+  // is seen, two more turns of the corridor, and only then the metal door and
+  // the portal. A thing counts as found when the walk passes close by,
+  // looking its way. Works not found yet are hidden, by instance: the same
+  // picture may hang in several chunks.
+  // Grandmother's zone holds five new works: once they are seen, any unseen
+  // one still hanging there goes dark the moment it is out of sight, and
+  // comes back in the light.
+  _memoryQuota() {
+    const st = this.stage.stage, P = this.player;
+    for (const a of this.artworks.active) {
+      if (st === 1 && this.stageSeen[1] >= PORTAL_SEEN_MEMORY && !this.seen.has(a.art.id) && !a.hidden
+        && !this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3)) {
+        a.hidden = a.quota = true; if (a.sub) a.sub.visible = false;
+      } else if (st !== 1 && a.quota) { a.hidden = a.quota = false; if (a.sub) a.sub.visible = true; }
+    }
+  }
+
+  _fearPacing(speed) {
+    const act = this.artworks.active, P = this.player;
+    if (this.stage.stage !== 0) {
+      if (this._fear?.hiding) { for (const a of act) { a.hidden = false; if (a.sub) a.sub.visible = true; } this._fear.hiding = false; }
+      return;
+    }
+    const f = this._fear ||= { shown: new Set(), ids: new Set(), found: new Set(), writings: 0, things: 0, unlocked: FEAR_START, at2: 0, turns: 0, axis: null, hiding: true };
+    const keyOf = a => a.art.id + '@' + a.centerWorld.x.toFixed(1) + ',' + a.centerWorld.z.toFixed(1);
+    for (const a of act) { const on = f.shown.has(keyOf(a)); a.hidden = !on; if (a.sub) a.sub.visible = on; }
+
+    // what the walk has taken in
+    const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+    const look = (key, x, z, kind) => {
+      if (f.found.has(key)) return;
+      const dx = x - P.pos.x, dz = z - P.pos.y, d = Math.hypot(dx, dz);
+      if (d < FIND_NEAR && (fx * dx + fz * dz) / (d || 1) > 0.3) { f.found.add(key); f[kind]++; }
+    };
+    for (const t of this._fearFinds()) look(t.key, t.x, t.z, t.kind);
+
+    // the next work is due
+    const shownSeen = [...f.ids].every(id => this.seen.has(id));
+    if (f.unlocked === 2 && shownSeen && f.shown.size >= 2 && f.writings >= FEAR_FIND_3.writings && f.things >= FEAR_FIND_3.things) f.unlocked = 3;
+    else if (f.unlocked >= 3 && f.unlocked < PORTAL_SEEN_FEAR && shownSeen && f.shown.size >= f.unlocked) f.unlocked++;   // the fourth and fifth, one at a time
+    if (this.tour && shownSeen && f.shown.size >= f.unlocked && f.unlocked < PORTAL_SEEN_FEAR) f.unlocked++;   // the testers' tour does not wait on the finds
+    if (f.shown.size < f.unlocked && (f.shown.size >= FEAR_START || this._walked > 0.3)) {   // the first two from the first step: the chunks ahead have loaded by then
+      const first = f.shown.size < FEAR_START;
+      let best = null, bd = Infinity;
+      for (const a of act) {
+        if (f.ids.has(a.art.id) || this.seen.has(a.art.id)) continue;
+        const dx = a.centerWorld.x - P.pos.x, dz = a.centerWorld.z - P.pos.y, d = Math.hypot(dx, dz);
+        if (this.tour ? d > 40 : first ? d > 30 : (d < 6 || d > 22)) continue;
+        const inSight = this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3);
+        if (!this.tour && !first && (fx * dx + fz * dz) / (d || 1) > 0.2 && inSight) continue;   // never appears in plain view
+        // the first two hang where the visitor can see them, ahead of the
+        // walk, never behind or to the side; a work behind a wall in the next
+        // corridor would leave the walk with nothing, and the third waits on
+        // both being seen. With none ahead in sight yet, it waits for one.
+        if (!this.tour && first && (!inSight || (fx * dx + fz * dz) / (d || 1) < 0.35)) continue;
+        if (d < bd) { bd = d; best = a; }
+      }
+      if (best) {
+        f.shown.add(keyOf(best)); f.ids.add(best.art.id); best.hidden = false; if (best.sub) best.sub.visible = true;
+        if (!first) this._rebuildScatter();              // the candles re-light toward it
+      }
+    }
+
+    // A work shown and walked away from, far and out of sight for a while (or
+    // its chunk gone), is hidden again, so the pacing above hangs it anew
+    // near the walk: nobody is left looking for a picture a hundred metres back (#53).
+    const now = this._time ?? 0;
+    f.lost ??= new Map();
+    for (const key of f.shown) {
+      const id = key.slice(0, key.indexOf('@'));
+      if ([...this.seen].some(s => String(s) === id)) { f.lost.delete(key); continue; }
+      const w = act.find(a => keyOf(a) === key);
+      const far = !w || (Math.hypot(w.centerWorld.x - P.pos.x, w.centerWorld.z - P.pos.y) > LOST_FAR
+        && !this._lineOfSight(P.pos.x, P.pos.y, w.centerWorld.x + w.normal.x * 0.3, w.centerWorld.z + w.normal.z * 0.3));
+      if (!far) { f.lost.delete(key); continue; }
+      if (!f.lost.has(key)) f.lost.set(key, now);
+      if (now - f.lost.get(key) < LOST_FOR) continue;
+      f.lost.delete(key); f.shown.delete(key);
+      for (const i of f.ids) if (String(i) === id) f.ids.delete(i);
+      if (w) { w.hidden = true; if (w.sub) w.sub.visible = false; }
+    }
+
+    // The metal door onto the stairwell (#43, _preplaceStairwell) stands down
+    // the corridor ahead after the first work and again, once the first is out of
+    // sight, after the third. After the fifth work turns
+    // count toward the portal.
+    if ((this._stairCount || 0) === 1 && this.stageSeen[0] === 3) this._retireStairwell();
+    if (speed > 0.5) {
+      const axis = ((Math.round(P.yaw / (Math.PI / 2)) % 4) + 4) % 4;
+      if (f.axis === null) f.axis = axis;
+      else if (axis !== f.axis) {
+        f.axis = axis;
+        if (this.stageSeen[0] >= PORTAL_SEEN_FEAR) f.turns++;
+      }
+    }
+  }
+
+  // Everything in fear that counts as a find: scrawls and boards on the walls,
+  // things lying about, the ward's beds and chairs. Keys are stable per chunk.
+  _fearFinds() {
+    const out = [];
+    for (const [ck, st] of this.chunkStuff) {
+      st.writings.forEach((w, i) => out.push({ key: 'w' + ck + ':' + i, x: w.mesh.position.x, z: w.mesh.position.z, kind: 'writings' }));
+      (st.posters || []).forEach((p, i) => out.push({ key: 'b' + ck + ':' + i, x: p.mesh.position.x, z: p.mesh.position.z, kind: 'writings' }));
+      (st.props?.walls || []).concat(st.props?.air || []).forEach((p, i) => out.push({ key: 'p' + ck + ':' + i, x: p.x, z: p.z, kind: 'things' }));
+      (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || []).forEach((b, i) => out.push({ key: 'm' + ck + ':' + i, x: b.x, z: b.z, kind: 'things' }));
+    }
+    return out;
+  }
+
+  // Threshold check, run every frame: cheap when nothing is due.
+  _maybeSummonPortal(time) {
+    const st = this.stage.stage;
+    // ?dream=1|2|3 (a sketch to judge): the metal door at once, the visitor set before it
+    if (DREAM_PREVIEW && st === 0) {
+      if (!this.summonedPortals[1]) this._summonPortal(1, time);
+      const pl = this.stairwellPlan;
+      if (pl && !this._dreamPlaced) {
+        this._dreamPlaced = true;
+        const nx = Math.sin(pl.rotY), nz = Math.cos(pl.rotY);
+        let d = 0.6;
+        while (d < 4 && this.world.isWalkable(pl.x + nx * (d + 0.2), pl.z + nz * (d + 0.2))) d += 0.2;
+        this.player.pos.set(pl.x + nx * d, pl.z + nz * d);
+        this.player.yaw = pl.rotY;
+      }
+      if (pl) return;
+    }
+    if (st === 0 && !this.summonedPortals[1] && this.stageSeen[0] >= PORTAL_SEEN_FEAR && (this._fear?.turns ?? FEAR_TURNS) >= FEAR_TURNS) this._summonPortal(1, time);
+    else if (st === 0 && this.summonedPortals[1] && !this.stairwellPlan && time - (this._stairTry || 0) > 1) {
+      // no wall for the metal door on the first try: look again from wherever the walk is now
+      this._stairTry = time;
+      this._summonStairwell(this.summonedPortals[1], cellOf(this.player.pos.x), cellOf(this.player.pos.y));
+    }
+    else if (st === 1 && !this.summonedPortals[2] && this.visitedRoom && this.stageSeen[1] >= PORTAL_SEEN_MEMORY) this._summonPortal(2, time);
+    this._keepPortalNear(time);
+  }
+
+  // Candles along the walls are the map. Their colour tells how close you are:
+  //   fear stage     the flame reddens toward a portal into the red rooms
+  //   memory stage   the flame turns yellow toward the next portal, and the
+  //                  wax itself reddens toward grandmother's room
+  //   light stage    pale, nothing left to find
+  _buildScatter(group, cx, cz) {
+    const st = this.stage.stage;
+    const rnd = mulberry32(hash2i(SEED_SCATTER ^ (st * 7919), cx, cz));
+    const portals = this._nextPortals(cx, cz);
+    const kitchens = [];
+    if (st === 1) for (let dz = -5; dz <= 5; dz++) for (let dx = -5; dx <= 5; dx++) { const k = kitchenPlan(cx + dx, cz + dz); if (k) kitchens.push(k); }
+    const seekRoom = st === 1 && !this.visitedRoom;   // red rooms: first the room, then the way on
+    const near = (list, x, z) => { let d = Infinity; for (const p of list) d = Math.min(d, Math.hypot(p.x - x, p.z - z)); return d; };
+    const arts = this.artworks.active.filter(a => !a.hidden).map(a => ({ x: a.centerWorld.x, z: a.centerWorld.z, seen: this.seen.has(a.art.id) }));
+    const unseen = arts.filter(a => !a.seen);
+    const prox = d => { const k = Math.max(0, Math.min(1, 1 - d / 65)); return k * k * (3 - 2 * k); };   // felt from further off (#53)
+    const YELLOW = new THREE.Color(0xffd27a), RED = new THREE.Color(0xff2a14), PALE_WAX = new THREE.Color(0xe6dac0), RED_WAX = new THREE.Color(0x8e1216);
+    const items = [], wallAt = [];
+    const wardCells = this._wardCells.get(cx + ':' + cz);
+    for (let j = 0; j < CHUNK; j++) for (let i = 0; i < CHUNK; i++) {
+      const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+      if (solidAtGlobal(gi, gj)) continue;
+      if (wardCells?.has(cellKey(gi, gj))) continue;  // the hospital's things own these cells
+      const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([di, dj]) => solidAtGlobal(gi + di, gj + dj));
+      const cd = cornerDist(centreOf(gi), centreOf(gj));
+      if (side && cd >= 1.2) wallAt.push({ gi, gj, side });   // the fill below may come nearer a corner
+      if (cd < PROP_FREE) continue;                     // the holy zone round a corner stays bare of the trail
+      const r = rnd();
+      if (!side) continue;                              // only along walls, so paths stay clear
+      const x = centreOf(gi) + side[0] * 0.36 + (rnd() - 0.5) * 0.3;
+      const z = centreOf(gj) + side[1] * 0.36 + (rnd() - 0.5) * 0.3;
+      const pp = seekRoom ? 0 : prox(near(portals, x, z));
+      const pk = st === 1 ? Math.max(0, Math.min(1, 1 - near(kitchens, x, z) / 70)) : 0;
+      // unseen works draw candles to them; around works already seen they are embers
+      const du = near(unseen, x, z), spent = du > CANDLE_NEAR && near(arts, x, z) < CANDLE_NEAR;
+      const pa = du < CANDLE_NEAR ? 1 - du / CANDLE_NEAR : 0;
+      if (r > ((st === 0 ? 0.06 : 0.035) + 0.09 * Math.max(pp, pk) + 0.12 * pa) * Math.max(1, this.quality.p.density) * (st === 2 ? 1.7 : 1)) continue;   // the light loses many to its cloth: set out more   // fear is lit more often: the candles are its map
+      const flame = st === 0 ? YELLOW.clone().lerp(RED, pp)
+        : seekRoom ? YELLOW.clone().lerp(RED, pk)        // before the room: everything reddens toward it
+          : st === 1 ? RED.clone().lerp(YELLOW, pp)      // after: the flame yellows toward the way into the light
+            : new THREE.Color(0xffc970);
+      const wax = st === 1 ? PALE_WAX.clone().lerp(RED_WAX, pk) : PALE_WAX.clone();
+      if (spent) flame.copy(EMBER);
+      else if (pa > 0) flame.multiplyScalar(1 + 0.8 * pa);    // brighter the closer the unseen work
+      // the map's own direction: the nearest thing this candle points toward
+      // (a portal, or an unseen work), for stage 2's floating candles to
+      // drift along without recomputing it every frame
+      let tgx = 0, tgz = 0, tgd = Infinity;
+      for (const p of portals) { const d = Math.hypot(p.x - x, p.z - z); if (d < tgd) { tgd = d; tgx = p.x - x; tgz = p.z - z; } }
+      for (const a of unseen) { const d = Math.hypot(a.x - x, a.z - z); if (d < tgd) { tgd = d; tgx = a.x - x; tgz = a.z - z; } }
+      if (tgd < Infinity && tgd > 1e-3) { tgx /= tgd; tgz /= tgd; }
+      if (this._nearFlammable(cx, cz, x, z) || this._keepOut(cx, cz, x, z, 0.25)) continue;
+      items.push({ type: st === 2 ? 'boatCandle' : 'candle', x, z, rot: rnd() * 6.28, flame, wax, spent, tgx, tgz });
+    }
+    // The floor under the map (#43): wherever a wall is further than CANDLE_FILL
+    // from any candle, here or next door, one more is set down, so at least two
+    // are always in sight and the way can be read. They take the colour of
+    // their place like the rest.
+    const others = [];
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (dx || dz)
+      for (const it of this.chunkStuff.get((cx + dx) + ':' + (cz + dz))?.scatter?.items || []) if (!it.gone) others.push(it);
+    const lit = (x, z) => items.some(it => Math.hypot(it.x - x, it.z - z) < CANDLE_FILL) || others.some(it => Math.hypot(it.x - x, it.z - z) < CANDLE_FILL);
+    for (const { gi, gj, side } of wallAt) {
+      const x = centreOf(gi) + side[0] * 0.36, z = centreOf(gj) + side[1] * 0.36;
+      if (lit(x, z) || this._nearFlammable(cx, cz, x, z) || this._keepOut(cx, cz, x, z, 0.25)) continue;
+      const pp = seekRoom ? 0 : prox(near(portals, x, z)), pk = st === 1 ? Math.max(0, Math.min(1, 1 - near(kitchens, x, z) / 70)) : 0;
+      const du = near(unseen, x, z), spent = du > CANDLE_NEAR && near(arts, x, z) < CANDLE_NEAR;
+      const flame = spent ? EMBER.clone() : st === 0 ? YELLOW.clone().lerp(RED, pp) : seekRoom ? YELLOW.clone().lerp(RED, pk) : st === 1 ? RED.clone().lerp(YELLOW, pp) : new THREE.Color(0xffc970);
+      const wax = st === 1 ? PALE_WAX.clone().lerp(RED_WAX, pk) : PALE_WAX.clone();
+      let tgx = 0, tgz = 0, tgd = Infinity;
+      for (const p of portals.concat(unseen)) { const d = Math.hypot(p.x - x, p.z - z); if (d < tgd) { tgd = d; tgx = p.x - x; tgz = p.z - z; } }
+      if (tgd < Infinity && tgd > 1e-3) { tgx /= tgd; tgz /= tgd; }
+      items.push({ type: st === 2 ? 'boatCandle' : 'candle', x, z, rot: rnd() * 6.28, flame, wax, spent, tgx, tgz });
+    }
+    return buildScatter(group, items);
+  }
+
+  // After a stage change the trail must lead to the next portal: rebuild it.
+  // Things the stage leaves along its corridors (props.js): spots against a
+  // wall on the corridor lattice, kept apart, clear of works, writings,
+  // posters, the hospital's islands, portals and grandmother's room; in the
+  // light also spots in the air for lace and cranes. Pure function of the
+  // chunk, the visit's seed and the stage.
+  _buildProps(group, cx, cz, reserved) {
+    const st = this.stage.stage, low = this.quality.tier === 0;
+    const rp = mulberry32(hash2i(SEED_PROPS ^ (st * 7919), cx, cz));
+    const ward = this._wardCells.get(cx + ':' + cz);
+    const avoid = [];
+    for (const target of [1, 2]) {
+      const p = this.summonedPortals[target];
+      if (p && p.cx === cx && p.cz === cz) avoid.push([cellOf(p.x), cellOf(p.z), 3]);
+    }
+    if (this.stairwellPlan?.cx === cx && this.stairwellPlan?.cz === cz) avoid.push([cellOf(this.stairwellPlan.x), cellOf(this.stairwellPlan.z), 3]);
+    if (st === 1) { const k = kitchenPlan(cx, cz); if (k) avoid.push([cellOf(k.x), cellOf(k.z), 5]); }
+    if (st === 2) { const k = veiledPlan(cx, cz); if (k) avoid.push([cellOf(k.x), cellOf(k.z), 5]); }
+    const free = (gi, gj) => !solidAtGlobal(gi, gj) && !reserved.has(cellKey(gi, gj)) && !ward?.has(cellKey(gi, gj))
+      && cornerDist(centreOf(gi), centreOf(gj)) >= PROP_FREE
+      && avoid.every(([ai, aj, r]) => Math.max(Math.abs(gi - ai), Math.abs(gj - aj)) > r);
+    const wallSpots = [], airSpots = [];
+    for (let j = 1; j < CHUNK - 1; j++) for (let i = 1; i < CHUNK - 1; i++) {
+      if (!EGG_BAND.has(i) && !EGG_BAND.has(j)) continue;              // corridor lattice only
+      const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+      if (!free(gi, gj)) continue;
+      airSpots.push({ gi, gj });
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+        if (solidAtGlobal(gi + di, gj + dj)) {
+          // the wall a window would sit in: open on both sides along the
+          // face too, and the wall itself keeps going past them, so a
+          // 0.95 m frame and its 1.55 m curtain rod never hang past a
+          // corner or a doorway into empty air
+          const tx = di !== 0 ? 0 : 1, tz = di !== 0 ? 1 : 0;
+          const run3 = !solidAtGlobal(gi + tx, gj + tz) && !solidAtGlobal(gi - tx, gj - tz)
+            && solidAtGlobal(gi + tx + di, gj + tz + dj) && solidAtGlobal(gi - tx + di, gj - tz + dj);
+          wallSpots.push({ gi, gj, di, dj, run3 });
+        }
+    }
+    const dens = this.quality.p.density;
+    const choose = (list, n, gap) => {
+      const out = [];
+      for (let tries = 0; tries < 60 * Math.max(1, dens) && out.length < n && list.length; tries++) {
+        const s = list[Math.floor(rp() * list.length)];
+        if (out.every(o => Math.max(Math.abs(o.gi - s.gi), Math.abs(o.gj - s.gj)) >= gap)) out.push(s);
+      }
+      return out;
+    };
+    const nWall = Math.round((st === 2 ? 5 : 7) * dens);
+    // the halls too (#43): along the walls of every hall from 4 x 4, about one
+    // thing to five cells of its edge, clear of its corners (a plant may stand there)
+    const hallWalls = [];
+    for (const rm of chunkRooms(cx, cz)) {
+      if (rm.x1 - rm.x0 + 1 < 4 || rm.y1 - rm.y0 + 1 < 4 || rp() < 0.35) continue;   // about a third of the halls stay bare
+      const here = [];
+      for (let j = rm.y0; j <= rm.y1; j++) for (let i = rm.x0; i <= rm.x1; i++) {
+        const edge = i === rm.x0 || i === rm.x1 || j === rm.y0 || j === rm.y1;
+        const nearCorner = (i - rm.x0 < 2 || rm.x1 - i < 2) && (j - rm.y0 < 2 || rm.y1 - j < 2);
+        if (!edge || nearCorner) continue;
+        const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+        // a hall's wall is not a corridor's: its things may come nearer a corner
+        if (solidAtGlobal(gi, gj) || reserved.has(cellKey(gi, gj)) || ward?.has(cellKey(gi, gj)) || cornerDist(centreOf(gi), centreOf(gj)) < 1.2
+          || !avoid.every(([ai, aj, r]) => Math.max(Math.abs(gi - ai), Math.abs(gj - aj)) > r)) continue;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (solidAtGlobal(gi + di, gj + dj)) {
+          const tx = di !== 0 ? 0 : 1, tz = di !== 0 ? 1 : 0;
+          const run3 = !solidAtGlobal(gi + tx, gj + tz) && !solidAtGlobal(gi - tx, gj - tz)
+            && solidAtGlobal(gi + tx + di, gj + tz + dj) && solidAtGlobal(gi - tx + di, gj - tz + dj);
+          here.push({ gi, gj, di, dj, run3 });
+        }
+      }
+      const edgeCells = 2 * (rm.x1 - rm.x0 + rm.y1 - rm.y0);
+      hallWalls.push(...choose(here, Math.round(edgeCells / 5 * Math.min(1.5, Math.max(0.6, dens))), 3));
+    }
+    // never over a carpet, a notice board or a writing on the same wall: its
+    // own half width hw along the face, plus a hand's gap
+    const busy = this._wallBusy?.get(cx + ':' + cz) || [];
+    const onBusy = (x, z, nx, nz, hw) => !this._wallFree(cx, cz, busy, x, z, nx, nz, hw);
+    const faceOf = s => ({ x: centreOf(s.gi) + s.di * CELL / 2, z: centreOf(s.gj) + s.dj * CELL / 2, nx: -s.di, nz: -s.dj });
+    const clearWall = (s, hw) => { const f = faceOf(s); return !onBusy(f.x, f.z, f.nx, f.nz, hw); };
+    const walls = choose(wallSpots.filter(s => clearWall(s, 0.8)), nWall, dens > 1.2 ? 2 : 3).concat(hallWalls.filter(s => clearWall(s, 0.8))).map(s => ({
+      ...faceOf(s), r: rp(), run3: s.run3 }))
+      .filter((w, i, all) => all.findIndex(o => o.nx === w.nx && o.nz === w.nz && Math.hypot(o.x - w.x, o.z - w.z) < 1.8) === i);   // a hall's pick and a corridor's may meet on one face: one of them
+    const air = st === 2 ? choose(airSpots, Math.round(4 * dens), dens > 1.2 ? 3 : 4).map(s => ({ x: centreOf(s.gi), z: centreOf(s.gj), r: rp() })) : [];
+    const sp = this.stairwellPlan, clearOf = q => Object.values(this.summonedPortals || {}).every(p => !p || Math.hypot(p.x - q.x, p.z - q.z) > 2.6)
+      && (!sp || Math.hypot(sp.x - q.x, sp.z - q.z) > 3);
+    for (const list of [walls, air]) for (let i = list.length - 1; i >= 0; i--) if (!clearOf(list[i])) list.splice(i, 1);
+    // everything on a wall may be a curtained window: remember it, a candle keeps off
+    (this._flammable ||= new Map()).set(cx + ':' + cz, walls.concat(air).map(w => ({ x: w.x, z: w.z })));   // hanging cloth in the air too
+    const built = this.props.build(group, st, walls, air);
+    // ivy up the corridor walls of fear and memory (#43; none in the light): a
+    // few patches a chunk, on wall spots the props left, two cells clear of them
+    const ivySpots = choose(wallSpots.filter(w => clearWall(w, 0.6) && !solidAtGlobal(w.gi - w.di, w.gj - w.dj) && free(w.gi - w.di, w.gj - w.dj) && walls.every(o => Math.hypot(o.x - (centreOf(w.gi) + w.di * CELL / 2), o.z - (centreOf(w.gj) + w.dj * CELL / 2)) > 2 * CELL)), Math.round(2.5 * Math.max(0.6, dens)), 3)
+      .map(w => ({ x: centreOf(w.gi) + w.di * CELL / 2, z: centreOf(w.gj) + w.dj * CELL / 2, nx: -w.di, nz: -w.dj })).filter(clearOf);
+    const ivy = buildIvy(group, st, ivySpots, hash2i(SEED_PROPS ^ 0x1717, cx, cz), this.atmo);
+    if (ivy) {                                           // the pots stand in the way like any other thing; candles keep off
+      built.boxes = built.boxes.concat(ivy.pots.map(q => footBox(q.x, q.z, 0.45)));
+      this._flammable.get(cx + ':' + cz).push(...ivy.pots);
+    }
+    // the zone's plants (#39, #43): in halls from 4 x 4 cells, in a corner or the
+    // middle, and in the dead ends of corridors, where nobody has to pass. Fear
+    // its pale ficus; grandmother's zone the light's tropics in her porcelain;
+    // the light one of its five (the monstera, tropics.js), place to place
+    // the light has twice the green (#80): two a hall, three in a big one, more
+    // dead ends, and pots along the walls of its widened corridors
+    const spots = this._hallPlantSpots(cx, cz, free, rp, 1, st >= 1 ? { p: 0.95, side: 4, per: 2 } : { p: 0.8, side: 4 })   // grandmother's zone as green as the light (#96)
+      .concat(this._deadEndSpots(cx, cz, free, rp, st >= 1 ? 3 : 2));
+    // (the crossings' three steps of air are kept on the old lane, which the grove never touches)
+    const groveFree = (gi, gj) => !solidAtGlobal(gi, gj) && !reserved.has(cellKey(gi, gj)) && !ward?.has(cellKey(gi, gj))
+      && avoid.every(([ai, aj, r]) => Math.max(Math.abs(gi - ai), Math.abs(gj - aj)) > r);
+    if (st === 2 && corridorWidth(cx, cz)) spots.push(...this._groveSpots(cx, cz, groveFree, rp, spots));
+    // small things on the walls of fear and memory (#43, C4): a clock, a plate, a
+    // portrait, a calendar, one to three a chunk, clear of the props and the ivy;
+    // the event director may take one down (events.js)
+    const rh = mulberry32(hash2i(SEED_PROPS ^ 0x3c1, cx, cz)), hangSpots = [];
+    const far = (x, z, list, d) => list.every(o => Math.hypot(o.x - x, o.z - z) > d);
+    const hangCand = st === 2 ? [] : wallSpots.map(w => ({ x: centreOf(w.gi) + w.di * CELL / 2, z: centreOf(w.gj) + w.dj * CELL / 2, nx: -w.di, nz: -w.dj }))
+      .filter(q => far(q.x, q.z, walls, 1.4) && far(q.x, q.z, ivySpots, 1.6) && clearOf(q) && !onBusy(q.x, q.z, q.nx, q.nz, 0.3));
+    const nHang = hangCand.length ? Math.round((1 + rh() * 2) * Math.min(1.3, Math.max(0.6, dens))) : 0;
+    for (let tries = 0; tries < 40 && hangSpots.length < nHang; tries++) {
+      const q = hangCand[Math.floor(rh() * hangCand.length)];
+      if (far(q.x, q.z, hangSpots, 3 * CELL)) hangSpots.push({ ...q, r: rh() });
+    }
+    const hung = this.wallThings.build(group, st, hangSpots);
+    built.hung = hung.hung;
+    // what the event director already took down stays down when the chunk is built again
+    for (const h of built.hung) {
+      h.home = st + ':' + h.mesh.position.x.toFixed(2) + ':' + h.mesh.position.z.toFixed(2);
+      const rest = this._fallen?.get(h.home);
+      if (!rest) continue;
+      h.fallen = true;
+      h.mesh.position.copy(rest.pos);
+      h.mesh.rotation.copy(rest.rot);
+    }
+    const plantsDispose = () => { ivy?.dispose(); hung.dispose(); };
+    if (!spots.length) return { ...built, dispose() { built.dispose(); plantsDispose(); } };
+    this._flammable.get(cx + ':' + cz).push(...spots.map(q => ({ x: q.x, z: q.z })));   // candles keep off
+    const pickOf = (q, list) => list[Math.floor(Math.abs(Math.sin(q.x * 12.9898 + q.z * 78.233) * 43758.5453) % 1 * list.length)];
+    const kindOf = q => st === 0 ? 'fear' : st === 1 ? 'room:' + pickOf(q, ROOM_PLANTS) : (q.corner ? 'accept-corner:' : 'accept-middle:') + pickOf(q, LIGHT_PLANTS);
+    const kinds = ['fear', ...ROOM_PLANTS.map(n => 'room:' + n), ...LIGHT_PLANTS.flatMap(n => ['accept-corner:' + n, 'accept-middle:' + n])];
+    const sets = kinds.map(k => buildHallPlants(group, k, spots.filter(q => kindOf(q) === k), this.atmo));
+    return { ...built, boxes: built.boxes.concat(...sets.map(p => p.boxes)), dispose() { built.dispose(); plantsDispose(); sets.forEach(p => p.dispose()); } };
+  }
+
+  // Where a hall takes a plant: a hall of at least 6 x 6 cells, in one of its
+  // true corners (walls on both outer sides) or in its very middle, never
+  // within `gap` cells of the corridor lattice that runs through it (the way
+  // through stays clear of the leaves too), on cells free of everything else
+  // (the whole 3 x 3 round it). With gap 2 about a third of the big halls
+  // have such a place; seven in ten of those get a plant (opt: { p, side },
+  // the share that gets one and the smallest hall side, for the light zone).
+  _hallPlantSpots(cx, cz, free, rp, gap, { p = 0.7, side = 6, per = 1 } = {}) {
+    const bands = [];
+    for (let b = 0; b < CHUNK; b++) if (isBandCell(cx, cz, b)) bands.push(b);   // this chunk's lattice, however wide
+    const bandDist = i => Math.min(...bands.map(b => Math.abs(i - b)));
+    const ok = (i, j) => bandDist(i) >= gap && bandDist(j) >= gap;
+    const clear = (gi, gj) => { for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (!free(gi + di, gj + dj) && !(di || dj ? solidAtGlobal(gi + di, gj + dj) : false)) return false; return free(gi, gj); };
+    const out = [];
+    for (const rm of chunkRooms(cx, cz)) {
+      if (rm.x1 - rm.x0 + 1 < side || rm.y1 - rm.y0 + 1 < side || rp() > p) continue;
+      const cands = [];
+      for (const [i, j, oi, oj] of [[rm.x0, rm.y0, -1, -1], [rm.x1, rm.y0, 1, -1], [rm.x0, rm.y1, -1, 1], [rm.x1, rm.y1, 1, 1]]) {
+        const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+        if (!ok(i, j) || !solidAtGlobal(gi + oi, gj) || !solidAtGlobal(gi, gj + oj) || !clear(gi, gj)) continue;
+        // into the corner, 0.55 m off both walls
+        cands.push({ x: centreOf(gi) + oi * 0.05, z: centreOf(gj) + oj * 0.05, rot: Math.atan2(-oi, -oj), corner: true });
+      }
+      const mi = Math.floor((rm.x0 + rm.x1) / 2), mj = Math.floor((rm.y0 + rm.y1) / 2), gi = cx * CHUNK + mi, gj = cz * CHUNK + mj;
+      if (ok(mi, mj) && clear(gi, gj)) cands.push({ x: centreOf(gi), z: centreOf(gj), rot: rp() * 6.28 });
+      if (!cands.length) continue;
+      // one plant a hall, two in a big one (a corner each), four metres apart
+      // (per: how many a small hall takes, a big one one more)
+      const big = rm.x1 - rm.x0 + 1 >= 6 && rm.y1 - rm.y0 + 1 >= 6;
+      for (let n = 0; n < (big ? per + 1 : per) && cands.length; n++) {
+        const c = cands.splice(Math.floor(rp() * cands.length), 1)[0];
+        if (out.every(o => Math.hypot(o.x - c.x, o.z - c.z) > 4)) out.push(c);
+      }
+    }
+    return out;
+  }
+
+  // The dead ends of corridors (#43): an open cell with wall on three sides,
+  // off the corridor lattice, free with the cell in front of it, gets a plant
+  // turned toward the way out, about one dead end in two.
+  _deadEndSpots(cx, cz, free, rp, cap = 2) {
+    const out = [];
+    for (let j = 1; j < CHUNK - 1; j++) for (let i = 1; i < CHUNK - 1; i++) {
+      if (EGG_BAND.has(i) || EGG_BAND.has(j)) continue;
+      const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+      if (!free(gi, gj)) continue;
+      const open = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([di, dj]) => !solidAtGlobal(gi + di, gj + dj));
+      if (open.length !== 1 || !free(gi + open[0][0], gj + open[0][1]) || rp() > 0.5) continue;
+      const [di, dj] = open[0];
+      out.push({ x: centreOf(gi) - di * 0.1, z: centreOf(gj) - dj * 0.1, rot: Math.atan2(di, dj) });
+    }
+    return out.slice(0, cap);
+  }
+
+  // The light's widened corridors (#80): pots against the walls of the cells
+  // the corridor gained, off the old two-cell lane (the way through stays as it
+  // was) and off the chunk's seams, where doors stand; a couple more for each
+  // level of width, three and a half metres apart and from `taken`.
+  _groveSpots(cx, cz, free, rp, taken) {
+    const lv = corridorWidth(cx, cz), out = [], want = 2 * lv;
+    const cands = [];
+    for (let j = 2; j < CHUNK - 2; j++) for (let i = 2; i < CHUNK - 2; i++) {
+      if (EGG_BAND.has(i) || EGG_BAND.has(j)) continue;                     // the old lane
+      if (!isBandCell(cx, cz, i) && !isBandCell(cx, cz, j)) continue;       // only what the corridor gained
+      const gi = cx * CHUNK + i, gj = cz * CHUNK + j;
+      if (!free(gi, gj)) continue;
+      const walls = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([di, dj]) => solidAtGlobal(gi + di, gj + dj));
+      if (walls.length !== 1) continue;                                     // against one wall, not in a corner
+      const [di, dj] = walls[0];
+      if (!free(gi - di, gj - dj)) continue;                                // and the cell in front is clear
+      cands.push({ x: centreOf(gi) + di * 0.1, z: centreOf(gj) + dj * 0.1, rot: Math.atan2(-di, -dj) });
+    }
+    while (out.length < want && cands.length) {
+      const c = cands.splice(Math.floor(rp() * cands.length), 1)[0];
+      if (out.concat(taken).every(o => Math.hypot(o.x - c.x, o.z - c.z) > 3.5)) out.push(c);
+    }
+    return out;
+  }
+
+  // How wide the corridors of a chunk met now are (#80, world.js): narrow
+  // outside the light; in it, wider at 15, 40 and 65 % of the works that were
+  // still unseen when the visitor came in.
+  _widthLevel() {
+    if (this.stage?.stage !== 2) return 0;
+    const share = this._acceptShare();
+    return [0.06, 0.22, 0.45].filter(k => share >= k).length;   // wider sooner (#96)
+  }
+
+  // For checks (tests/smoke.mjs): everything flat on the walls of the loaded
+  // chunks, tested pair by pair against the rule above and against the works
+  // as they actually hang. Returns the count and a few of the clashes.
+  _auditWalls() {
+    const things = [], bad = [];
+    for (const st of this.chunkStuff.values()) {
+      for (const b of st.wallBusy || []) things.push(b);
+      for (const w of st.props?.walls || []) things.push({ x: w.x, z: w.z, nx: w.nx, nz: w.nz, hw: 0.4 });
+      for (const h of st.props?.hung || []) if (!h.fallen) things.push({ x: h.mesh.position.x, z: h.mesh.position.z, nx: h.nx, nz: h.nz, hw: 0.3 });
+    }
+    const face = (a, b) => Math.abs(a.nx - b.nx) < 0.1 && Math.abs(a.nz - b.nz) < 0.1 && Math.abs((a.x - b.x) * a.nx + (a.z - b.z) * a.nz) < 0.3;
+    for (let i = 0; i < things.length; i++) for (let j = i + 1; j < things.length; j++) {
+      const a = things[i], b = things[j];
+      if (face(a, b) && Math.abs((a.x - b.x) * a.nz - (a.z - b.z) * a.nx) < a.hw + b.hw - 0.05) bad.push(['thing', a.x.toFixed(1), a.z.toFixed(1)]);
+    }
+    for (const w of this.artworks?.active || []) {
+      const half = (w.width + 0.68) / 2, n = w.normal, c = w.centerWorld;
+      const tx = n.z, tz = -n.x, mx = c.x + tx * 0.28, mz = c.z + tz * 0.28;   // the middle of frame and placard together
+      for (const a of things) {
+        if (n.x * a.nx + n.z * a.nz < -0.5) continue;
+        const ahead = (a.x - mx) * n.x + (a.z - mz) * n.z, along = Math.abs((a.x - mx) * n.z - (a.z - mz) * n.x);
+        if (ahead < -0.3) continue;
+        if (Math.hypot(Math.max(0, along - half - a.hw), Math.max(0, ahead)) < ART_CLEAR - 0.05) bad.push(['work ' + w.art.id, a.x.toFixed(1), a.z.toFixed(1)]);
+      }
+    }
+    return { things: things.length, works: this.artworks?.active?.length || 0, clashes: bad.length, some: bad.slice(0, 5) };
+  }
+
+  // the share of the works still unseen on entering the light that the
+  // visitor has found there since, 0..1; 0 outside the light
+  _acceptShare() {
+    if (this.stage?.stage !== 2) return 0;
+    const left = this.total - (this.seen.size - this.stageSeen[2]);
+    return Math.min(1, this.stageSeen[2] / Math.max(1, left));
+  }
+
+  // One rule for everything flat on a wall (#94): nothing over anything else
+  // on the same face, its own half width hw plus a hand's gap; and nothing
+  // within three steps of a work's frame and placard, on its face or round
+  // the corner (artworks.js artworkBusy). busy: the chunk's records so far.
+  _wallFree(cx, cz, busy, x, z, nx, nz, hw) {
+    for (const b of busy) {
+      if (Math.abs(b.nx - nx) < 0.1 && Math.abs(b.nz - nz) < 0.1
+        && Math.abs((x - b.x) * nx + (z - b.z) * nz) < 0.3 && Math.abs((x - b.x) * nz - (z - b.z) * nx) < b.hw + hw + 0.2) return false;
+    }
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) for (const b of artworkBusy(cx + dx, cz + dz)) {
+      const ahead = (x - b.x) * b.nx + (z - b.z) * b.nz, along = Math.abs((x - b.x) * b.nz - (z - b.z) * b.nx);
+      if (b.nx * nx + b.nz * nz < -0.5 || ahead < -0.3) continue;   // across the corridor, or behind the wall
+      if (Math.hypot(Math.max(0, along - b.half - hw), Math.max(0, ahead)) < ART_CLEAR) return false;
+    }
+    return true;
+  }
+
+  // Nothing is set down on top of something else: the ways through doors and
+  // portals, the metal door's threshold, the hospital's beds, grandmother's
+  // room and whatever props already stand nearby keep their ground. pad:
+  // the item's own reach. Checks only this chunk and its neighbours.
+  _keepOut(cx, cz, x, z, pad = 0.35) {
+    for (const p of Object.values(this.summonedPortals || {})) if (p && Math.hypot(p.x - x, p.z - z) < 2.4 + pad) return true;
+    const sp = this.stairwellPlan;
+    if (sp && Math.hypot(sp.x - x, sp.z - z) < 2.8 + pad) return true;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const st = this.chunkStuff.get((cx + dx) + ':' + (cz + dz));
+      if (!st) continue;
+      if (this.stage.stage === 0) for (const d of st.doors || []) if (Math.hypot(d.x - x, d.z - z) < 1.8 + pad) return true;
+      for (const q of (st.props?.walls || []).concat(st.props?.air || [])) if (Math.hypot(q.x - x, q.z - z) < 0.5 + pad) return true;
+      for (const h of st.props?.hung || []) if (h.fallen && Math.hypot(h.mesh.position.x - x, h.mesh.position.z - z) < 0.3 + pad) return true;
+      for (const b of (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || [])) if (Math.hypot(b.x - x, b.z - z) < b.r + pad) return true;
+      const k = st.kitchen;
+      if (k && x > k.minX - pad && x < k.maxX + pad && z > k.minZ - pad && z < k.maxZ + pad) return true;
+    }
+    return false;
+  }
+
+  // A chunk's props are built after its neighbours' candles may already
+  // stand: any of those candles now too close to a curtain, a hanging cloth
+  // or a plant of this chunk is taken away (hidden, its light dark, never
+  // floated or guttered again), so no flame burns under the cloth (#43).
+  _snuffNear(cx, cz) {
+    const mine = this._flammable?.get(cx + ':' + cz);
+    if (!mine?.length) return;
+    const dark = new THREE.Color(0), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const sc = this.chunkStuff.get((cx + dx) + ':' + (cz + dz))?.scatter;
+      if (!sc?.items) continue;
+      const ccx = cx + dx, ccz = cz + dz;
+      sc.items.forEach((it, i) => {
+        if (it.gone || !mine.some(f => Math.hypot(f.x - it.x, f.z - it.z) < CANDLE_CURTAIN_GAP)) return;
+        // first try the nearest place along a wall within 3 m that is clear of cloth and of other candles
+        let best = null, bd = Infinity;
+        const gi0 = cellOf(it.x), gj0 = cellOf(it.z);
+        for (let gj = gj0 - 3; gj <= gj0 + 3; gj++) for (let gi = gi0 - 3; gi <= gi0 + 3; gi++) {
+          if (solidAtGlobal(gi, gj)) continue;
+          const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([a, b]) => solidAtGlobal(gi + a, gj + b));
+          if (!side) continue;
+          const x = centreOf(gi) + side[0] * 0.36, z = centreOf(gj) + side[1] * 0.36, d = Math.hypot(x - it.x, z - it.z);
+          if (d >= bd || d > 3 || this._nearFlammable(ccx, ccz, x, z) || this._keepOut(ccx, ccz, x, z, 0.25)
+            || sc.items.some((o, j) => j !== i && !o.gone && Math.hypot(o.x - x, o.z - z) < 0.8)) continue;
+          bd = d; best = { x, z };
+        }
+        if (best) { sc.move(i, best.x, best.z); return; }
+        it.gone = true;
+        for (const name in sc.meshes) { sc.meshes[name].setMatrixAt(i, zero); sc.meshes[name].instanceMatrix.needsUpdate = true; }
+        if (sc.lights?.[i]) sc.lights[i].col = dark;
+      });
+    }
+  }
+
+  // a candle never stands where it would set a curtain alight
+  _nearFlammable(cx, cz, x, z) {
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++)
+      for (const f of this._flammable?.get((cx + dx) + ':' + (cz + dz)) || [])
+        if (Math.hypot(f.x - x, f.z - z) < CANDLE_CURTAIN_GAP) return true;
+    return false;
+  }
+
+  // Where the view is taken to see into the door: a step and a bit in front
+  // of it, a little to the free side of the leaf's swing, looking at the
+  // opening. { from, spot, doorYaw, ... } — see _stairHold.
+  _stairView(sw) {
+    const P = this.player, r = sw.group.rotation.y;
+    const nx = Math.sin(r), nz = Math.cos(r), ax = Math.cos(r), az = -Math.sin(r);   // out of the wall, and along it (the door's local +x)
+    let spot = null;
+    for (const dist of [1.4, 1.1, 0.8]) {
+      const x = sw.group.position.x + nx * dist + ax * 0.3, z = sw.group.position.z + nz * dist + az * 0.3;
+      if (this.world.isWalkable(x, z)) { spot = { x, z }; break; }
+    }
+    spot ??= { x: P.pos.x, z: P.pos.y };
+    return {
+      from: { x: P.pos.x, z: P.pos.y }, spot, yaw0: P.yaw, pitch0: P.pitch,
+      doorYaw: Math.atan2(-(sw.group.position.x - 0.05 * ax - spot.x), -(sw.group.position.z - 0.05 * az - spot.z)),
+      way: null, yawFrom: 0, pitchFrom: 0, turnT: 0,
+    };
+  }
+
+  // One frame of the held view: it flies to the spot while the door opens,
+  // stays there with only a few degrees of turn, and comes round level onto
+  // the way on as the door shuts.
+  _stairHold(sw, dt) {
+    const P = this.player, c = sw.cam;
+    const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+    const ease = e => e * e * (3 - 2 * e);
+    P.vel.set(0, 0);
+    if (sw.phase === 'open') {
+      const e = ease(Math.min(1, sw.t / STAIR_FLY));
+      P.pos.set(c.from.x + (c.spot.x - c.from.x) * e, c.from.z + (c.spot.z - c.from.z) * e);
+      P.yaw = c.doorYaw + wrap(c.yaw0 - c.doorYaw) * (1 - e);
+      P.pitch = c.pitch0 * (1 - e);
+    } else if (sw.phase === 'hold') {
+      P.pos.set(c.spot.x, c.spot.z);
+      P.yaw = c.doorYaw + Math.max(-STAIR_FREE, Math.min(STAIR_FREE, wrap(P.yaw - c.doorYaw)));
+      P.pitch = Math.max(-STAIR_FREE, Math.min(STAIR_FREE, P.pitch));
+    } else {                                            // slam, turn
+      c.turnT += dt;
+      const e = ease(Math.min(1, c.turnT / STAIR_TURN));
+      if (sw.phase === 'turn') c.backT = (c.backT || 0) + dt;
+      const back = ease(Math.min(1, (c.backT || 0) / STAIR_TURN));   // and, once shut, steps back to where the walk was
+      P.pos.set(c.spot.x + (c.from.x - c.spot.x) * back, c.spot.z + (c.from.z - c.spot.z) * back);
+      P.yaw = c.yawFrom + wrap(c.way - c.yawFrom) * e;
+      P.pitch = c.pitchFrom * (1 - e);
+    }
+    P._apply(0);
+  }
+
+  // Whatever hangs on the walls within r metres of a spot (notice boards,
+  // carpets, writings) is taken down: a door or a portal owns that stretch.
+  _clearAround(x, z, r) {
+    const near = m => Math.hypot(m.position.x - x, m.position.z - z) < r;
+    for (const st of this.chunkStuff.values()) {
+      st.posters = (st.posters || []).filter(p => { if (!near(p.mesh)) return true; p.mesh.parent?.remove(p.mesh); return false; });
+      st.carpets = (st.carpets || []).filter(m => { if (!near(m)) return true; m.parent?.remove(m); return false; });
+      st.writings = (st.writings || []).filter(w => { if (!near(w.mesh)) return true; w.mesh.parent?.remove(w.mesh); return false; });
+    }
+  }
+
+  // A door or a portal has just been given a place in this chunk: what was
+  // already built there is drawn again so nothing is left standing on it.
+  _rebuildChunkProps(cx, cz, st) {
+    st.props?.dispose();
+    st.props = this._buildProps(st.group, cx, cz, st.reserved || new Set());
+    this._snuffNear(cx, cz);
+    st.scatter?.dispose();
+    st.scatter = this._buildScatter(st.group, cx, cz);
+  }
+
+  // Everything set down along the corridors, built again for a changed world.
+  // A chunk takes a few milliseconds and some thirty are loaded: the one the
+  // visitor stands in goes at once, the rest one a frame, nearest first
+  // (_stepRebuild, from update), so the walk never stops for it.
+  _rebuildScatter() {
+    const P = this.player.pos, span = CHUNK * CELL;
+    const far = key => { const [cx, cz] = key.split(':').map(Number); return Math.hypot((cx + 0.5) * span - P.x, (cz + 0.5) * span - P.y); };
+    this._rebuildQueue = [...this.chunkStuff.keys()].sort((a, b) => far(a) - far(b));
+    this._stepRebuild();
+  }
+  _stepRebuild() {
+    const key = this._rebuildQueue?.shift();
+    if (key === undefined) return;
+    const st = this.chunkStuff.get(key);
+    if (!st) return;                                     // unloaded meanwhile
+    st.scatter?.dispose();
+    const [cx, cz] = key.split(':').map(Number);
+    st.scatter = this._buildScatter(st.group, cx, cz);
+    st.props?.dispose();
+    st.props = this._buildProps(st.group, cx, cz, st.reserved || new Set());
+    this._snuffNear(cx, cz);
+    st.drown?.dispose();
+    st.drown = this.stage.stage === 2 ? this.drowned.build(st.group, cx, cz, this._drownSpots(cx, cz, st.reserved || new Set())) : null;
+  }
+
+  // ── the television ─────────────────────────────────────────────────────
+  // One screen texture for every room: the current question in bright
+  // phosphor while it is being asked, otherwise snow (black and white static).
+  _tvTexture() {
+    if (this._tv) return this._tv;
+    const c = document.createElement('canvas'); c.width = 256; c.height = 192;
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    this._tv = { c, g: c.getContext('2d'), tex, img: null, frame: 0 };
+    return this._tv;
+  }
+  _drawTV() {
+    const tv = this._tvTexture(), g = tv.g, W = tv.c.width, H = tv.c.height, now = performance.now();
+    // touched three times (rituals.js): a white flare of snow, then the time,
+    // large, as if the set had only ever been a clock; then back to what it showed
+    if (now < (this._tvBurstUntil || 0)) {
+      if (!tv.img) tv.img = g.createImageData(W, H);
+      const d = tv.img.data;
+      for (let i = 0; i < W * H; i++) { const v = 150 + Math.random() * 105; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
+      g.putImageData(tv.img, 0, 0);
+      tv.tex.needsUpdate = true; this._tvDirty = true;
+      return true;
+    }
+    if (now < (this._tvClockUntil || 0)) {
+      g.fillStyle = '#050000'; g.fillRect(0, 0, W, H);
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '700 64px "Departure Mono", monospace';
+      g.fillStyle = '#ffe2d6'; g.shadowColor = '#ff3a20';
+      g.shadowBlur = 18 + 10 * Math.sin(now / 90); g.fillText('12:24', W / 2, H / 2 + 4);
+      g.shadowBlur = 0; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+      for (let yy = (now / 40 | 0) % 3; yy < H; yy += 3) { g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(0, yy, W, 1); }
+      tv.tex.needsUpdate = true; this._tvDirty = true;   // the soul's words are redrawn after
+      return true;
+    }
+    const talking = this._tvText && now < this._tvUntil;
+    if (talking) {
+      if (!this._tvDirty) return true;
+      this._tvDirty = false;
+      g.fillStyle = '#050000'; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#ffd2c4'; g.shadowColor = '#ff4a30'; g.shadowBlur = 8;
+      g.font = '17px "Departure Mono", monospace';
+      const words = this._tvText.split(/\s+/); let line = '', y = 44;
+      for (const w of words) { const tt = line ? line + ' ' + w : w; if (g.measureText(tt).width > 224 && line) { g.fillText(line, 16, y); line = w; y += 22; } else line = tt; }
+      g.fillText(line, 16, y);
+      g.shadowBlur = 0;
+      for (let yy = 0; yy < H; yy += 2) { g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(0, yy, W, 1); }
+      tv.tex.needsUpdate = true;
+      return true;
+    }
+    // snow: redraw every other frame, grey-white dots on black, a rolling bar
+    if ((tv.frame++ & 1) === 0) {
+      if (!tv.img) tv.img = g.createImageData(W, H);
+      const d = tv.img.data, bar = (performance.now() / 12) % H;
+      for (let i = 0; i < W * H; i++) {
+        const y = (i / W) | 0;
+        let v = Math.random() < 0.5 ? Math.random() * 90 : 120 + Math.random() * 135;
+        if (Math.abs(y - bar) < 8) v *= 1.25;
+        d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255;
+      }
+      g.putImageData(tv.img, 0, 0);
+      tv.tex.needsUpdate = true;
+    }
+    return false;
+  }
+
+  // ── clouds ─────────────────────────────────────────────────────────────
+  // In the light the souls are gone; small clouds drift through the fog
+  // instead, above the head, each carrying a question about acceptance.
+  // Stand still and one sinks toward you; walk into it and it asks, then
+  // thins away and gathers again somewhere else.
+  _hideRoamers() {
+    if (this._roamersHidden || !this.roamers) return;
+    this._roamersHidden = true;
+    this._hideSouls(this.roamers);
+  }
+  _hideSouls(list) {
+    for (const r of list || []) { r.sprite.visible = false; r.tail.forEach(t => { t.visible = false; }); }
+  }
+  _askAccept(time) {
+    if (this.finale) return;
+    this._soulAt = time; this._walked = 0;
+    const qs = t('acceptQuestions');
+    const order = this._soulOrder(3, qs.length);
+    this._soulIdx[3] = this._soulIdx[3] || 0;
+    const text = qs[order[this._soulIdx[3]++ % qs.length]];
+    if (!this.asked.includes(text)) this.asked.push(text);
+    this.audio?.whisper?.();
+    this._say(t('cloudLabel'), text, SKY, { onGone: () => this.audio?.fairy?.() });
+  }
+  // open floor a metre round (x, z): clouds and balloons keep clear of walls
+  _airClear(x, z, r = 1.0) {
+    for (const [dx, dz] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r], [r * 0.7, r * 0.7], [-r * 0.7, r * 0.7], [r * 0.7, -r * 0.7], [-r * 0.7, -r * 0.7]])
+      if (solidAtGlobal(cellOf(x + dx), cellOf(z + dz))) return false;
+    return true;
+  }
+  _updateClouds(dt, time, speed) {
+    const P = this.player;
+    this._updateBalloons(dt, time, speed);
+    this._updateSurfaceBalloon(time);
+    if (!this.clouds) {
+      const tex = cloudTexture();
+      this.clouds = Array.from({ length: 4 }, (_, i) => {
+        const puffs = [1, 0.7, 0.62, 0.5].map((k, j) => {
+          const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xf4f6f1, transparent: true, depthWrite: false, fog: true, opacity: 0 }));
+          sp.userData.k = k; sp.userData.off = new THREE.Vector3(j ? (Math.random() - 0.5) * 0.5 : 0, j ? (Math.random() - 0.4) * 0.18 : 0, j ? (Math.random() - 0.5) * 0.5 : 0);
+          this.scene.add(sp);
+          return sp;
+        });
+        const c = { puffs, pos: new THREE.Vector3(), aim: new THREE.Vector3(), home: new THREE.Vector3(), gone: false, back: 0, seed: Math.random() * 10, a: 0 };
+        this._spawnCloud(c);
+        return c;
+      });
+    }
+    for (const c of this.clouds) {
+      if (c.gone) {
+        c.a = Math.max(0, c.a - dt * 0.8);
+        if (time > c.back) this._spawnCloud(c);
+      } else {
+        const toP = new THREE.Vector3(P.pos.x - c.pos.x, 0, P.pos.y - c.pos.z), dP = toP.length();
+        if (dP > 26) { this._spawnCloud(c); continue; }
+        // they hang where they are and only drift a little; a still visitor
+        // draws one in, slowly, through open air only
+        if (c.pos.distanceTo(c.aim) < 0.2 || Math.random() < dt * 0.03) {
+          const nx = c.home.x + (Math.random() - 0.5) * 2.4, nz = c.home.z + (Math.random() - 0.5) * 2.4;
+          if (this._airClear(nx, nz)) c.aim.set(nx, 2.2 + Math.random() * 0.4, nz);
+        }
+        const drawn = speed < 0.1 && dP < 8;
+        const goal = drawn ? new THREE.Vector3(P.pos.x - toP.x / dP * 0.6, 1.8, P.pos.y - toP.z / dP * 0.6) : c.aim;
+        const step = goal.clone().sub(c.pos), len = step.length();
+        if (len > 1e-3) {
+          step.multiplyScalar(Math.min(len, dt * (drawn ? 0.35 : 0.08)) / len);
+          if (this._airClear(c.pos.x + step.x, c.pos.z + step.z, 0.8)) c.pos.add(step); else c.aim.copy(c.pos);
+        }
+        c.a = Math.min(1, c.a + dt * 0.4);
+        if (dP < 1.2 && this._soulReady(time)) { c.gone = true; c.back = time + 14; this._askAccept(time); }
+      }
+      for (const sp of c.puffs) {
+        const k = sp.userData.k, br = 1 + 0.06 * Math.sin(time * 0.7 + c.seed + k * 3);   // breathing
+        sp.position.copy(c.pos).add(sp.userData.off);
+        sp.position.y += Math.sin(time * 0.5 + c.seed) * 0.08;
+        sp.scale.set(0.95 * k * br, 0.6 * k * br, 1);
+        sp.material.opacity = 0.85 * c.a;
+        sp.visible = c.a > 0.01;
+      }
+    }
+  }
+  // Balloons: pale, almost white blue, each holding a question. They float
+  // on their strings in open rooms; walk up to one and its question is
+  // asked; it lets go and rises away, and after a long while another
+  // appears elsewhere. Only one at a time, and when the dreams run out
+  // so do the balloons.
+  _updateBalloons(dt, time, speed) {
+    const P = this.player;
+    if (!this.balloons) {
+      this.balloons = Array.from({ length: 1 }, () => {   // a single one, now and then
+        const g = new THREE.Group();
+        // latex in the light: see latexMaterial()
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 40, 28), this._latex ??= latexMaterial());
+        body.scale.set(1, 1.18, 1);
+        const knot = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.04, 10), this.atmo.prop({ color: 0xdfe9f0, rust: 0 }));
+        knot.position.y = -0.245; knot.rotation.x = Math.PI;
+        const pts = Array.from({ length: 12 }, (_, k) => new THREE.Vector3(Math.sin(k * 0.7) * 0.02, -0.26 - k * 0.1, 0));
+        const string = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xc9d2d6, transparent: true, opacity: 0.7, fog: true }));
+        g.add(body, knot, string);
+        this.scene.add(g);
+        const b = { g, text: this._nextBalloonText(), pos: new THREE.Vector3(), seed: Math.random() * 10, gone: false, back: 0, rise: 0, readUntil: 0,
+          floorShade: blotMesh(this.scene), wallShade: blotMesh(this.scene) };
+        this._spawnBalloon(b);
+        return b;
+      });
+    }
+    for (const b of this.balloons) {
+      if (b.spent) continue;                                 // the dreams are all asked: no more balloons
+      const dP = Math.hypot(P.pos.x - b.pos.x, P.pos.y - b.pos.z);
+      if (b.gone && time < b.readUntil) {                    // its question is being read: it tugs at the string
+        const k = 1 - (b.readUntil - time) / BALLOON_READ;
+        b.g.position.y = b.pos.y + k * k * 0.12 + Math.sin(time * 5 + b.seed) * 0.015 * k;
+        continue;
+      }
+      if (b.gone) {                                          // read: it lets go and rises into the fog
+        b.rise += dt * 0.6; b.g.position.y = b.pos.y + 0.12 + b.rise * b.rise;
+        if (time > b.back) {
+          b.text = this._nextBalloonText();
+          if (b.text) this._spawnBalloon(b); else { b.spent = true; b.g.visible = false; }
+        }
+        continue;
+      }
+      if (dP > 26) { this._spawnBalloon(b); continue; }
+      b.g.position.set(b.pos.x + Math.sin(time * 0.4 + b.seed) * 0.05, b.pos.y + Math.sin(time * 0.9 + b.seed) * 0.05, b.pos.z + Math.cos(time * 0.35 + b.seed) * 0.05);
+      b.g.rotation.set(Math.sin(time * 0.6 + b.seed) * 0.06, time * 0.1 + b.seed, 0);   // turning slowly on its string
+      if (dP < 1.1 && this._soulReady(time) && !this.finale) {
+        b.gone = true; b.readUntil = time + BALLOON_READ; b.back = b.readUntil + BALLOON_PAUSE; b.rise = 0;
+        this._soulAt = time; this._walked = 0;
+        if (!this.asked.includes(b.text)) this.asked.push(b.text);
+        this.audio?.whisper?.();
+        this._say(t('balloonLabel'), b.text, SKY, { onGone: () => this.audio?.fairy?.() });
+      }
+    }
+    for (const b of this.balloons) this._shadeBalloon(b, b.g.position, 1);
+  }
+  // Light from high above and a little to one side: the blot on the water
+  // lies under the balloon, smaller and darker the lower it hangs; a wall
+  // within reach catches a second, fainter blot, lower than the balloon.
+  _shadeBalloon(b, p, k0) {
+    const water = this._water(), fl = b.floorShade, wl = b.wallShade;
+    const vis = b.g.visible !== false && this.stage.stage === 2;
+    const wy = water.heightAt(p.x, p.z) ?? 0;
+    const h = Math.max(0.05, p.y - wy);
+    fl.visible = vis;
+    if (vis) {
+      fl.position.set(p.x + 0.12 * h, wy + 0.012, p.z + 0.08 * h);
+      fl.rotation.set(-Math.PI / 2, 0, 0);
+      const sz = 0.34 + 0.28 * h;
+      fl.scale.set(sz, sz * 1.15, 1);
+      fl.material.uniforms.uK.value = k0 * Math.min(0.9, 1.1 / (0.6 + h));
+    }
+    // the nearest wall along the four axes, within 2 m
+    wl.visible = false;
+    if (!vis) return;
+    const gi = cellOf(p.x), gj = cellOf(p.z);
+    let best = null;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      for (let n = 0; n <= 1; n++) {
+        if (!solidAtGlobal(gi + di * (n + 1), gj + dj * (n + 1))) continue;
+        const face = di ? (gi + (di > 0 ? n + 1 : -n)) * CELL : (gj + (dj > 0 ? n + 1 : -n)) * CELL;
+        const d = di ? Math.abs(face - p.x) : Math.abs(face - p.z);
+        if (d < 2 && (!best || d < best.d)) best = { d, di, dj, face };
+        break;
+      }
+    }
+    if (!best) return;
+    const off = 0.01;
+    wl.visible = true;
+    // cast down and aside along the light (it comes from high up, from +x +z)
+    const drop = 0.25 + 0.8 * best.d, aside = -(0.3 + 0.45 * best.d);
+    wl.position.set(best.di ? best.face - best.di * off : p.x + aside, Math.max(0.3, p.y - drop), best.dj ? best.face - best.dj * off : p.z + aside);
+    wl.rotation.set(0, best.di ? -best.di * Math.PI / 2 : (best.dj > 0 ? Math.PI : 0), 0);
+    const sz = 0.38 + 0.3 * best.d;
+    wl.scale.set(sz, sz * 1.15, 1);
+    wl.material.uniforms.uK.value = k0 * 0.95 * (1 - best.d / 2.4);
+  }
+  // The balloons ask only the dreams, each once; null when none are left.
+  _nextBalloonText() {
+    const dreams = t('dreamQuestions'), dOrder = this._soulOrder(4, dreams.length);
+    const i = this._balloonIdx = (this._balloonIdx ?? -1) + 1;
+    return i < dreams.length ? dreams[dOrder[i]] : null;
+  }
+  _spawnBalloon(b) {
+    const P = this.player;
+    for (let tries = 0; tries < 40; tries++) {
+      const a = Math.random() * 6.28, d = 8 + Math.random() * 12;
+      const x = P.pos.x + Math.cos(a) * d, z = P.pos.y + Math.sin(a) * d;
+      if (!this._airClear(x, z, 0.9) || this._nearThings(x, z, 0.5)) continue;   // the string hangs clear of the furniture
+      if ((this.balloons || []).some(o => o !== b && !o.gone && Math.hypot(o.pos.x - x, o.pos.z - z) < 8)) continue;   // never two together
+      b.pos.set(x, 1.7 + Math.random() * 0.5, z);
+      b.gone = false; b.rise = 0; b.g.position.copy(b.pos);
+      return;
+    }
+  }
+  // A third balloon, on the water itself: no string, no question, no let
+  // go. It just turns and rides the tide a few centimetres, one more small
+  // thing the flood carried in.
+  _updateSurfaceBalloon(time) {
+    if (this.stage.stage !== 2) return;
+    if (!this.surfaceBalloon) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 40, 28), this._latex ??= latexMaterial());
+      body.scale.set(1, 1.18, 1);
+      g.add(body);
+      this.scene.add(g);
+      this.surfaceBalloon = { g, pos: new THREE.Vector3(), seed: Math.random() * 10, floorShade: blotMesh(this.scene), wallShade: blotMesh(this.scene) };
+      this._spawnSurfaceBalloon();
+    }
+    const b = this.surfaceBalloon, P = this.player;
+    if (Math.hypot(P.pos.x - b.pos.x, P.pos.y - b.pos.z) > 26) this._spawnSurfaceBalloon();
+    const water = this._water();
+    const wy = water.heightAt(b.pos.x, b.pos.z);
+    const y = (wy ?? 0.1) + 0.2;
+    b.g.position.set(b.pos.x + Math.sin(time * 0.15 + b.seed) * 0.04, y, b.pos.z + Math.cos(time * 0.13 + b.seed) * 0.04);
+    b.g.rotation.set(Math.sin(time * 0.3 + b.seed) * 0.04, time * 0.09 + b.seed, 0);
+    this._shadeBalloon(b, b.g.position, 1);
+  }
+  _spawnSurfaceBalloon() {
+    const P = this.player;
+    for (let tries = 0; tries < 40; tries++) {
+      const a = Math.random() * 6.28, d = 6 + Math.random() * 14;
+      const x = P.pos.x + Math.cos(a) * d, z = P.pos.y + Math.sin(a) * d;
+      if (!this._airClear(x, z, 0.9) || this._nearThings(x, z, 0.4)) continue;
+      this.surfaceBalloon.pos.set(x, 0, z);
+      return;
+    }
+  }
+  _spawnCloud(c) {
+    const P = this.player;
+    for (let tries = 0; tries < 40; tries++) {
+      const a = Math.random() * 6.28, d = 6 + Math.random() * 12;
+      const x = P.pos.x + Math.cos(a) * d, z = P.pos.y + Math.sin(a) * d;
+      if (!this._airClear(x, z, 1.1)) continue;          // only where a room opens up
+      c.pos.set(x, 2.2 + Math.random() * 0.4, z); c.aim = c.pos.clone(); c.home = c.pos.clone();
+      c.gone = false; c.a = 0;
+      return;
+    }
+  }
+
+  // ── roaming souls ──────────────────────────────────────────────────────
+  // Five souls wander the corridors around the visitor once the room has
+  // been found. They drift on their own; stand still and one comes to you;
+  // walk into it and it asks. Then it scatters and returns somewhere else.
+  _spawnRoamer(r) {
+    const P = this.player;
+    for (let tries = 0; tries < 40; tries++) {
+      const a = Math.random() * 6.28, d = 7 + Math.random() * 12;
+      const x = P.pos.x + Math.cos(a) * d, z = P.pos.y + Math.sin(a) * d;
+      if (solidAtGlobal(cellOf(x), cellOf(z))) continue;
+      r.pos.set(x, 1.3 + Math.random() * 0.5, z);
+      r.aim = r.pos.clone();
+      r.gone = false; r.sprite.material.opacity = 0;
+      r.tail.forEach(t => t.position.copy(r.pos));
+      return;
+    }
+  }
+  _makeSouls(cats, colorOf, peak = 1) {
+    return cats.map(cat => {
+      const mk = (k) => new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: colorOf(cat), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: k * peak }));
+      const sprite = mk(1); sprite.scale.set(0.35, 0.35, 1); this.scene.add(sprite);
+      const tail = [0.6, 0.42, 0.28].map(k => { const t2 = mk(k); t2.scale.set(0.35 * k, 0.35 * k, 1); this.scene.add(t2); return t2; });
+      const r = { cat, peak, sprite, tail, pos: new THREE.Vector3(), aim: new THREE.Vector3(), gone: false, back: 0, seed: Math.random() * 10 };
+      this._spawnRoamer(r);
+      return r;
+    });
+  }
+  _updateRoamers(dt, time, speed) {
+    this._roamersHidden = false;                       // hidden again whenever the walk leaves the red rooms
+    this.roamers ??= this._makeSouls([0, 1, 2, 0, 1], cat => SOUL_COLORS[cat]);
+    this._tickSouls(this.roamers, dt, time, speed, r => this._askSoul(r.cat, null, time));
+  }
+  // The hospital has its own souls: three blue, half see-through, asking
+  // about fear. Same manners as the red rooms' souls.
+  _updateFearSouls(dt, time, speed) {
+    this.fearSouls ??= this._makeSouls([0, 0, 0], () => FEAR_SOUL, FEAR_SOUL_PEAK);
+    this._tickSouls(this.fearSouls, dt, time, speed, () => this._askFear(time));
+  }
+  _askFear(time) {
+    if (this.finale) return;
+    this._soulAt = time; this._walked = 0;
+    const qs = t('fearSouls');
+    const order = this._soulOrder(5, qs.length);
+    this._soulIdx[5] = this._soulIdx[5] || 0;
+    const text = qs[order[this._soulIdx[5]++ % qs.length]];
+    if (!this.asked.includes(text)) this.asked.push(text);
+    this.audio?.whisper?.();
+    this._say(t('fearSoulLabel'), text, '#' + new THREE.Color(FEAR_SOUL).lerp(new THREE.Color(0xffffff), 0.45).getHexString());
+  }
+  _tickSouls(list, dt, time, speed, ask) {
+    const P = this.player;
+    for (const r of list) {
+      r.sprite.visible = true;
+      if (r.gone) {
+        r.sprite.material.opacity = Math.max(0, r.sprite.material.opacity - dt);
+        r.tail.forEach(t => { t.visible = false; });
+        if (time > r.back) this._spawnRoamer(r);
+        continue;
+      }
+      const toP = new THREE.Vector3(P.pos.x - r.pos.x, 0, P.pos.y - r.pos.z), dP = toP.length();
+      if (dP > 26) { this._spawnRoamer(r); continue; }   // left behind: come back nearer
+      // wander toward a new aim now and then; a still visitor draws it in
+      if (r.pos.distanceTo(r.aim) < 0.3 || Math.random() < dt * 0.1) {
+        const nx = r.pos.x + (Math.random() - 0.5) * 6, nz = r.pos.z + (Math.random() - 0.5) * 6;
+        if (!solidAtGlobal(cellOf(nx), cellOf(nz))) r.aim.set(nx, 1.3 + Math.random() * 0.5, nz);
+      }
+      const drawn = speed < 0.1 && dP < 7;
+      const goal = drawn ? new THREE.Vector3(P.pos.x - toP.x / dP * SOUL_STOP, 1.5, P.pos.y - toP.z / dP * SOUL_STOP) : r.aim;
+      const step = goal.clone().sub(r.pos);
+      const len = step.length();
+      if (len > 1e-3) {
+        step.multiplyScalar(Math.min(len, dt * (drawn ? 0.9 : 0.35)) / len);
+        const nx = r.pos.x + step.x, nz = r.pos.z + step.z;
+        if (!solidAtGlobal(cellOf(nx), cellOf(nz))) r.pos.add(step); else r.aim.copy(r.pos); // never through walls
+      }
+      r.sprite.material.opacity = Math.min(r.peak, r.sprite.material.opacity + dt * 0.5);
+      r.sprite.position.set(r.pos.x, r.pos.y + Math.sin(time * 0.9 + r.seed) * 0.1, r.pos.z);
+      const s2 = 0.32 + 0.05 * Math.sin(time * 3 + r.seed); r.sprite.scale.set(s2, s2, 1);
+      let lead = r.sprite.position;
+      for (const t of r.tail) { t.visible = true; t.position.lerp(lead, Math.min(1, dt * 4)); lead = t.position; }
+      if (dP < 1.1 && this._soulReady(time)) {
+        r.gone = true; r.back = time + 12;
+        ask(r);
+      }
+    }
+  }
+
+  // Straight into the nearest grandmother's room, the world switched to the
+  // red rooms on the way (for checks: window.__app.soul._jumpToRoom(); 2: the light's copy).
+  _jumpToRoom(stage = 1) {
+    const P = this.player;
+    const cx = Math.floor(P.pos.x / (CHUNK * CELL)), cz = Math.floor(P.pos.y / (CHUNK * CELL));
+    let best = null, bd = Infinity;
+    for (let dz = -12; dz <= 12; dz++) for (let dx = -12; dx <= 12; dx++) {
+      const k = stage === 2 ? veiledPlan(cx + dx, cz + dz) : kitchenPlan(cx + dx, cz + dz);
+      if (!k) continue;
+      const d = Math.hypot(k.x - P.pos.x, k.z - P.pos.y);
+      if (d < bd) { bd = d; best = k; }
+    }
+    if (!best) return;
+    if (this.artworks.inspecting) this.artworks._closeInspect();
+    this.player.auto = null;
+    this.stage.set(stage);
+    // stand a step from the table, looking at it
+    const sx = best.x - 1.4, sz = best.z - 1.4;
+    const ok = !solidAtGlobal(cellOf(sx), cellOf(sz));
+    P.pos.set(ok ? sx : best.x, ok ? sz : best.z - 1.2);
+    P.vel.set(0, 0);
+    P.yaw = Math.atan2(-(best.x - P.pos.x), -(best.z - P.pos.y));
+    P.pitch = -0.25;
+    this._prevPos = { x: P.pos.x, z: P.pos.y };      // not a walk through anything
+    this.world.update(P.pos.x, P.pos.y);
+    this.post?.burst(1.4);
+  }
+
+  // Cheat 00000: the finale always happens in acceptance. From anywhere
+  // else the world first turns to the light, then every work counts as
+  // seen and the arch of roses rises.
+  _cheatFinale() {
+    if (this.finale) return;
+    if (this.artworks.inspecting) this.artworks._closeInspect();
+    this.player.auto = null;
+    const wait = this.stage.set(2) ? 2600 : 0;          // the stage blend takes 2.5 s
+    this.post?.burst(1.4);
+    setTimeout(() => {
+      if (this.finale) return;
+      for (const a of this.artworks.list) this.seen.add(a.id);
+      this._beginFinale();
+    }, wait);
+  }
+
+  // ── guide ──────────────────────────────────────────────────────────────
+  _toggleGuide() {
+    if (this.guide) {
+      this.scene.remove(this.guide.mesh); this.guide.mesh.geometry.dispose(); this.guide.mesh.material.dispose();
+      this.guide = null; return;
+    }
+    const shape = new THREE.Shape();                    // a broad chevron lying on the floor
+    shape.moveTo(0, 0.45); shape.lineTo(0.42, -0.05); shape.lineTo(0.24, -0.05); shape.lineTo(0, 0.2);
+    shape.lineTo(-0.24, -0.05); shape.lineTo(-0.42, -0.05); shape.closePath();
+    const geo = new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2).scale(1.4, 1, 1.4);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x7dff9a, transparent: true, opacity: 0.9, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
+    const mesh = new THREE.InstancedMesh(geo, mat, 80);
+    mesh.count = 0; mesh.frustumCulled = false; mesh.renderOrder = 3;
+    this.scene.add(mesh);
+    this.guide = { mesh, t: 0 };
+  }
+
+  // ── the testers' tour (PPPPP) ─────────────────────────────────────────
+  _toggleTour() {
+    const P = this.player;
+    if (this.tour) {
+      this.scene.remove(this.tour.mesh); this.tour.mesh.geometry.dispose(); this.tour.mesh.material.dispose();
+      if (P.auto?.kind === 'tour') P.auto = null;
+      this.tour = null; return;
+    }
+    const geo = new THREE.PlaneGeometry(0.09, CELL * 1.02).rotateX(-Math.PI / 2);   // one dash a cell: a line along the way
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.9, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
+    const mesh = new THREE.InstancedMesh(geo, mat, 120);
+    mesh.count = 0; mesh.frustumCulled = false; mesh.renderOrder = 3;
+    this.scene.add(mesh);
+    this.tour = { mesh, t: 0, path: [], goal: null, wait: 0, skip: new Set() };
+  }
+
+  // Where the tour goes next: the nearest unseen work the stage will still
+  // show (standing two metres before it), else grandmother's room, else the
+  // portal, else on ahead to find more.
+  _tourGoal() {
+    const P = this.player, st = this.stage.stage, T = this.tour;
+    const quota = st === 0 ? PORTAL_SEEN_FEAR : st === 1 ? PORTAL_SEEN_MEMORY : Infinity;
+    if (this.stageSeen[st] < quota || st === 2) {
+      let best = null, bd = Infinity;
+      for (const a of this.artworks.active) {
+        if (a.hidden || this.seen.has(a.art.id) || T.skip.has(a)) continue;
+        const d = Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y);
+        if (d < bd) { bd = d; best = a; }
+      }
+      if (best) return { x: best.centerWorld.x + best.normal.x * 2, z: best.centerWorld.z + best.normal.z * 2, work: best };
+    }
+    if (st === 1 && !this.visitedRoom) { const k = this._guideTarget(); if (k) return { x: k.x, z: k.z, room: true }; }
+    if (st < 2 && this.stageSeen[st] >= quota) {
+      if (!this.summonedPortals[st + 1]) this._summonPortal(st + 1, this._time ?? 0);
+      const p = this.summonedPortals[st + 1];
+      if (p) return { x: p.x, z: p.z, portal: true };
+    }
+    // nothing in reach: on ahead, the chunks there will hang more; a way
+    // that gets nowhere for three seconds is given up for the next quarter
+    if (!T.dir) T.dir = [-Math.sin(P.yaw), -Math.cos(P.yaw)];
+    const now = this._time ?? 0;
+    if (!T.mark || now - T.mark.t > 3) {
+      if (T.mark && Math.hypot(P.pos.x - T.mark.x, P.pos.y - T.mark.z) < 1) T.dir = [-T.dir[1], T.dir[0]];
+      T.mark = { x: P.pos.x, z: P.pos.y, t: now };
+    }
+    return { x: P.pos.x + T.dir[0] * 40, z: P.pos.y + T.dir[1] * 40, ahead: true };
+  }
+
+  _updateTour(dt, time) {
+    const T = this.tour, P = this.player;
+    if (this.finale) { this._toggleTour(); return; }   // the ending takes the walk from here
+    T.mesh.material.opacity = 0.65 + 0.3 * Math.sin(time * 5);
+    T.t -= dt;
+    if (T.t <= 0 || !T.goal) {
+      T.t = 0.5;
+      T.goal = this._tourGoal();
+      const gi = cellOf(T.goal.x), gj = cellOf(T.goal.z);
+      T.path = this._route((i, j) => (i === gi && j === gj ? Infinity : -Math.hypot(i - gi, j - gj)), cellOf(P.pos.x), cellOf(P.pos.y), 30000);
+      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
+      let n = 0;
+      for (let k = 0; k < T.path.length - 1 && n < 120; k++) {
+        const [i, j] = T.path[k], [ni, nj] = T.path[k + 1];
+        q.setFromAxisAngle(up, Math.atan2(-(ni - i), -(nj - j)));
+        m.compose(new THREE.Vector3((centreOf(i) + centreOf(ni)) / 2, 0.05, (centreOf(j) + centreOf(nj)) / 2), q, one);
+        T.mesh.setMatrixAt(n++, m);
+      }
+      T.mesh.count = n; T.mesh.instanceMatrix.needsUpdate = true;
+    }
+    const auto = P.auto?.kind === 'tour' ? P.auto : (P.auto = { kind: 'tour', yaw: P.yaw, vel: new THREE.Vector2(), hold: true });
+    const g = T.goal, w = g.work;
+    const dg = Math.hypot(g.x - P.pos.x, g.z - P.pos.y);
+    if (w && dg < 0.8) {                                // there: face the work until it counts as seen
+      auto.vel.set(0, 0);
+      auto.yaw = Math.atan2(w.normal.x, w.normal.z);
+      if ((T.wait += dt) > 4) { T.skip.add(w); T.wait = 0; T.goal = null; }   // its picture never came: on to the next
+      if (this.seen.has(w.art.id)) { T.wait = 0; T.goal = null; }
+      return;
+    }
+    T.wait = 0;
+    // caught on a bed or a chair the route does not know of: step past it
+    const now = this._time ?? 0;
+    if (!T.prog || Math.hypot(P.pos.x - T.prog.x, P.pos.y - T.prog.z) > 0.3) T.prog = { x: P.pos.x, z: P.pos.y, t: now };
+    else if (now - T.prog.t > 1.5 && T.path.length > 2) {
+      const [si, sj] = T.path[Math.min(3, T.path.length - 1)];
+      P.pos.set(centreOf(si), centreOf(sj)); T.prog = null; T.goal = null; return;
+    }
+    // aim at a cell a little way along the route, so corners are cut smoothly
+    const k = Math.min(2, T.path.length - 1);
+    const [ai, aj] = k > 0 ? T.path[k] : [cellOf(g.x), cellOf(g.z)];
+    const tx = (k > 0 && dg > 1.5 ? centreOf(ai) : g.x) - P.pos.x, tz = (k > 0 && dg > 1.5 ? centreOf(aj) : g.z) - P.pos.y, tl = Math.hypot(tx, tz) || 1;
+    auto.yaw = Math.atan2(-tx, -tz);
+    auto.vel.set(tx / tl, tz / tl).multiplyScalar(TOUR_SPEED);
+    if (tl < 0.4 && T.path.length) T.path.shift();
+  }
+
+  // Where the guide leads: in fear to the nearest portal into the red rooms,
+  // in the red rooms to the nearest grandmother's room, then to the way on.
+  _guideTarget() {
+    const P = this.player, cx = Math.floor(P.pos.x / (CHUNK * CELL)), cz = Math.floor(P.pos.y / (CHUNK * CELL));
+    let best = null, bd = Infinity;
+    const consider = (x, z) => { const d = Math.hypot(x - P.pos.x, z - P.pos.y); if (d < bd) { bd = d; best = { x, z }; } };
+    if (this.stage.stage === 1 && !this.visitedRoom) {
+      for (let dz = -5; dz <= 5; dz++) for (let dx = -5; dx <= 5; dx++) { const k = kitchenPlan(cx + dx, cz + dz); if (k) consider(k.x, k.z); }
+    } else {
+      const p = this.summonedPortals[this.stage.stage + 1];
+      if (p) consider(p.x, p.z);
+    }
+    return best;
+  }
+
+  _updateGuide(dt, time) {
+    const g = this.guide;
+    g.t -= dt;
+    g.mesh.material.opacity = 0.6 + 0.35 * Math.sin(time * 4);
+    if (g.t > 0) return;
+    g.t = 1;
+    const st = this.stage.stage;                        // no crossing in reach for the portal yet: try again from here
+    if (st < 2 && !this.summonedPortals[st + 1] && (st === 0 || this.visitedRoom)) this._summonPortal(st + 1, time);
+    const target = this._guideTarget();
+    if (!target) { g.mesh.count = 0; return; }
+    const tx = cellOf(target.x - 0.01), tz = cellOf(target.z - 0.01);
+    const path = this._route((i, j) => (Math.abs(i - tx) <= 1 && Math.abs(j - tz) <= 1 ? Infinity : -Math.hypot(i - tx, j - tz)),
+      cellOf(this.player.pos.x), cellOf(this.player.pos.y), 40000);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
+    let n = 0;
+    for (let k = 1; k < path.length - 1 && n < 80; k += 2) {
+      const [i, j] = path[k], [ni, nj] = path[k + 1];
+      q.setFromAxisAngle(up, Math.atan2(-(ni - i), -(nj - j)));  // point along the route
+      m.compose(new THREE.Vector3(centreOf(i), 0.04, centreOf(j)), q, one);
+      g.mesh.setMatrixAt(n++, m);
+    }
+    g.mesh.count = n;
+    g.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  _doorsNear(x, z) {
+    const out = [];
+    for (const stuff of this.chunkStuff.values()) {
+      if (this.stage.stage !== 0) break;                 // no doors outside fear: nothing to bump into
+      for (const d of stuff.doors) if (Math.abs(d.x - x) < 4 && Math.abs(d.z - z) < 4) out.push(d);
+    }
+    return out;
+  }
+
+
+  // ── route for the red scratches: breadth-first over open cells ─────────
+  _route(goalFn, fromGi, fromGj, maxNodes = 7000) {
+    const key = (i, j) => i + ',' + j;
+    const prev = new Map([[key(fromGi, fromGj), null]]);
+    const q = [[fromGi, fromGj]];
+    let best = null, bestScore = -Infinity;
+    for (let head = 0; head < q.length && head < maxNodes; head++) {
+      const [i, j] = q[head];
+      const s = goalFn(i, j);
+      if (s === Infinity) { best = [i, j]; break; }
+      if (s > bestScore) { bestScore = s; best = [i, j]; }
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di, nj = j + dj, k = key(ni, nj);
+        if (prev.has(k) || solidAtGlobal(ni, nj)) continue;
+        if (this._doorBlocks(i, j, ni, nj)) continue;
+        prev.set(k, [i, j]);
+        q.push([ni, nj]);
+      }
+    }
+    if (!best) return [];
+    const path = [];
+    for (let c = best; c; c = prev.get(key(c[0], c[1]))) path.push(c);
+    return path.reverse();
+  }
+
+  // a closed door sits on a chunk edge between two cells
+  _doorBlocks(i, j, ni, nj) {
+    if (this.stage.stage !== 0) return false;           // no doors outside fear
+    for (const stuff of this.chunkStuff.values()) for (const d of stuff.doors) {
+      if (d.open) continue;
+      const mx = (Math.max(i, ni)) * CELL, mz = (Math.max(j, nj)) * CELL;
+      if (i !== ni && Math.abs(mx - d.routeSeg.a.x) < 1e-3 && d.routeSeg.a.x === d.routeSeg.b.x
+        && centreOf(j) > d.routeSeg.a.z && centreOf(j) < d.routeSeg.b.z) return true;
+      if (j !== nj && Math.abs(mz - d.routeSeg.a.z) < 1e-3 && d.routeSeg.a.z === d.routeSeg.b.z
+        && centreOf(i) > d.routeSeg.a.x && centreOf(i) < d.routeSeg.b.x) return true;
+    }
+    return false;
+  }
+
+  // The way the marks lead from where the visitor stands, a few cells ahead
+  // so it follows the corridor, as a unit vector on the floor; null if none.
+  wayDir() {
+    const c = this.wayCells, P = this.player;
+    if (!c || c.length < 2) return null;
+    const [ti, tj] = c[Math.min(4, c.length - 1)];
+    const dx = centreOf(ti) - P.pos.x, dz = centreOf(tj) - P.pos.y, d = Math.hypot(dx, dz);
+    return d > 0.5 ? { x: dx / d, z: dz / d } : null;
+  }
+
+  // What can be touched for a ritual near (px, pz): rituals.js. Candles in
+  // every stage, the wall clocks in fear and memory; the ward's beds, drips and wheelchairs in fear; the clock
+  // nook and grandmother's television in memory; the drowned things in the light.
+  ritualTargets(px, pz, reach = 4) {
+    const out = [], st = this.stage.stage, near = (x, z) => Math.hypot(x - px, z - pz) < reach;
+    for (const s of this.chunkStuff.values()) {
+      s.scatter?.items?.forEach((it, i) => { if (!it.gone && near(it.x, it.z)) out.push({ kind: 'candle', key: it, x: it.x, y: 0.2, z: it.z, r: 0.16, it, i, sc: s.scatter }); });
+      for (const h of s.props?.hung || []) {               // the clocks on the walls, while they hang
+        if (h.fallen || !/Clock/.test(h.kind) || !near(h.mesh.position.x, h.mesh.position.z)) continue;
+        out.push({ kind: 'clock', key: h, x: h.mesh.position.x, y: h.mesh.position.y, z: h.mesh.position.z, r: 0.2 });
+      }
+      if (st === 0) {
+        const a = s.ward?.plan?.anchor;
+        if (a && near(a.x, a.z)) {
+          if (a.type === 'bed' || a.type === 'gurney') out.push({ kind: 'bed', key: a, x: a.x, y: a.type === 'gurney' ? 0.78 : 0.64, z: a.z, r: 0.9, rot: a.rot });
+          else if (a.type === 'drip' && !a.tip) out.push({ kind: 'drip', key: a, x: a.x, y: 1.1, z: a.z, r: 0.35 });
+          else if (a.type === 'wheelchair') out.push({ kind: 'wheelchair', key: a, x: a.x, y: 0.5, z: a.z, r: 0.5 });
+        }
+      } else if (st === 1) {
+        if (s.egg && near(s.egg.x, s.egg.z)) out.push({ kind: 'clock', key: s.egg, x: s.egg.x, y: 0.7, z: s.egg.z, r: 0.3 });
+        const tv = s.kitchen?.room?.tv;
+        if (tv && near(tv.x, tv.z)) out.push({ kind: 'tv', key: s.kitchen.room, x: tv.x, y: 0.76, z: tv.z, r: 0.7 });
+      } else {
+        for (const th of s.drown?.things || []) if (near(th.x, th.z)) out.push({ kind: 'drowned', key: th, x: th.x, y: th.floats ? 0.3 : 0.08, z: th.z, r: 0.3, th });
+      }
+    }
+    return out;
+  }
+
+  _updateMarks() {
+    const p = this.player.pos;
+    const gi = cellOf(p.x), gj = cellOf(p.y);
+    // target: the work the marks already lead to, until it is seen; then the
+    // nearest one not yet seen; else onward, away from spawn. Holding the
+    // target keeps the arrows from swinging between two works.
+    let target = this._markTarget;
+    if (!target || this.seen.has(target.art.id) || !this.artworks.active.includes(target)) {
+      target = null; let td = Infinity;
+      for (const a of this.artworks.active) {
+        if (a.hidden || this.seen.has(a.art.id)) continue;
+        const d = Math.hypot(a.centerWorld.x - p.x, a.centerWorld.z - p.y);
+        if (d < td) { td = d; target = a; }
+      }
+      this._markTarget = target;
+    }
+    let goalFn, goalKey;
+    const portal = this.summonedPortals?.[this.stage.stage + 1];
+    let find = null;
+    if (!portal && !target && this.stage.stage === 0 && this._fear) {   // fear, waiting: lead to what is still to be found
+      let fd = 30;
+      for (const t of this._fearFinds()) {
+        if (this._fear.found.has(t.key)) continue;
+        const d = Math.hypot(t.x - p.x, t.z - p.y);
+        if (d > 2 && d < fd) { fd = d; find = t; }
+      }
+    }
+    if (portal) {                                        // the way on is open: every mark points to it
+      const tx = cellOf(portal.x - 0.01), tz = cellOf(portal.z - 0.01);
+      goalFn = (i, j) => (Math.abs(i - tx) <= 1 && Math.abs(j - tz) <= 1 ? Infinity : -Math.hypot(i - tx, j - tz));
+      goalKey = `p${tx},${tz}`;
+    } else if (find && !target) {
+      const tx = cellOf(find.x), tz = cellOf(find.z);
+      goalFn = (i, j) => (Math.abs(i - tx) <= 1 && Math.abs(j - tz) <= 1 ? Infinity : -Math.hypot(i - tx, j - tz));
+      goalKey = `f${find.key}`;
+    } else if (target) {
+      const tx = cellOf(target.centerWorld.x + target.normal.x * 0.9);
+      const tz = cellOf(target.centerWorld.z + target.normal.z * 0.9);
+      goalFn = (i, j) => (i === tx && j === tz ? Infinity : -Math.hypot(i - tx, j - tz));
+      goalKey = `a${tx},${tz}`;
+    } else {
+      // no unseen work in reach: lead outward, toward acceptance
+      const lim = 40;
+      goalFn = (i, j) => (Math.abs(i - gi) > lim || Math.abs(j - gj) > lim ? -Infinity
+        : Math.hypot(centreOf(i) - ORIGIN.x, centreOf(j) - ORIGIN.z));
+      goalKey = 'out';
+    }
+    const pathKey = `${gi},${gj}:${goalKey}:${this.doorsOpen.size}`;
+    if (pathKey === this._pathKey) return;
+    this._pathKey = pathKey;
+
+    // marks toward another goal fade out where they are; nothing jumps
+    for (const m of this.marks) if (m.visible && m.userData.goal !== goalKey && !m.userData.fadeAt) m.userData.fadeAt = this._time || 0.001;
+
+    const byKey = new Map();
+    for (const m of this.marks) if (m.visible && m.userData.key) byKey.set(m.userData.key, m);
+    const spare = () => {
+      let best = this.marks.find(m => !m.visible), far = -1;
+      if (best) return best;
+      for (const m of this.marks) {                    // else the mark furthest behind
+        const d = Math.hypot(m.position.x - p.x, m.position.z - p.y);
+        if (d > far && d > 8) { far = d; best = m; }
+      }
+      return best;
+    };
+    const cells = this._route(goalFn, gi, gj).slice(0, ROUTE_CELLS);
+    this.wayCells = cells;                               // the shadows lead along it too (events.js, wayDir)
+    for (let k = 2; k < cells.length - 1; k += MARK_EVERY) {
+      const [i, j] = cells[k], [ni, nj] = cells[k + 1];
+      const di = ni - i, dj = nj - j;
+      // a wall beside this step: left or right of the direction of travel
+      const sides = di !== 0 ? [[0, 1], [0, -1]] : [[1, 0], [-1, 0]];
+      const side = sides.find(([si, sj]) => solidAtGlobal(i + si, j + sj));
+      if (!side) continue;
+      const [si, sj] = side;
+      const key = `${i},${j},${si},${sj},${di},${dj}`;
+      const had = byKey.get(key);
+      if (had) { had.userData.goal = goalKey; had.userData.fadeAt = 0; had.material.opacity = 1; continue; }   // already scratched here
+      const m = spare();
+      if (!m) break;
+      const nx = -si, nz = -sj;                         // wall normal, into the corridor
+      const mx = si ? (si > 0 ? (i + 1) * CELL : i * CELL) + nx * 0.013 : centreOf(i);
+      const mz = sj ? (sj > 0 ? (j + 1) * CELL : j * CELL) + nz * 0.013 : centreOf(j);
+      // never across the metal door: it is cut into this wall, a scratch would hang in its opening
+      const sp = this.stairwellPlan;
+      if (sp && Math.abs((mx - sp.x) * nx + (mz - sp.z) * nz) < 0.3 && Math.abs((mx - sp.x) * nz - (mz - sp.z) * nx) < 0.85) continue;
+      m.position.set(mx, MARK_Y + (k % 2) * 0.12, mz);
+      m.rotation.set(0, Math.atan2(nx, nz), 0);
+      // plane's local +x in world is (nz, -nx); mirror so the arrow points onward
+      m.scale.x = di * nz - dj * nx >= 0 ? 1 : -1;
+      Object.assign(m.userData, { key, goal: goalKey, fadeAt: 0 });
+      m.material.opacity = 1;
+      m.visible = true;
+    }
+  }
+
+  // A work just seen: the candles around it, with nothing unseen left near,
+  // flicker and die down to embers (_tickCandles). Lights share the colour.
+  _gutterCandles(time) {
+    const arts = this.artworks.active.filter(a => !a.hidden).map(a => ({ x: a.centerWorld.x, z: a.centerWorld.z, seen: this.seen.has(a.art.id) }));
+    this._dying ??= [];
+    for (const st of this.chunkStuff.values()) {
+      const sc = st.scatter;
+      if (!sc?.items) continue;
+      sc.items.forEach((it, i) => {
+        if (it.spent || it.gone) return;
+        let dA = Infinity, dU = Infinity;
+        for (const a of arts) { const d = Math.hypot(a.x - it.x, a.z - it.z); dA = Math.min(dA, d); if (!a.seen) dU = Math.min(dU, d); }
+        if (dA < CANDLE_NEAR && dU > CANDLE_NEAR) {
+          it.spent = true;
+          this._dying.push({ sc, i, it, base: it.flame.clone(), t0: time + Math.random() * 0.8 });
+        }
+      });
+    }
+  }
+
+  _tickCandles(time) {
+    if (!this._dying?.length) return;
+    this._dying = this._dying.filter(d => {
+      if (d.sc.disposed) return false;
+      const k = Math.max(0, (time - d.t0) / CANDLE_DIE);
+      const flick = 0.55 + 0.45 * Math.sin(time * 23 + d.i * 1.7) * Math.sin(time * 7.3 + d.i);
+      d.it.flame.copy(d.base).multiplyScalar(Math.max(0, 1 - k) * flick).lerp(EMBER, Math.min(1, k));
+      for (const name of ['flame', 'pool']) {
+        const m = d.sc.meshes[name];
+        if (!m) continue;
+        m.setColorAt(d.i, d.it.flame);
+        m.instanceColor.needsUpdate = true;
+      }
+      return k < 1;
+    });
+  }
+
+  // Acceptance stage only: every live candle rides the water where it has
+  // risen, bobs, tilts a little and drifts along its wall toward the
+  // direction _buildScatter worked out for it (tgx, tgz), never more than
+  // CANDLE_DRIFT off where it was set down. The candle lights the walls
+  // catch (scatter.lights) follow it, so the map still reads.
+  _floatCandles(time, water) {
+    if (this.stage.stage !== 2) return;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), qt = new THREE.Quaternion(),
+      up = new THREE.Vector3(0, 1, 0), ax = new THREE.Vector3(1, 0, 0), one = new THREE.Vector3(1, 1, 1);
+    const CANDLE_DRIFT = 0.25, FLOAT_NEAR = 18, at = new THREE.Vector3(), px = this.player.pos.x, pz = this.player.pos.y;
+    for (const st of this.chunkStuff.values()) {
+      const sc = st.scatter;
+      if (!sc?.items?.length) continue;
+      let moved = false;
+      for (let i = 0; i < sc.items.length; i++) {
+        const it = sc.items[i];
+        if (it.spent || it.gone) continue;
+        // far off in the milky air a candle holds still: only those within FLOAT_NEAR ride the water
+        if (Math.abs(it.x - px) > FLOAT_NEAR || Math.abs(it.z - pz) > FLOAT_NEAR) continue;
+        moved = true;
+        const sway = 0.5 + 0.5 * Math.sin(time * 0.17 + i * 0.63);      // 0..1, biased on toward the target
+        const drift = (sway * 0.7 + 0.3) * CANDLE_DRIFT;
+        const x = it.x + it.tgx * drift, z = it.z + it.tgz * drift;
+        const wy = water.heightAt(x, z);
+        const floaty = wy != null;
+        const base = floaty ? wy : 0;
+        const bob = floaty ? Math.sin(time * 1.7 + i * 1.3) * 0.005 : 0;
+        q.setFromAxisAngle(up, it.rot);
+        if (floaty) { qt.setFromAxisAngle(ax, Math.sin(time * 0.6 + i * 2.1) * 0.09); q.multiply(qt); }
+        for (const [name, off] of [['boat', 0.0], ['saucer', 0.01], ['wax', 0.09], ['flame', 0.18], ['pool', 0.016]]) {
+          const mesh = sc.meshes[name];
+          if (!mesh) continue;
+          m.compose(at.set(x, base + off + bob, z), q, one);
+          mesh.setMatrixAt(i, m);
+        }
+        const L = sc.lights[i];
+        if (L) { L.x = x; L.y = base + 0.28 + bob; L.z = z; }
+      }
+      if (moved) for (const name in sc.meshes) sc.meshes[name].instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  // anything of _petalObstacles() within pad of (x, z)?
+  _nearThings(x, z, pad) {
+    return this._petalObstacles().some(o => Math.hypot(o.x - x, o.z - z) < o.r + pad);
+  }
+  // Everything standing in the water near the visitor, as circles
+  // { x, z, r }: the petals flow round them, never through.
+  // Things stand still: the per-frame list is gathered again only every half
+  // second or when the visitor steps into another chunk.
+  _petalObstacles(fresh = false) {
+    const P = this.player.pos, cx = Math.floor(P.x / (CHUNK * CELL)), cz = Math.floor(P.y / (CHUNK * CELL));
+    const now = performance.now(), key = cx + ':' + cz + ':' + this.stage.stage;
+    if (!fresh && this._obst && this._obstKey === key && now - this._obstAt < 500) return this._obst;
+    const out = fresh ? [] : (this._obst ??= []);
+    out.length = 0;
+    if (!fresh) { this._obstKey = key; this._obstAt = now; }
+    if (this.stage.stage !== 2) return out;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const st = this.chunkStuff.get((cx + dx) + ':' + (cz + dz));
+      if (!st) continue;
+      for (const b of st.props?.boxes || []) out.push(b);
+      for (const it of st.scatter?.items || []) if (!it.spent) out.push({ x: it.x, z: it.z, r: 0.4 });    // candles, and the 25 cm they drift
+      for (const m of st.drown?.meshes || []) out.push({ x: m.position.x, z: m.position.z, r: 0.22 });
+    }
+    return out;
+  }
+
+  // marks of a finished goal fade slowly; marks far behind return to the pool
+  _tickMarks(time) {
+    const p = this.player.pos, home = this.stage.stage === 1;
+    for (const m of this.marks) {
+      const dried = m.userData.dried;
+      m.material.visible = this.stage.stage === 0;       // red only in fear: flowers at home, petals on the water in the light
+      dried.visible = false;                                                // grandmother's rooms lead by light alone now
+      if (dried.visible) {
+        const nx = Math.sin(m.rotation.y), nz = Math.cos(m.rotation.y);
+        const ax = nz * m.scale.x, az = -nx * m.scale.x;                    // the way the scratch points
+        dried.position.set(m.position.x + nx * 0.62, 0.012, m.position.z + nz * 0.62);   // clear of the candles by the wall
+        dried.rotation.set(-Math.PI / 2, 0, Math.atan2(-az, ax));
+        dried.scale.setScalar(m.material.opacity);                          // a fading goal: the flowers shrink away
+      }
+      if (!m.visible) continue;
+      if (m.userData.fadeAt) {
+        const k = (time - m.userData.fadeAt) / MARK_FADE;
+        m.material.opacity = Math.max(0, 1 - k);
+        if (k >= 1) { m.visible = false; m.userData.key = null; m.userData.fadeAt = 0; }
+      } else if (Math.hypot(m.position.x - p.x, m.position.z - p.y) > MARK_KEEP) {
+        m.visible = false; m.userData.key = null;
+      }
+    }
+  }
+
+  // ── per-frame ───────────────────────────────────────────────────────────
+  // The name of the stage, shown once as the visitor enters it: rises out of
+  // the dark in the middle of the screen, holds, and sinks back.
+  _zoneTitle(n) {
+    let el = document.getElementById('zone-title');
+    if (!el) { el = document.createElement('div'); el.id = 'zone-title'; el.setAttribute('aria-live', 'polite'); document.body.appendChild(el); }
+    el.textContent = t('zoneNames')[n];
+    el.classList.remove('show'); void el.offsetWidth;   // restart the animation
+    el.classList.add('show');
+  }
+
+  update(dt, time, zone) {
+    if (this._titleFor !== this.stage.stage) { this._titleFor = this.stage.stage; this._zoneTitle(this.stage.stage); }
+    this._sync();
+    this._stepRebuild();                                // one chunk a frame of a pending rebuild
+    this._stepPaint();                                  // and a few milliseconds of canvas painting
+    this.petals.update(dt, time);
+    this._time = time;
+    this._tickMarks(time);
+    this.glowPetals.update(dt, time, this.marks, this._water(), this.stage.stage === 2 && !this.finale, this.player.pos, this._petalObstacles());
+    this._shadowLight = (this._shadowLight ?? 0) + ((this.stage.stage === 2 ? 1 : 0) - (this._shadowLight ?? 0)) * Math.min(1, dt);
+    setShadowLight(this._shadowLight);
+    this._tickCandles(time);
+    const water = this._water();
+    this._floatCandles(time, water);
+    this.props.update(time, this.player.pos.x, this.player.pos.y, water.level);
+    this.drowned.update(time, water);
+    this.chandeliers.update(time, this.camera.position, this.stage.stage === 1);
+    const P = this.player, cam = this.camera;
+    const memoryStage = this.stage.stage === 1;   // grandmother's room only exists here
+    const speed = P.vel.length();
+    if (this._lastPos) this._walked += Math.min(1, Math.hypot(P.pos.x - this._lastPos.x, P.pos.y - this._lastPos.y));
+    this._lastPos = { x: P.pos.x, y: P.pos.y };
+    const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+
+    this._fearPacing(speed);
+    if (time - (this._quotaAt || 0) > 0.5) { this._quotaAt = time; this._memoryQuota(); }
+
+    // seen: close enough and roughly in front
+    for (const a of this.artworks.active) {
+      if (a.hidden || !a.ready) continue;               // a canvas still dark (its picture on the way) is not a work seen
+      const dx = a.centerWorld.x - P.pos.x, dz = a.centerWorld.z - P.pos.y;
+      const d = Math.hypot(dx, dz);
+      if (d < SEEN_DIST && (fx * dx + fz * dz) / (d || 1) > 0.5 && !this.seen.has(a.art.id)) { this.seen.add(a.art.id); this._lastFound = a.art.id; }
+    }
+    if (this.artworks.inspecting && !this.seen.has(this.artworks.inspecting.art.id)) { this.seen.add(this.artworks.inspecting.art.id); this._lastFound = this.artworks.inspecting.art.id; }
+    if (this.seen.size !== this._seenShown) {
+      if (this._seenShown === 0 && this.seen.size > 0) setTimeout(() => this.petals.sparkle(), GRAIN_OPEN_MS); // the grain opens: sparkles spill from the corner
+      this._seenShown = this.seen.size;
+      // count each newly-seen work into the stage it was seen in, however it
+      // got into `seen` — normal viewing, a console poke while testing, or
+      // a cheat like 00000 that adds several at once
+      for (const id of this.seen) if (!this._stageSeenIds.has(id)) { this._stageSeenIds.add(id); this.stageSeen[this.stage.stage]++; }
+      this._gutterCandles(time);
+      this.roses.set(this.seen.size, t('rosesLabel', { n: this.seen.size, total: this.total }));
+    }
+    this._maybeSummonPortal(time);
+
+    this._updateBoards(dt);
+
+    this._repathT -= dt;
+    if (this._repathT <= 0) { this._repathT = REPATH_EVERY; this._updateMarks(); }
+
+    // turn-around: more than ~145° of turning inside 1.5 s
+    this._yawHist.push([time, P.yaw]);
+    while (this._yawHist.length && time - this._yawHist[0][0] > 1.5) this._yawHist.shift();
+    const turned = Math.abs(P.yaw - this._yawHist[0][1]);
+    if (turned > 2.5 && !this._turning) {
+      this._turning = true;
+      this.post?.burst(0.9);
+      // whatever was behind you may not be what it was
+      for (const s of this.chunkStuff.values()) for (const w of s.writings) {
+        if (w.behindT > 0.8 && Math.random() < 0.6) { w.seed = Math.random(); this._writeOn(w); }
+      }
+    } else if (turned < 1.0) this._turning = false;
+    // track how long each writing has been out of sight behind you
+    for (const s of this.chunkStuff.values()) for (const w of s.writings) {
+      const dx = w.mesh.position.x - cam.position.x, dz = w.mesh.position.z - cam.position.z;
+      const d = Math.hypot(dx, dz);
+      w.behindT = d < 14 && (fx * dx + fz * dz) / (d || 1) < -0.2 ? w.behindT + dt : 0;
+    }
+
+    // presence doors: stand still close to one and it gives way. Light pours
+    // out through the gap, the music clears, "not yet", and it slams shut.
+    this._doorLights.length = 0;
+    for (const s of this.chunkStuff.values()) for (const d of s.doors) {
+      if (d.phase === 'done' || this.stage.stage !== 0) continue;   // doors live in fear only
+      if (d.phase === 'wait') {
+        if (this.finale) continue;                     // the way on is open now: doors keep still
+        const near = Math.hypot(d.x - P.pos.x, d.z - P.pos.y) < DOOR_REACH;
+        d.waitT = near && speed < 0.08 && !P.locked ? d.waitT + dt : Math.max(0, d.waitT - dt * 2);
+        d.leaf.material.color.setScalar(0.8 + 0.2 * Math.min(1, d.waitT / DOOR_WAIT));
+        if (d.waitT < DOOR_WAIT) continue;
+        d.phase = 'open'; d.t = 0; d.said = false;
+        const local = d.group.worldToLocal(new THREE.Vector3(P.pos.x, 1, P.pos.y));
+        d.dir = local.z >= 0 ? 1 : -1;                 // the side the visitor stands on
+        d.rays ??= buildLightRays();
+        d.rays.group.rotation.y = d.dir > 0 ? 0 : Math.PI;
+        d.group.add(d.rays.group);
+        this.audio?.doorLight?.(DOOR_HOLD + 1.5);
+        this.audio?.doorCreak?.(1.3);                  // the hinges, as it gives way
+      }
+      d.t += dt;
+      let swing = 0, k = 0;
+      if (d.phase === 'open') {
+        const e = Math.min(1, d.t / 1.3);
+        swing = DOOR_SWING * (1 - (1 - e) ** 3);        // gives way, slowing at the end
+        k = Math.min(1, Math.max(0, (d.t - 0.15) / 0.9));
+        if (!d.said && d.t > 0.8) { d.said = true; this._say(null, t('doorNotYet')); }
+        if (d.t >= DOOR_HOLD) { d.phase = 'slam'; d.t = 0; }
+      } else if (d.phase === 'slam') {
+        const e = Math.min(1, d.t / DOOR_SLAM);
+        swing = DOOR_SWING * (1 - e * e);               // accelerating shut
+        k = Math.max(0, 1 - d.t / 0.12);
+        if (e >= 1) {
+          d.phase = 'done'; this.doorsDone.add(d.key);
+          d.leaf.material.color.setScalar(0.8);
+          this.audio?.doorSlam?.();
+          this.post?.burst?.(0.7);
+        }
+      }
+      d.pivot.rotation.y = -d.dir * swing;               // away from the visitor
+      d.rays?.set(k, time);
+      if (k > 0.01) {                                    // the walls and floor catch it
+        d.lights ??= [[0.6, 1.3], [2.0, 1.0]].map(([z, y]) => ({ at: new THREE.Vector3(0, y, z), p: new THREE.Vector3(), x: 0, y: 0, z: 0, col: new THREE.Color() }));
+        for (const l of d.lights) {                      // reused every frame: nothing allocated while it shines
+          d.rays.group.localToWorld(l.p.copy(l.at));
+          l.x = l.p.x; l.y = l.p.y; l.z = l.p.z;
+          l.col.setRGB(1, 0.97, 0.9).multiplyScalar(0.55 * k);
+          this._doorLights.push(l);
+        }
+      }
+    }
+
+    // the metal door onto the stairwell (fear only): every time the visitor
+    // comes close, the view is taken — flown from wherever they stand to a spot
+    // in front of the doorway, looking in — while the door gives way and shows
+    // the stairwell with light in the tone of its photograph pouring out. The
+    // view can be turned only a few degrees while it is held. As the door
+    // shuts the view comes round, level, onto the way on, and the walk is the
+    // visitor's again. It re-arms once they have walked away.
+    if (this.stage.stage !== 0) this._dropStairwell();
+    const eye = new THREE.Vector3();
+    for (const s of this.chunkStuff.values()) {
+      const sw = s.stairwell;
+      if (!sw) continue;
+      const d = Math.hypot(sw.group.position.x - P.pos.x, sw.group.position.z - P.pos.y);
+      let k = 0;
+      if (sw.phase === 'wait') {
+        if (this.finale || d >= STAIR_NEAR) continue;
+        sw.phase = 'open'; sw.t = 0;
+        if (!P.locked && !P.auto) sw.cam = this._stairView(sw);
+        this.audio?.doorCreak?.(STAIR_OPEN + 0.4);
+        this.audio?.doorLight?.(STAIR_HOLD + 1);
+        if (STAIR_NIGHTMARE) { this.audio?.nightmare?.(STAIR_OPEN + STAIR_HOLD); sw.fov0 = P.camera.fov; }
+      }
+      sw.t += dt;
+      if (sw.phase === 'open') {
+        const e = Math.min(1, sw.t / STAIR_OPEN);
+        // negative, as the presence doors: the leaf swings out toward the visitor
+        sw.pivot.rotation.y = -STAIR_SWING * (1 - (1 - e) ** 3);
+        k = e;
+        if (sw.t >= STAIR_OPEN) { sw.phase = 'hold'; sw.t = 0; }
+      } else if (sw.phase === 'hold') {
+        sw.pivot.rotation.y = -STAIR_SWING;
+        k = 1;
+        if (STAIR_NIGHTMARE && sw.fov0) {                // the corridor seems to stretch away: a slow creeping zoom in
+          const e = Math.min(1, sw.t / STAIR_HOLD);
+          P.camera.fov = sw.fov0 * (1 - 0.14 * e * e * (3 - 2 * e)); P.camera.updateProjectionMatrix();
+        }
+        if (sw.t >= STAIR_HOLD) {
+          sw.phase = 'slam'; sw.t = 0;
+          if (sw.cam) {                                   // the view will come round onto the way on
+            // back onto the path, facing the way the visitor was walking, square to the corridor (#43)
+            sw.cam.way = Math.round(sw.cam.yaw0 / (Math.PI / 2)) * (Math.PI / 2);
+            sw.cam.yawFrom = P.yaw; sw.cam.pitchFrom = P.pitch; sw.cam.turnT = 0;
+          }
+        }
+      } else if (sw.phase === 'slam') {
+        const e = Math.min(1, sw.t / STAIR_SLAM);
+        sw.pivot.rotation.y = -STAIR_SWING * (1 - e * e);
+        k = 1 - e;
+        if (e >= 1) {
+          sw.phase = 'turn'; sw.t = 0;
+          this.audio?.doorSlam?.();
+          this.post?.burst?.(0.4);
+          if (STAIR_NIGHTMARE) {
+            this.post?.black?.(0.3);
+            if (sw.fov0) { P.camera.fov = sw.fov0; P.camera.updateProjectionMatrix(); sw.fov0 = 0; }
+          }
+          if (!this._stairDone) { this._stairDone = true; this._say(null, t('stairDream')); }
+        }
+      } else if (sw.phase === 'turn') {
+        if (!sw.cam || (sw.cam.turnT >= STAIR_TURN && (sw.cam.backT || 0) >= STAIR_TURN)) { sw.cam = null; sw.phase = 'cool'; }
+      } else if (sw.phase === 'cool') {
+        if (d > STAIR_NEAR + 1.5 || (DREAM_PREVIEW && sw.t > 3)) {   // walked away (or judging a sketch: a pause): it opens for the next pass, onto another stairwell
+          sw.phase = 'wait';
+          sw.pic = this._nextStair();                  // the next of the deck: never one already seen
+          sw.setImage(`assets/stairs/stairs_${sw.pic}.webp`);
+        }
+      }
+      if (sw.cam) this._stairHold(sw, dt);
+      eye.set(P.pos.x, P.eyeH ?? EYE_HEIGHT, P.pos.y);
+      sw.tick(dt, time, k, eye);
+      if (k > 0.01) {                                  // the walls and floor catch it, in the photograph's tone
+        sw.lights ??= [[0.6, 1.3], [2.0, 1.0]].map(([z, y]) => ({ at: new THREE.Vector3(0, y, z), p: new THREE.Vector3(), x: 0, y: 0, z: 0, col: new THREE.Color() }));
+        for (const l of sw.lights) {
+          sw.rays.group.localToWorld(l.p.copy(l.at));
+          l.x = l.p.x; l.y = l.p.y; l.z = l.p.z;
+          l.col.setRGB(sw.tint.x, sw.tint.y, sw.tint.z).multiplyScalar(0.45 * k);
+          this._doorLights.push(l);
+        }
+      }
+    }
+
+    // secret: walk backwards for 30 s and you are small again
+    if (P.intent < 0) { this._backT += dt; this._fwdT = 0; }
+    else if (P.intent > 0) { this._fwdT += dt; this._backT = 0; }
+    if (!this.child && this._backT > CHILD_AFTER) { this.child = true; P.eyeTarget = CHILD_EYE; this.audio?.chime(); }
+    if (this.child && this._fwdT > 25) { this.child = false; P.eyeTarget = EYE_HEIGHT; }
+
+    // secret: grandmother's kitchen is quiet
+    let inKitchen = false;
+    for (const s of this.chunkStuff.values()) {
+      const k = s.kitchen;
+      if (k && memoryStage && P.pos.x > k.minX && P.pos.x < k.maxX && P.pos.y > k.minZ && P.pos.y < k.maxZ) inKitchen = true;
+    }
+    if (inKitchen !== this._inKitchen) {
+      this._inKitchen = inKitchen;
+      this.audio?.hush(inKitchen);
+      if (inKitchen && !this._roomHinted) {
+        this._roomHinted = true; this.visitedRoom = true;
+        this._say(t('roomLabel'), t('roomHint')); this._soulAt = time;
+        this._rebuildScatter();                       // candles now point to the way out into the light
+      }
+    }
+
+    // a question on screen, the visitor standing still: it is kept for the card,
+    // and it warms and stays a while longer to say so
+    const q = this._onScreen;
+    if (q) {
+      const up = q.el.classList.contains('visible');    // set a frame after it is typed, taken off as it fades
+      if (!q.el.isConnected || (q.up && !up)) this._onScreen = null;
+      else if ((q.up = up) && (q.still = P.vel.length() < 0.15 ? q.still + dt : 0) >= KEEP_STILL) {
+        this.kept.push(q.text);
+        q.el.classList.add('kept');
+        q.el.style.setProperty('--q', '#ff1a1a');      // the design system's one red, as small text on the dark
+        q.keep();
+        this._onScreen = null;
+      }
+    }
+
+    // standing still in her room for a while: the clock strikes twelve, then
+    // the kettle boils (places.js stay), once a visit
+    if (inKitchen && !this._roomStayed) {
+      this._roomStill = P.vel.length() < 0.15 ? (this._roomStill || 0) + dt : 0;
+      if (this._roomStill > ROOM_STILL) { this._roomStayed = true; this.audio?.roomStay?.(); }
+    }
+
+    // portals: cross-check, animate the veils, dim the ones already used
+    this._portalAppear(dt);
+    const cur = { x: P.pos.x, z: P.pos.y };
+    this._checkPortals(this._prevPos, cur);
+    this._prevPos = cur;
+    for (const st of this.chunkStuff.values()) for (const p of st.portals) {
+      // only the portal into the very next stage exists; the way into the
+      // light opens only after grandmother's room has been found
+      const live = p.target === this.stage.stage + 1 && (p.target !== 2 || this.visitedRoom);
+      p.group.visible = live;
+      p.veil.material.uniforms.uTime.value = time;
+    }
+    if (this.stage.stage !== this._lastStage) { // the world changed: rewrite the walls in its hand
+      this._lastStage = this.stage.stage;
+      const target = { fear: +(this.stage.stage === 0), memory: +(this.stage.stage === 1), accept: +(this.stage.stage === 2) };
+      // every scrawl is a canvas: painted in turn, in the portal's flight, not all in the frame of the swap
+      for (const st of this.chunkStuff.values()) for (const w of st.writings) {
+        w.zone = target;
+        if (this._deferPaint) this._paint.push(() => { if (w.mesh.parent) this._writeOn(w); }); else this._writeOn(w);
+      }
+      for (const st of this.chunkStuff.values()) for (const p of st.posters || []) this._printPoster(p);
+      // the rooms first, the nearest first: they are what the stage is for
+      const rooms = [...this.chunkStuff.values()].map(st => st.kitchen).filter(Boolean)
+        .sort((a, b) => Math.hypot(a.x - P.pos.x, a.z - P.pos.y) - Math.hypot(b.x - P.pos.x, b.z - P.pos.y));
+      for (const k of rooms) this._wantRoom(k);
+      for (const st of this.chunkStuff.values()) {
+        for (const m of (st.carpets || []).concat(st.rugs || [])) this._showMemory(m);
+        for (const m of st.toys || []) m.visible = this.stage.stage === 1;
+      }
+      // and the rest of the plain carpets and rugs, ahead of the chunks that will want them
+      if (this.stage.stage === 1 && !this._paintedAhead) { this._paintedAhead = true; this._paint.push(...boardPaintJobs()); }
+      // the light's ten plants, built and compiled now, under the tunnel, not in the frame a chunk first wants one (#80)
+      if (this.stage.stage === 2 && !this._plantsWarm) {
+        this._plantsWarm = true;
+        warmPlants(LIGHT_PLANTS.flatMap(n => ['accept-corner:' + n, 'accept-middle:' + n]), this.atmo).then(gs => gs.forEach(g => this._warm(g))).catch(() => {});
+      }
+      this._rebuildScatter();
+      for (const st of this.chunkStuff.values()) if (st.ward) st.ward.group.visible = this.stage.stage === 0;
+      for (const st of this.chunkStuff.values()) if (st.beds) st.beds.group.visible = this.stage.stage === 0;
+      for (const st of this.chunkStuff.values()) for (const d of st.doors) d.group.visible = this.stage.stage === 0;
+      this._warmPending = true;
+    }
+    this._warmShaders();
+
+    // grandmother's room: light the nearest one, let candles and picture breathe
+    let room = null, nook = null, rd = 14;
+    for (const st of this.chunkStuff.values()) {
+      const k = st.kitchen;
+      if (!k) continue;
+      k.group.visible = memoryStage && this._roomInSight(k, time);
+      if (!memoryStage) continue;
+      const d = Math.hypot(k.x - P.pos.x, k.z - P.pos.y);
+      if (d < rd) { rd = d; room = k.room; nook = k; }
+    }
+    this.kitchenRig.update(room, time, !!nook?.group.visible);
+    // the light's copies: shown in the light alone, one built a frame, the nearest first
+    let vNext = null, vd = 40;
+    for (const st of this.chunkStuff.values()) {
+      const v = st.veiled;
+      if (!v) continue;
+      v.group.visible = this.stage.stage === 2;
+      const d = Math.hypot(v.x - P.pos.x, v.z - P.pos.y);
+      if (this.stage.stage === 2 && !v.room && d < vd) { vd = d; vNext = v; }
+    }
+    vNext?.build();
+    this.atmo?.setNook?.(nook);                         // its walls: smoke where the paper has roses (materials.js)
+    // the souls in the room drift, and scatter when walked into
+    for (const st of this.chunkStuff.values()) {
+      const k = st.kitchen;
+      if (!k || !memoryStage || !k.wisps) continue;
+      for (const w of k.wisps) {
+        if (w.gone) {
+          for (const tsp of w.tail) tsp.visible = false;
+          w.sprite.material.opacity = Math.max(0, w.sprite.material.opacity - dt);
+          w.sprite.scale.multiplyScalar(1 + dt * 1.5);
+          if (time > w.back) { w.gone = false; this._placeWisp(w, k); w.sprite.scale.set(0.35, 0.35, 1); }
+          continue;
+        }
+        w.sprite.material.opacity = Math.min(1, w.sprite.material.opacity + dt * 0.5);
+        // a still visitor draws the nearest soul in, slowly; moving lets it drift home
+        const dxp = P.pos.x - w.home.x, dzp = P.pos.y - w.home.z, dp = Math.hypot(dxp, dzp);
+        const drawn = speed < 0.1 && dp < 5 ? Math.min(1, w.pull.x + dt * 0.12) : Math.max(0, w.pull.x - dt * 0.2);
+        w.pull.x = drawn;
+        const reach = dp > SOUL_STOP ? drawn * (1 - SOUL_STOP / dp) : 0;  // never drifts inside touching range
+        const b = Math.sin(time * 0.9 + w.seed);
+        w.sprite.position.set(
+          w.home.x + dxp * reach + Math.sin(time * 0.4 + w.seed) * 0.25,
+          w.home.y + b * 0.12,
+          w.home.z + dzp * reach + Math.cos(time * 0.35 + w.seed) * 0.25);
+        let lead = w.sprite.position;
+        for (const tsp of w.tail) { tsp.position.lerp(lead, Math.min(1, dt * 4)); tsp.visible = true; lead = tsp.position; }
+        const s2 = 0.32 + 0.05 * Math.sin(time * 3 + w.seed);
+        w.sprite.scale.set(s2, s2, 1);
+        if (Math.hypot(w.sprite.position.x - P.pos.x, w.sprite.position.z - P.pos.y) < 1.1 && this._soulReady(time)) {
+          w.gone = true; w.back = time + 20;
+          this._askSoul(w.cat, k.room, time);
+        }
+      }
+    }
+    // the television: attach the shared screen once, draw it, hiss when it snows
+    if (room) {
+      const tv = this._tvTexture();
+      for (const sc of room.screens) if (sc.material.map !== tv.tex) { sc.material.map = tv.tex; sc.material.needsUpdate = true; }
+      const talking = nook.group.visible ? this._drawTV() : false;   // no painting a screen nobody can see
+      const tvPos = room.tv;
+      const dTv = tvPos ? Math.hypot(tvPos.x - P.pos.x, tvPos.z - P.pos.y) : 99;
+      const burst = performance.now() < (this._tvBurstUntil || 0);   // touched three times: a loud snow first (rituals.js)
+      this.audio?.tvStatic?.(burst ? 1 : talking ? 0 : Math.max(0, 1 - dTv / 7), { cc: !burst });
+    } else this.audio?.tvStatic?.(0);
+    if (room) {
+      for (const { flame, halo } of room.flames.concat(room.trail || [])) {
+        const f = 1.7 + Math.sin(time * 13 + flame.id) * 0.25 + Math.random() * 0.2;
+        flame.scale.set(1, f, 1);
+        halo.material.opacity = 0.7 + Math.random() * 0.3;
+      }
+      for (const sc of room.screens) sc.material.color.setScalar(0.92 + 0.08 * Math.random());
+    }
+
+    if (this.guide) this._updateGuide(dt, time);
+    if (this.tour) this._updateTour(dt, time);
+
+    // after grandmother's room the souls leave it and roam the corridors
+    if (this.visitedRoom && this.stage.stage === 1) this._updateRoamers(dt, time, speed);
+    if (this.stage.stage === 2) {
+      this._hideRoamers(); for (const b of this.balloons || []) b.g.visible = !b.spent;
+      if (this.surfaceBalloon) this.surfaceBalloon.g.visible = true;
+      this._updateClouds(dt, time, speed);
+    } else if (this.clouds || this.balloons || this.surfaceBalloon) {            // a cheat can lead back out of the light
+      for (const b of this.balloons || []) { b.g.visible = false; b.floorShade.visible = b.wallShade.visible = false; }
+      if (this.surfaceBalloon) { this.surfaceBalloon.g.visible = false; this.surfaceBalloon.floorShade.visible = this.surfaceBalloon.wallShade.visible = false; }
+      for (const c of this.clouds || []) for (const sp of c.puffs) sp.visible = false;
+    }
+    if (this.stage.stage !== 1) this._hideRoamers?.();
+    if (this.stage.stage === 0) this._updateFearSouls(dt, time, speed);
+    else if (this.fearSouls && !this._fearHidden) this._hideSouls(this.fearSouls);
+    this._fearHidden = this.stage.stage !== 0;
+
+    // all the works seen: the arch of roses, once nothing else holds the view
+    if (!this.finale && this.seen.size >= this.total && !P.locked) this._beginFinale();
+    if (this.finale) this._updateFinale(dt, time);
+
+    // candles: flames breathe; the 8 nearest light the walls
+    tickCandles(time);
+    this._candleT = (this._candleT || 0) - dt;
+    if (this._candleT <= 0) {
+      this._candleT = 0.25;
+      const all = [];
+      if (!this.finale?.gone) for (const st2 of this.chunkStuff.values()) for (const c of st2.scatter?.lights || []) {
+        const d = Math.hypot(c.x - P.pos.x, c.z - P.pos.y);
+        if (d < 14) all.push([d, c]);
+      }
+      for (const c of this.finale?.candles?.lights || []) {           // the ending's candles, at the water's height
+        const y = this.finale.candles.group.position.y;
+        all.push([Math.hypot(c.x - P.pos.x, c.z - P.pos.y), { ...c, y: 0.28 + y }]);
+      }
+      all.sort((a, b) => a[0] - b[0]);
+      this._nearCandles = all.slice(0, 8).map(e => e[1]);
+      this._lightTheWay();
+    }
+    window.__app?.atmo?.setCandles(this._doorLights.length ? this._doorLights.concat(this._nearCandles || []).slice(0, 8) : this._nearCandles || [], time);
+
+    // voices of the works nearby, and the portal's call
+    this._updateVoices(zone, dt);
+    this._updateBeacon(time);
+  }
+
+  // Light is the map in fear and in the red rooms (#96): lamps and candles
+  // burn up near what is still worth finding (unseen works, before the room
+  // grandmother's room itself, the portal) and sink low where everything is
+  // seen; near the portal every lamp takes on the next zone's light.
+  _lightTheWay() {
+    const st = this.stage.stage, P = this.player, atmo = window.__app?.atmo;
+    if (!atmo?.setWay) return;
+    const lures = [];
+    if (st < 2) {
+      for (const a of this.artworks.active) if (!a.hidden && !this.seen.has(a.art.id)) lures.push({ x: a.centerWorld.x, z: a.centerWorld.z, w: 1 });
+      if (st === 1 && !this.visitedRoom) {
+        const cx = Math.floor(P.pos.x / (CHUNK * CELL)), cz = Math.floor(P.pos.y / (CHUNK * CELL));
+        for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) { const k = kitchenPlan(cx + dx, cz + dz); if (k) lures.push({ x: k.x, z: k.z, w: 1 }); }
+      }
+      lures.sort((a, b) => Math.hypot(a.x - P.pos.x, a.z - P.pos.y) - Math.hypot(b.x - P.pos.x, b.z - P.pos.y));
+    }
+    const way = st < 2 ? this.summonedPortals[st + 1] : null;
+    atmo.setWay(lures.slice(0, 6), way, WAY_COL[st + 1]);
+    // each candle near the visitor burns by the same rule
+    for (const c of this._nearCandles || []) {
+      let k = way ? Math.max(0, 1 - Math.hypot(way.x - c.x, way.z - c.z) / 22) : 0;
+      for (const l of lures) k = Math.max(k, Math.max(0, Math.min(1, (15 - Math.hypot(l.x - c.x, l.z - c.z)) / 12)));
+      c.k = st < 2 ? 0.55 + 0.75 * k : 1;
+    }
+  }
+
+  // The portal calls by ear (beacon.js): from a cell a few metres ahead on
+  // the walked route, so the sound turns the corners the visitor must.
+  _updateBeacon(time) {
+    if (!this.audio) return;
+    const st = this.stage.stage, P = this.player, plan = st < 2 ? this.summonedPortals[st + 1] : null;
+    this._beacon ||= createBeacon(this.audio);
+    if (!plan || this.finale) { this._beacon.update(st, null, 0, false); this._beaconAt = null; return; }
+    if (time - (this._beaconT || 0) > 1) {
+      this._beaconT = time;
+      const gi = cellOf(plan.x), gj = cellOf(plan.z);
+      const path = this._route((i, j) => (Math.abs(i - gi) <= 1 && Math.abs(j - gj) <= 1 ? Infinity : -Math.hypot(i - gi, j - gj)), cellOf(P.pos.x), cellOf(P.pos.y), 12000);
+      const seen = this._lineOfSight(P.pos.x, P.pos.y, plan.x, plan.z);
+      // the farthest cell still in sight within six ahead: the sound sits round the next corner
+      let at = { x: plan.x, z: plan.z };
+      if (!seen && path.length > 2) {
+        let k = Math.min(6, path.length - 1);
+        while (k > 1 && !this._lineOfSight(P.pos.x, P.pos.y, centreOf(path[k][0]), centreOf(path[k][1]))) k--;
+        at = { x: centreOf(path[k][0]), z: centreOf(path[k][1]) };
+      }
+      this._beaconAt = { at, route: path.length ? path.length * CELL : Math.hypot(plan.x - P.pos.x, plan.z - P.pos.y), seen };
+    }
+    const b = this._beaconAt;
+    if (b) this._beacon.update(st, b.at, b.route, b.seen);
+  }
+
+  _updateVoices(zone, dt = 0.016) {
+    if (!this.audio?.setArtVoices) return;
+    const P = this.player;
+    // Alisa's voiced works (alisa.js): their note is hers until they have spoken
+    const alisa = (this._alisa ||= new AlisaVoices(this.audio));
+    const voiced = this.artworks.active.filter(a => !a.hidden && VOICED.has(a.art.id))
+      .map(a => ({ key: a.chunkKey + ':' + a.art.id, id: a.art.id, x: a.centerWorld.x, z: a.centerWorld.z }));
+    alisa.update({ x: P.pos.x, z: P.pos.y }, voiced);
+    const near = this.artworks.active
+      .filter(a => !a.hidden && !alisa.holds(a.chunkKey + ':' + a.art.id, a.art.id))
+      .map(a => ({ a, d: Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y) }))
+      .filter(o => o.d < 30)
+      .sort((u, v) => u.d - v.d)
+      .slice(0, 4)
+      .map(({ a }) => ({
+        key: a.chunkKey + ':' + a.art.id,
+        index: parseInt(a.art.id, 10) - 1,
+        x: a.centerWorld.x, z: a.centerWorld.z,
+        seen: this.seen.has(a.art.id),
+        occluded: !this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3),
+      }));
+    this.audio.setArtVoices({ x: P.pos.x, z: P.pos.y, yaw: P.yaw }, near);
+    // at a work (within 3.5 m, in sight, or inspecting it): its own sound world
+    let at = this.artworks.inspecting;
+    if (!at) {
+      let bd = 3.5;
+      for (const a of this.artworks.active) {
+        if (a.hidden) continue;
+        const d = Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y);
+        if (d < bd && this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3)) { bd = d; at = a; }
+      }
+    }
+    this.audio.nearWork?.(at ? parseInt(at.art.id, 10) - 1 : null);
+    // the last work near, in the light: grandmother's waltz, clearer the nearer (#94, music.js)
+    // It is heard from further now and from where the work is, by the
+    // walked way round the corners, so headphones can follow it (#96).
+    if (this.stage.stage === 2 && !this.finale && this.total - this.seen.size === 1) {
+      let last = null, ld = Infinity;
+      for (const a of this.artworks.active) {
+        if (a.hidden || this.seen.has(a.art.id)) continue;
+        const d = Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y);
+        if (d < ld) { ld = d; last = a; }
+      }
+      if (last && (this._waltzT = (this._waltzT ?? 0) - dt) <= 0) {
+        this._waltzT = 1;
+        const tx = last.centerWorld.x + last.normal.x * 1.2, tz = last.centerWorld.z + last.normal.z * 1.2;
+        const gi = cellOf(tx), gj = cellOf(tz);
+        const path = this._route((i, j) => (i === gi && j === gj ? Infinity : -Math.hypot(i - gi, j - gj)), cellOf(P.pos.x), cellOf(P.pos.y), 12000);
+        let at = { x: last.centerWorld.x, z: last.centerWorld.z };
+        if (path.length > 2 && !this._lineOfSight(P.pos.x, P.pos.y, tx, tz)) {
+          let k = Math.min(6, path.length - 1);
+          while (k > 1 && !this._lineOfSight(P.pos.x, P.pos.y, centreOf(path[k][0]), centreOf(path[k][1]))) k--;
+          at = { x: centreOf(path[k][0]), z: centreOf(path[k][1]) };
+        }
+        this._waltzAt = { ...at, route: path.length ? path.length * CELL : ld };
+      }
+      const w = this._waltzAt;
+      if (w) this.audio.lastWaltz?.(Math.max(0.25, Math.min(1, (48 - w.route) / 40)), { x: w.x, z: w.z, d: ld });
+    }
+    // the yard through the light's windows, the nearest one (#94, yard.js)
+    if ((this._yardT = (this._yardT ?? 0) - dt) <= 0) {
+      this._yardT = 0.2;
+      let best = Infinity, bx = 0, bz = 0;
+      if (this.stage.stage === 2 && !this.finale) for (const st of this.chunkStuff.values()) {
+        const ws = (st.props?.windows || []).concat(st.veiled?.room?.window ? [{ x: st.veiled.room.window.x, z: st.veiled.room.window.z }] : []);
+        for (const w of ws) { const d = Math.hypot(w.x - P.pos.x, w.z - P.pos.y); if (d < best) { best = d; bx = w.x - P.pos.x; bz = w.z - P.pos.y; } }
+      }
+      this.audio.yardNear?.(best, bx, bz);
+    }
+    this.audio.setZone?.(zone);
+  }
+
+  // Is (x, z) on a rug or a runner of the memory stage? The footsteps ask
+  // (audio.js _surface): a rug muffles them.
+  onRug(x, z) {
+    if (this.stage.stage !== 1) return false;
+    for (const st of this.chunkStuff.values()) for (const m of st.rugs || []) {
+      if (!m.visible) continue;
+      const p = m.geometry.parameters, c = Math.cos(m.rotation.y), s = Math.sin(m.rotation.y);
+      const dx = x - m.position.x, dz = z - m.position.z, lx = dx * c - dz * s, lz = dx * s + dz * c;   // into the rug's own frame
+      if (Math.abs(lx) <= p.width / 2 && Math.abs(lz) <= p.height / 2) return true;
+    }
+    return false;
+  }
+
+  // A room is walls all round and a door: it is drawn only while some part of
+  // its floor can be seen from where the visitor stands (checked four times a
+  // second), so the dozen rooms loaded round the walk do not all cost draw calls.
+  _roomInSight(k, time) {
+    if (k._seenAt !== undefined && time - k._seenAt < 0.25) return k._seen;
+    k._seenAt = time;
+    const P = this.player.pos, px = P.x, pz = P.y, m = 0.6;
+    const nx = Math.max(k.minX, Math.min(k.maxX, px)), nz = Math.max(k.minZ, Math.min(k.maxZ, pz));
+    const d = Math.hypot(nx - px, nz - pz);
+    if (d < 1.5) return (k._seen = true);
+    if (d > 45) return (k._seen = false);
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
+      const x = k.minX + m + (k.maxX - k.minX - 2 * m) * i / 3, z = k.minZ + m + (k.maxZ - k.minZ - 2 * m) * j / 3;
+      if (this._lineOfSight(px, pz, x, z)) return (k._seen = true);
+    }
+    return (k._seen = false);
+  }
+
+  _lineOfSight(x0, z0, x1, z1) {
+    const d = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(d / 0.4);
+    for (let k = 1; k < n; k++) {
+      const x = x0 + (x1 - x0) * (k / n), z = z0 + (z1 - z0) * (k / n);
+      if (solidAtGlobal(cellOf(x), cellOf(z))) return false;
+    }
+    return true;
+  }
+}
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

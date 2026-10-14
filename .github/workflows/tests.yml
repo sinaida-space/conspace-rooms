@@ -1,0 +1,35 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    name: world, placement, zones
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm test
+        working-directory: tests
+
+  smoke:
+    name: a walk across two chunk borders
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+        working-directory: tests
+      # the runner's own Chrome, software WebGL, tier 0
+      - run: npm run smoke
+        working-directory: tests
+
+# Je suis le spectre d'une rose que tu portais hier au bal.

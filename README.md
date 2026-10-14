@@ -1,0 +1,252 @@
+![CONSPACE ROOMS](.github/conspace.png)
+
+# CONSPACE ROOMS
+
+**Live:** https://conspace-rooms.vercel.app/ (RU / EN)
+
+## Links
+
+| | Main site (Vercel) | Mirror (GitHub Pages) |
+|---|---|---|
+| **The labyrinth** | [conspace-rooms.vercel.app](https://conspace-rooms.vercel.app/) | [sinaida-space.github.io/conspace-rooms](https://sinaida-space.github.io/conspace-rooms/?mirror) |
+| **Gallery mode** | [/gallery](https://conspace-rooms.vercel.app/gallery) | [/gallery.html](https://sinaida-space.github.io/conspace-rooms/gallery.html) |
+| **Gallery rider** | [/rider.html](https://conspace-rooms.vercel.app/rider.html?lang=en) | [/rider.html](https://sinaida-space.github.io/conspace-rooms/rider.html?lang=en&mirror) |
+| **Specs** | [/tech.html](https://conspace-rooms.vercel.app/tech.html?lang=en) | [/tech.html](https://sinaida-space.github.io/conspace-rooms/tech.html?lang=en&mirror) |
+
+Add `?lang=ru` or `?lang=en` to any page for the language. The mirror is a
+backup copy: `?mirror` keeps you on GitHub Pages and the
+browser remembers it. Gesture control works there too: the hand tracker is
+served from the site itself.
+
+A walk-through web installation by [Sinaida](https://sinaida.eu/) and
+[UVALISS](https://uvaliss.ru/) (Alisa Feer). Eighteen works from the SOULS series
+by UVALISS hang in a labyrinth of half-lit rooms that the browser builds as you
+walk. There is no map and no signage. A rose in the corner grows with every work
+you meet; find all eighteen and an arch of roses rises out of the clouds to let you out. Put on headphones
+and go slowly.
+
+## What it is about
+
+SOULS is a series about looking into your own inner world and accepting it as it
+is. The labyrinth walks the same road: hospital corridors of fear, then a
+grandmother's flat full of memory, then pale rooms where the same kitchen rests
+under glowing linen. The works hang wherever the corridors happen to put them, so every visit
+meets them in a different order.
+
+## The vibe
+
+Half-remembered late Soviet interiors: green oil paint under whitewash, humming
+tubes, rugs on the walls, a television left on in an empty room, beds and drip
+stands the hospital left behind. Liminal-space stillness with a green terminal
+screen for a front door. Candles are the map, a rare door gives way for a moment
+if you stand still in front of it, every work hums its own note, and the music is
+generated as you walk and never quite the same twice (each piece picks its own
+key, tempo and harmony). In the hospital, lo-fi piano with a ward monitor, 80s
+Soviet synth and a basement techno heard through concrete take turns, and a radio
+sometimes breaks through with the time signal. In grandmother's world gramophone
+records play everywhere, as if from the next flat, and close in her room: a
+waltz, a tango on a bayan, a 70s estrada ballad, a romance on a guitar.
+
+## Why it exists
+
+Paintings usually wait in rooms you have to travel to. This one opens in any
+browser, on a laptop or a phone, and you meet the works alone, at your own pace.
+It keeps nothing about you: no analytics, no accounts, and the camera image
+never leaves your device.
+
+## Collaboration
+
+UVALISS (Alisa Feer) is a visual artist from Saint Petersburg exploring themes of light and
+darkness, childhood and dreams.
+
+- Sinaida: [sinaida.eu](https://sinaida.eu/) · [@sin.ai.da](https://www.instagram.com/sin.ai.da)
+- UVALISS: [uvaliss.ru](https://uvaliss.ru/) · [@uvaliss](https://www.instagram.com/uvaliss/)
+
+## Controls
+
+| Action                | Desktop (gestures)         | Desktop (keyboard)          | Mobile (light mode)          |
+|------------------------|-----------------------------|-------------------------------|---------------------------------|
+| Walk                   | one fist (two fists run); the walk keeps to the corridor's middle | W / ↑, S / ↓                  | hold top half of the screen     |
+| Turn                   | point right hand = turn right, point left hand = turn left; heading into a wall, the view turns along the corridor by itself (or round, in a dead end) | ← / →, or mouse look (click to lock); heading into a wall while walking, the view turns along the corridor by itself (or round, in a dead end) | horizontal drag |
+| Zoom                   | both palms open, spread/pinch the two hands | mouse wheel         | two-finger pinch (desktop-touch fallback) |
+| Strafe                 | —                            | A / D                         | —                                |
+| Inspect                | paintings show themselves when passed, 3 s each; open palm holds | E, click        | tap an artwork                  |
+| Close inspect / stop   | both palms open              | Escape                        | tap again                       |
+| Back to the middle     | Space (keyboard works in every mode) | Space                 | —                                |
+| Full screen            | F                            | F                             | —                                |
+| Menu                    | Tab                          | Tab                            | tap the menu tape                |
+| Sound on/off            | N                             | N                               | tap the menu tape                |
+| Volume                  | [ and ]                       | [ and ]                         | the slider in the menu           |
+| Flicker on/off (calm)   | the menu                      | the menu (Tab, then arrows)     | tap the menu tape                |
+| Main screen             | H                             | H                               | tap the menu tape                |
+| Clip (when available)   | C                             | C                               | tap the menu tape                |
+| Finish (hold 1 s)       | Q                             | Q                               | tap the menu tape                |
+| Bug report             | R R R: a picture of the walk's state to screenshot and send | R R R | —            |
+
+A game controller works in every mode (standard mapping): left stick walks and
+strafes, right stick looks, RT or L3 runs, A inspects, B closes, Y puts the walk
+back to the middle, Start opens the menu (D-pad moves in it, A chooses).
+
+Touch a thing three times and it answers (`src/rituals.js`): three clicks,
+three taps, E or the controller's A three times while looking at it, or one open
+palm held toward it for two seconds. A candle crackles by the ear, flares, sends
+sparks toward a work not yet seen and asks a question in its smoke; in fear a
+bed's sheet breathes, a drip falls slowly to a monitor's beep, a wheelchair
+squeaks; in grandmother's world the television shows 12:24; in the light a
+drowned thing stirs in the water. A clock needs only one touch: it ticks and
+strikes once. Every clock stopped at 12:24 carries the same maker's mark, «ИН»
+in Russian and «JN» in English.
+
+Subtitles for the sounds and the music (`src/captions.js`) are switched on the
+welcome screen or in the menu and kept only in the URL as `?cc=1`. They look
+like film captions: yellow with a black edge, [sounds in brackets], `♪ music ♪`,
+and a sound from one side is captioned on that side of the screen.
+
+Gesture mode requests webcam access on entry (opt-in); if it's denied or unavailable the
+experience falls back to keyboard controls automatically. Light mode is auto-suggested on
+touch devices and runs at reduced quality (tier 0, tighter draw radius, no post-processing,
+half-resolution artwork textures, no webcam).
+
+## Run locally
+
+No build step and no dependencies: the site is plain HTML and ES modules, so any
+static file server will do. A server is needed because browsers block ES modules
+and the camera on `file://` pages.
+
+1. Install [Git](https://git-scm.com/) and Python 3 (preinstalled on macOS; on
+   Windows from [python.org](https://www.python.org/downloads/)).
+2. Clone the repository and enter it:
+
+   ```
+   git clone https://github.com/sinaida-space/conspace-rooms.git
+   cd conspace-rooms
+   ```
+
+3. Start a server in that folder:
+
+   ```
+   python3 -m http.server 4800
+   ```
+
+   (On Windows: `py -m http.server 4800`. With Node.js: `npx serve -l 4800`.)
+4. Open http://localhost:4800/ in Chrome, Edge or Firefox. `localhost` counts as a
+   secure origin, so gesture mode and the camera work there too.
+5. Stop the server with Ctrl+C.
+
+Requires WebGL2. Add `?seed=123` to walk one fixed labyrinth while testing.
+
+## Deploy
+
+Vercel, from `main` (root), no build step:
+https://conspace-rooms.vercel.app/
+
+Every push to `main` redeploys production.
+
+All asset and module paths are relative, so the site works unmodified under a
+subpath or at a domain root.
+
+The GitHub Pages address (https://sinaida-space.github.io/conspace-rooms/)
+stays on and forwards every page to Vercel: a small script at the top of each
+HTML page redirects any `github.io` host, keeping the path, `?lang` and hash.
+`?mirror` switches the redirect off and is remembered in `localStorage`, so the
+Pages copy works as a mirror; `gallery.html` never redirects.
+
+## Soul path
+
+The labyrinth follows the arc of the SOULS series, from trauma to accepting
+oneself. Distance from spawn picks the zone (`src/zones.js`, blended in the
+shaders in `src/materials.js`):
+
+- **Fear** (0–45 m): hospital corridors, green oil paint under whitewash, damp,
+  linoleum, cold tubes that flicker often.
+- **Memory** (80–135 m): grandmother's flat, rosette wallpaper, rugs on the
+  walls, parquet, warm lampshades.
+- **Acceptance** (175 m and on): pale walls in milky light; grandmother's kitchen
+  again, faded, the television and the table under glowing linen; works that
+  grow as the corridors widen; a courtyard heard through the windows.
+
+`src/soulpath.js` moves the world from one stage to the next through portals,
+and candles along the walls point the way. `src/ambience.js` gives every work
+its own sound, `src/dust.js` hangs dust in the lamp beams. Shift runs.
+
+Every visit builds a new labyrinth. The seed is the UTC date and time the page
+opened, to the second (`src/world.js`), and from it follow the corridors, where
+the works hang, the portals, doors and the order of the souls' questions. Two
+visitors who arrive in the same second walk the same corridors. `?seed=<int>`
+pins one labyrinth for testing.
+
+## Gallery mode
+
+`/gallery` runs the piece as an installation for a projector or a screen with a
+webcam. There are no start screens, menus or buttons and the cursor is hidden.
+An attract screen waits until the webcam sees a face for about a second; then the
+walk starts and the visitor steers with their hands. When nobody has been in front
+of the camera for a while (or the closing card has been up long enough), the
+attract screen comes back and the page reloads into a new labyrinth for the next
+visitor. The code is in `src/gallery.js`.
+
+### Setting it up
+
+1. A computer with a recent Chrome, a projector or screen, a webcam placed by the
+   screen facing the visitor at about chest height, and speakers or headphones.
+2. Light the visitor's face and hands from the front; the hand tracker needs to see
+   both hands clearly at a step or two from the camera.
+3. Start Chrome in kiosk mode so it opens full screen, plays sound and uses the
+   camera without anyone clicking:
+
+   ```
+   chrome --kiosk --autoplay-policy=no-user-gesture-required --use-fake-ui-for-media-stream "https://conspace-rooms.vercel.app/gallery?lang=ru"
+   ```
+
+   On macOS: `/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome` with
+   the same flags. Without kiosk mode, allow the camera once when Chrome asks (it
+   remembers the site) and press `F` for full screen; the first key press or click
+   also wakes the sound.
+4. Test it: step in front of the camera, the walk should start; step away and after
+   the idle time the attract screen should return.
+
+### URL parameters
+
+| Parameter | Default | What it does |
+|-----------|---------|--------------|
+| `lang`    | `ru`    | `ru` or `en` |
+| `idle`    | `40`    | seconds with nobody in front before the walk resets (5–600) |
+| `card`    | `25`    | seconds the closing card of questions stays up (5–300) |
+| `volume`  | `0.9`   | master volume, 0 to 1 |
+| `seed`    | time    | an integer for one fixed labyrinth instead of a new one per visitor |
+
+Example: `/gallery?lang=en&idle=60&card=30&volume=0.7`
+
+### Keys
+
+| Key | What it does |
+|-----|--------------|
+| `F` | toggle full screen (when not in kiosk mode) |
+| any key | enter with keyboard controls, if the camera is not available |
+
+As in the ordinary gesture mode,
+the camera image is processed only in the browser: nothing is
+recorded or sent anywhere.
+
+## Languages
+
+The first screen asks for Russian or English. The choice is kept only in the
+URL (`?lang=ru` / `?lang=en`), never in storage, so a link with `?lang=ru`
+opens straight in Russian. All strings live in `src/i18n.js`. The text pages
+(`tech.html`, `privacy.html`) hold both languages and switch the same way.
+
+## Stack
+
+- Vanilla JS (ES modules), no build step
+- [Departure Mono](https://github.com/rektdeckard/departure-mono) by Helena Zhang (SIL OFL 1.1), self-hosted in `assets/fonts/`
+- Subtitles use the device's system font (Helvetica Neue / Helvetica / Arial / system-ui); nothing is loaded or shipped for them
+- [three.js](https://threejs.org/) (vendored) for rendering
+- Procedural GLSL materials; the labyrinth geometry uses no texture files
+- Two CC0 models from [Poly Haven](https://polyhaven.com/) in `assets/models/` (Old Bed Frame, Wheelchair 01), simplified with glTF-Transform; every other hospital prop is drawn in `src/ward.js`
+- Rough Linen texture, [Poly Haven](https://polyhaven.com/a/rough_linen), CC0, in `assets/textures/linen_*.webp` (weave in grey, normals; 512 px)
+- Monstera Plant by Isa Lousberg, [Poly Pizza](https://poly.pizza/), CC0, in `assets/models/monstera.glb` (its own pot is cut away in `src/plants.js`)
+- [MediaPipe Tasks Vision](https://developers.google.com/mediapipe) 0.10.14 (Apache 2.0) hand landmarker for gesture mode, vendored in `vendor/mediapipe/` with its WebAssembly and both models; loaded lazily, opt-in, and no other host is asked for anything
+
+## Rights
+
+© Sinaida Krivchenko & UVALISS (Alisa Feer). Artworks all rights reserved. The window views (`assets/windows/`), the stairwell pictures (`assets/stairs/`) and the carpet pictures (`assets/carpets/`) are by Sinaida Krivchenko, made in Midjourney; the other carpets and the runners are drawn in code.

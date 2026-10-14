@@ -1,0 +1,1125 @@
+// ── conspace-rooms · music.js ───────────────────────────────────────────────
+// The labyrinth's music, generated live with Web Audio: no files, nobody's
+// recording. Three layers share one reverb and cross-fade:
+//
+// Which layer plays follows the world the visitor is in:
+//   hospital   (fear) the ward, kosmos, a muffled techno, synthwave, a music
+//              box, a radio between stations and a cello in the empty wing
+//              take turns, and now and then a radio breaks through with the
+//              six pips of the time signal. In the light (acceptance) the
+//              soft ward, a glass harmonica and slow bells.
+//   grandmother's world (memory) gramophone records everywhere: a waltz, a
+//              tango, a Soviet estrada ballad, a romance, a foxtrot, a gypsy
+//              romance, a children's record. In the corridors they sound
+//              through the wall of the next flat; in her room, close.
+// No voices anywhere: only instruments and the sounds of places (places.js).
+// Every time a piece starts it picks its own key, tempo and harmony, so it
+// never comes back quite the same.
+//
+//   corridor   the pieces of the hospital:
+//              · kosmos: 80s Soviet synth in E minor, a sawtooth arpeggio
+//                under a slowly sweeping filter, pads, a pulsing bass
+//              · techno: a basement rave heard through concrete, a muffled
+//                four-on-the-floor kick, an acid line, a dark stab
+//              · the ward:
+//              lo-fi electric piano on a slow minor progression (Dm9 · B♭maj7 ·
+//              Gm9 · A7♭9), bent by tape wow and flutter; a faint heartbeat on
+//              the bar; far down the ward a patient monitor beeps at its own,
+//              unsteady pace and now and then sounds its three-note alarm.
+//              Fear keeps the beeps and the heartbeat; memory softens them;
+//              in the light they are gone and the piano opens up.
+//   room       records through a gramophone horn (band-limited, resonant,
+//              overdriven), wobbling at 78 rpm under surface noise and crackle.
+//              Seven records take turns: an old waltz on a tinny piano, a tango
+//              on a bayan, a 70s estrada ballad (Yunost organ, bass guitar,
+//              brushes, vibraphone), a romance on a seven-string guitar, a
+//              thirties foxtrot (tuba, banjo, clarinet), a gypsy romance
+//              (violin sliding over the guitar, faster and faster), a worn
+//              children's record (xylophone and pipe, the needle jumping).
+//   light      a presence door giving way: a high major-ninth pad and slow
+//              bells; everything else sinks under it for a few seconds.
+//
+// Notes are scheduled ahead on the audio clock by a timer that looks 1.5 s
+// ahead, so a busy frame never makes the music stumble.
+
+import { Places } from './places.js';
+import { captions } from './captions.js';
+
+const CORRIDOR_CC = ['ward', 'kosmos', 'techno', 'synth', 'musicBox', 'radioPiece', 'cello', 'glass', 'bells'];
+const ROOM_CC = ['waltz', 'tango', 'estrada', 'romance', 'foxtrot', 'gypsy', 'kids'];
+
+const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+const LOOKAHEAD = 1.5;           // seconds of music scheduled ahead of now
+const TICK_MS = 200;             // scheduler period
+
+// corridor: 66 bpm, two bars per chord (bass note first, then the voicing)
+const CORRIDOR_BEAT = 60 / 66;
+const CORRIDOR_CHORDS = [
+  [50, [57, 60, 64, 65]],        // Dm9
+  [46, [57, 62, 65, 69]],        // B♭maj7
+  [43, [58, 62, 65, 69]],        // Gm9
+  [45, [55, 61, 64, 70]],        // A7♭9
+];
+const CORRIDOR_SCALE = [62, 65, 67, 69, 72, 74, 77];   // D minor pentatonic, for the melody
+
+// room: a waltz, 3/4 at 96 bpm, two bars per chord
+const ROOM_BEAT = 60 / 96;
+const ROOM_CHORDS = [
+  [45, [57, 60, 64]], [50, [57, 62, 65]], [40, [56, 59, 62]], [45, [57, 60, 64]],   // Am Dm E7 Am
+  [41, [57, 60, 65]], [50, [57, 62, 65]], [40, [56, 59, 62]], [45, [57, 60, 64]],   // F  Dm E7 Am
+];
+const ROOM_SCALE = [69, 71, 72, 74, 76, 77, 80, 81, 83, 84];                       // A harmonic minor
+
+const LIGHT_NOTES = [74, 78, 81, 85, 88];              // Dmaj9, high
+
+// estrada: A minor ballad, 84 bpm, one bar per chord
+const ESTRADA_BEAT = 60 / 84;
+const ESTRADA_CHORDS = [[45, [57, 60, 64]], [50, [57, 62, 65]], [43, [59, 62, 67]], [48, [55, 60, 64]],
+  [41, [57, 60, 65]], [50, [57, 62, 65]], [40, [56, 59, 62, 64]], [45, [57, 60, 64]]];   // Am Dm G C F Dm E7 Am
+const ESTRADA_SCALE = [69, 71, 72, 74, 76, 77, 79, 81, 83, 84];
+// kosmos: E minor, 100 bpm, two bars per chord
+const KOSMOS_BEAT = 60 / 100;
+const KOSMOS_CHORDS = [[40, [59, 64, 67, 71]], [36, [59, 64, 67, 71]], [45, [60, 64, 67, 71]], [47, [59, 63, 66, 69]]];   // Em Cmaj7 Am9 B7
+// tango: D minor, 104 bpm, one bar per chord
+const TANGO_BEAT = 60 / 104;
+const TANGO_CHORDS = [[38, [62, 65, 69]], [38, [62, 65, 69]], [43, [62, 67, 70]], [45, [61, 64, 67]],
+  [38, [62, 65, 69]], [46, [62, 65, 70]], [45, [61, 64, 67]], [38, [62, 65, 69]]];     // Dm Dm Gm A7 Dm Bb A7 Dm
+const TANGO_SCALE = [69, 70, 73, 74, 76, 77, 79, 81, 82];
+// romance: E minor, 3/4 at 76 bpm, one bar per chord, guitar picking
+const ROMANCE_BEAT = 60 / 76;
+const ROMANCE_CHORDS = [[40, [52, 55, 59, 64]], [45, [52, 57, 60, 64]], [47, [51, 54, 57, 63]], [40, [52, 55, 59, 64]],
+  [36, [52, 55, 60, 64]], [45, [52, 57, 60, 64]], [47, [51, 54, 57, 63]], [40, [52, 55, 59, 64]]];   // Em Am B7 Em C Am B7 Em
+const ROMANCE_SCALE = [71, 72, 74, 75, 76, 78, 79, 81, 83];
+
+// second harmonies, so a piece that comes back may come back changed
+const CORRIDOR_CHORDS_ALT = [[45, [55, 60, 64, 71]], [41, [57, 60, 64, 67]], [38, [57, 60, 65, 69]], [40, [56, 62, 65, 71]]];   // Am9 Fmaj7 Dm9 E7b9
+const KOSMOS_CHORDS_ALT = [[36, [55, 60, 63, 67]], [44, [56, 60, 63, 67]], [39, [55, 58, 63, 67]], [46, [58, 62, 65, 69]]];   // Cm Abmaj7 Eb Bb
+// techno: 122 bpm, heard through the floor
+const TECHNO_BEAT = 60 / 122;
+
+// synthwave: an arpeggio that never stops on two slow chords, a warm pad, a bass drone
+const SYNTH_BEAT = 60 / 84;
+const SYNTH_CHORDS = [[40, [52, 55, 59]], [36, [52, 55, 60]], [40, [52, 55, 59]], [38, [50, 54, 57]]];       // Em C Em D
+const SYNTH_CHORDS_ALT = [[45, [57, 60, 64]], [41, [57, 60, 65]], [45, [57, 60, 64]], [43, [55, 59, 62]]];   // Am F Am G
+const MUSICBOX_BEAT = 60 / 100;
+const MUSICBOX_CHORDS = [[60, [72, 76, 79]], [57, [72, 76, 81]], [53, [72, 77, 81]], [55, [71, 74, 79]]];     // C Am F G
+const MUSICBOX_SCALE = [76, 77, 79, 81, 83, 84, 86, 88, 91];
+const CELLO_BEAT = 60 / 58;
+const CELLO_SCALE = [50, 52, 53, 55, 57, 58, 60, 62, 64, 65, 67, 69];                                           // D natural minor
+const GLASS_BEAT = 60 / 60;
+const GLASS_CHORDS = [[62, [66, 69, 74]], [59, [66, 71, 74]], [55, [62, 67, 71]], [57, [64, 69, 73]]];       // D Bm G A
+const BELLS_BEAT = 60 / 50;
+const BELLS_SCALE = [74, 76, 78, 81, 83, 86];                                                                   // D major pentatonic
+const FOX_BEAT = 60 / 120;
+const FOX_CHORDS = [[36, [60, 64, 67]], [33, [61, 64, 67]], [38, [60, 65, 69]], [31, [59, 62, 65]]];          // C A7 Dm G7
+const FOX_SCALE = [67, 69, 71, 72, 74, 75, 76, 77, 79, 81, 84];
+const GYPSY_BEAT = 60 / 70;
+const GYPSY_CHORDS = [[45, [57, 60, 64]], [38, [57, 62, 65]], [40, [56, 59, 62]], [45, [57, 60, 64]]];        // Am Dm E7 Am
+const GYPSY_SCALE = [69, 71, 72, 74, 76, 77, 80, 81, 83, 84, 86, 88];                                          // A harmonic minor
+const KIDS_BEAT = 60 / 112;
+const KIDS_SCALE = [72, 74, 76, 79, 81, 84];                                                                    // C major pentatonic
+
+const PIECE_SECONDS = [110, 170];      // how long one piece plays before another takes over
+
+function noiseBuffer(ctx, seconds, shape = 1) {
+  const len = Math.floor(ctx.sampleRate * seconds);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * shape;
+  return buf;
+}
+// A generated hall: two channels of decaying noise, darker as it fades.
+function impulse(ctx, seconds) {
+  const len = Math.floor(ctx.sampleRate * seconds);
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    let lp = 0;
+    for (let i = 0; i < len; i++) {
+      const k = i / len, a = 0.25 + 0.7 * k;      // the tail loses its highs
+      lp += a * ((Math.random() * 2 - 1) - lp);
+      d[i] = lp * Math.pow(1 - k, 2.6);
+    }
+  }
+  return buf;
+}
+
+export class Music {
+  constructor(ctx, out) {
+    this.ctx = ctx;
+    const g = v => { const n = ctx.createGain(); n.gain.value = v; return n; };
+    this.mix = g(0); this.mix.connect(out);
+    this.mix.gain.setTargetAtTime(1, ctx.currentTime + 0.5, 2.5);   // fades in after the Enter
+
+    this.verb = ctx.createConvolver(); this.verb.buffer = impulse(ctx, 3.2);
+    this.verbOut = g(0.55); this.verb.connect(this.verbOut); this.verbOut.connect(this.mix);
+
+    // ── corridor chain: notes → wow/flutter delay → tone → bus
+    this.corridorBus = g(1); this.corridorBus.connect(this.mix);
+    this.corridorIn = g(1);
+    const wow = ctx.createDelay(0.05); wow.delayTime.value = 0.012;
+    this._lfo(0.33, 0.0022, wow.delayTime); this._lfo(6.1, 0.00025, wow.delayTime);
+    this.tone = ctx.createBiquadFilter(); this.tone.type = 'lowpass'; this.tone.frequency.value = 1600; this.tone.Q.value = 0.4;
+    this.corridorIn.connect(wow); wow.connect(this.tone); this.tone.connect(this.corridorBus);
+    this.corridorSend = g(0.35); this.tone.connect(this.corridorSend); this.corridorSend.connect(this.verb);
+    // tape hiss under it
+    const hiss = ctx.createBufferSource(); hiss.buffer = noiseBuffer(ctx, 2, 0.5); hiss.loop = true;
+    const hissLp = ctx.createBiquadFilter(); hissLp.type = 'lowpass'; hissLp.frequency.value = 5200;
+    this.hissGain = g(0.006); hiss.connect(hissLp); hissLp.connect(this.hissGain); this.hissGain.connect(this.corridorBus); hiss.start();
+    // the ward: monitor beeps and the heartbeat, faded by the zone
+    this.wardBus = g(1); this.wardBus.connect(this.corridorBus);
+    this.wardSend = g(0.7); this.wardBus.connect(this.wardSend); this.wardSend.connect(this.verb);
+    this.beatBus = g(1); this.beatBus.connect(this.corridorBus);
+
+    // ── room chain: notes → overdrive → horn band → honk → wow → bus
+    this.roomBus = g(0);
+    // the last waltz is heard from where the last work hangs (#96): the room's
+    // bus goes dry (as ever) or through a 3D panner, by crossfade
+    this.roomDry = g(1); this.roomWet = g(0);
+    this.roomPan = ctx.createPanner();
+    this.roomPan.panningModel = 'HRTF'; this.roomPan.distanceModel = 'linear'; this.roomPan.rolloffFactor = 0;
+    this.roomBus.connect(this.roomDry); this.roomDry.connect(this.mix);
+    this.roomBus.connect(this.roomWet); this.roomWet.connect(this.roomPan); this.roomPan.connect(this.mix);
+    this.roomIn = g(1);
+    const drive = ctx.createWaveShaper();
+    const curve = new Float32Array(1024);
+    for (let i = 0; i < 1024; i++) { const x = i / 511.5 - 1; curve[i] = Math.tanh(2.2 * x) / Math.tanh(2.2); }
+    drive.curve = curve;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 330; hp.Q.value = 0.9;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2900; lp.Q.value = 2.2;
+    const honk = ctx.createBiquadFilter(); honk.type = 'peaking'; honk.frequency.value = 1150; honk.gain.value = 7; honk.Q.value = 1.2;
+    const rwow = ctx.createDelay(0.05); rwow.delayTime.value = 0.014;
+    this._lfo(1.3, 0.0019, rwow.delayTime); this._lfo(0.27, 0.0032, rwow.delayTime);   // 78 rpm, and a warped disc
+    const trim = g(0.26);                                        // the overdrive runs hot: bring it back to the corridor's level
+    this.roomIn.connect(drive); drive.connect(hp); hp.connect(lp); lp.connect(honk); honk.connect(trim); trim.connect(rwow);
+    this.roomFar = ctx.createBiquadFilter(); this.roomFar.type = 'lowpass'; this.roomFar.frequency.value = 1500;   // through the wall, unless in her room
+    rwow.connect(this.roomFar); this.roomFar.connect(this.roomBus);
+    this.roomSend = g(0.25); rwow.connect(this.roomSend); this.roomSend.connect(this.verb);
+    // surface noise and rumble of the disc
+    const surf = ctx.createBufferSource(); surf.buffer = noiseBuffer(ctx, 2, 0.6); surf.loop = true;
+    const sbp = ctx.createBiquadFilter(); sbp.type = 'bandpass'; sbp.frequency.value = 2600; sbp.Q.value = 0.6;
+    const sg = g(0.03); surf.connect(sbp); sbp.connect(sg); sg.connect(this.roomBus); surf.start();
+    const rumble = ctx.createOscillator(); rumble.frequency.value = 31;
+    const rg = g(0.02); rumble.connect(rg); rg.connect(this.roomBus); rumble.start();
+    this._clickBuf = noiseBuffer(ctx, 0.01);
+
+    // a transistor radio for the station fragments: a narrow band, a little grit
+    this.radioIn = ctx.createBiquadFilter(); this.radioIn.type = 'bandpass'; this.radioIn.frequency.value = 1300; this.radioIn.Q.value = 1.6;
+    const radioGain = g(1.8); this.radioIn.connect(radioGain); radioGain.connect(this.corridorIn);
+
+    // the sounds of the places, under the music
+    this.places = new Places(ctx, this.mix, this.verb);
+
+    // ── light chain
+    this.lightBus = g(0); this.lightBus.connect(this.mix);
+    this.lightSend = g(0.9); this.lightBus.connect(this.lightSend); this.lightSend.connect(this.verb);
+
+    // state
+    this.zone = { fear: 1, memory: 0, accept: 0 };
+    this.inRoom = false;
+    this._bright = 0;
+    this._t = { corridor: ctx.currentTime + 0.6, room: ctx.currentTime + 0.6, beep: ctx.currentTime + 2, crackle: ctx.currentTime };
+    this._bar = { corridor: 0, room: 0 };
+    this._noise = noiseBuffer(ctx, 1);
+    this._piece = { corridor: 0, room: 0, corridorUntil: ctx.currentTime + 60 + Math.random() * 60, roomUntil: ctx.currentTime + 90 };
+    this._radioAt = ctx.currentTime + 90 + Math.random() * 120;
+    this.stage = 0;                                   // 0 hospital, 1 grandmother's world, 2 light
+    this._vc = this._variation(); this._vr = this._variation();
+    this._out = this.corridorIn;                      // where the instruments play into right now
+    this._v = this._vc; this._lane = 'corridor';
+    this._hr = 72; this._alarmIn = 40 + Math.random() * 40;
+    this._resolved = false; this._chordAmps = []; this._chordOscs = [];
+    this._timer = setInterval(() => this._schedule(), TICK_MS);
+    this._schedule();
+  }
+
+  // a slow wobble on any parameter
+  _lfo(freq, depth, param) {
+    const o = this.ctx.createOscillator(); o.frequency.value = freq;
+    const g = this.ctx.createGain(); g.gain.value = depth;
+    o.connect(g); g.connect(param); o.start();
+  }
+
+  // ── what the rest of the engine calls ───────────────────────────────────
+  setZone(zone) {
+    this.zone = zone;
+    const now = this.ctx.currentTime, f = zone.fear, a = zone.accept;
+    this.wardBus.gain.setTargetAtTime(f + 0.25 * zone.memory, now, 1.5);
+    this.beatBus.gain.setTargetAtTime(f, now, 1.5);
+    this.tone.frequency.setTargetAtTime(1500 + 2200 * a + 400 * zone.memory, now, 2);
+    this.verbOut.gain.setTargetAtTime(0.5 + 0.35 * a, now, 2);
+    this.places.setZone(zone);
+    const stage = zone.memory > Math.max(zone.fear, zone.accept) ? 1 : zone.accept > zone.fear ? 2 : 0;
+    if (stage !== this.stage) {                       // a new world: its own music from the next phrase on
+      this.stage = stage;
+      this._piece.corridorUntil = 0;
+      captions.say('amb' + stage, { gap: 30 });
+      if (stage === 1 && !this.inRoom) captions.say('r_' + ROOM_CC[this._piece.room] + 'Far', { music: true, gap: 20 });
+      this._mixLevels(3);
+    }
+  }
+  // gramophone records play in grandmother's world, and in her room whatever the world
+  get gram() { return this.inRoom || this.stage === 1 || !!this._farewell; }
+  // a note in the key the current piece picked
+  _m(n) { return midi(n + this._v.tr); }
+  // a fresh key, tempo and harmony for a piece that is starting
+  _variation() {
+    return { tr: [-3, -2, 0, 0, 2, 3, 5][Math.floor(Math.random() * 7)], tempo: 0.92 + Math.random() * 0.16, alt: Math.random() < 0.5,
+      acid: Array.from({ length: 16 }, () => (Math.random() < 0.7 ? [0, 0, 3, 5, 7, 10, 12][Math.floor(Math.random() * 7)] : null)) };
+  }
+  motion(s) { this._speed = s; }
+  // hurrying, the music presses on a little (pace.js): the next phrase is played faster
+  _paced(v, most) {
+    const run = window.__app?.pace?.run ?? 0;
+    return run > 0.02 ? { ...v, tempo: v.tempo * (1 + most * run) } : v;
+  }
+  room(on) {
+    if (on === this.inRoom) return;
+    this.inRoom = on;
+    this._mixLevels(on ? 3.5 : 2.5);
+    this.roomFar.frequency.setTargetAtTime(on ? 7000 : 1500, this.ctx.currentTime, 1.5);
+    if (on) { this._t.room = Math.max(this._t.room, this.ctx.currentTime + 0.4); this._bar.room = 0; }
+    if (on) captions.say('r_' + ROOM_CC[this._piece.room], { music: true, gap: 20 });
+  }
+  // a door gives way: the light plays over everything for `seconds`
+  light(seconds = 5) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    this._bright++;
+    this._mixLevels(1.2);
+    this.lightBus.gain.setTargetAtTime(1, t, 0.9);
+    for (const [k, n] of LIGHT_NOTES.entries()) this._pad(midi(n), t + k * 0.12, seconds, 0.028);
+    for (let k = 0; k < Math.floor(seconds / 0.45); k++) {
+      const n = LIGHT_NOTES[Math.floor(Math.random() * LIGHT_NOTES.length)] + 12;
+      this._bell(midi(n), t + 0.5 + k * 0.45 + Math.random() * 0.1, 0.02);
+    }
+    setTimeout(() => {
+      this._bright = Math.max(0, this._bright - 1);
+      if (!this._bright) { this.lightBus.gain.setTargetAtTime(0, this.ctx.currentTime, 1.5); this._mixLevels(2.5); }
+    }, seconds * 1000);
+  }
+  // the door slams: a body blow in the wall and the latch
+  slam() {
+    const ctx = this.ctx, t = ctx.currentTime;
+    this.lightBus.gain.cancelScheduledValues(t); this.lightBus.gain.setTargetAtTime(0, t, 0.03);
+    const s = ctx.createBufferSource(); s.buffer = noiseBuffer(ctx, 0.4);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220;
+    const ng = ctx.createGain(); ng.gain.setValueAtTime(0.9, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    s.connect(lp); lp.connect(ng); ng.connect(this.mix); ng.connect(this.verb); s.start(t);
+    const o = ctx.createOscillator(); o.frequency.setValueAtTime(78, t); o.frequency.exponentialRampToValueAtTime(34, t + 0.3);
+    const og = ctx.createGain(); og.gain.setValueAtTime(0.5, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    o.connect(og); og.connect(this.mix); o.start(t); o.stop(t + 0.45);
+    this._click(t + 0.02, 0.25, 4000, this.mix);
+  }
+  stop() { clearInterval(this._timer); }
+
+  // ── the last work (#94) ──────────────────────────────────────────────────
+  // Nearing the last work in the light, grandmother's waltz plays again, for
+  // the first time without the wall: in A minor, at its own tempo, clearer and
+  // louder the nearer (level 0..1). It stays the waltz until the end.
+  lastWaltz(level, at = null) {
+    if (at) {                                           // where it plays from: round the next corner toward the last work
+      const t = this.ctx.currentTime, P = this.roomPan;
+      if (P.positionX) { P.positionX.setTargetAtTime(at.x, t, 0.3); P.positionY.setTargetAtTime(1.5, t, 0.3); P.positionZ.setTargetAtTime(at.z, t, 0.3); }
+      else P.setPosition(at.x, 1.5, at.z);
+      const near = at.d < 3 ? 1 - at.d / 3 : 0;         // at the work itself it is all round you again
+      this.roomWet.gain.setTargetAtTime(1 - near, t, 0.4); this.roomDry.gain.setTargetAtTime(near, t, 0.4);
+    }
+    if (this._resolved) return;
+    const t = this.ctx.currentTime;
+    if (level > 0.01 && !this._farewell) {
+      this._farewell = true;
+      this._nextRoom = { room: 0, v: { ...this._variation(), tr: 0, tempo: 1 } };   // from the next bar
+      this._mixLevels(3);
+      captions.say('r_waltz', { music: true, gap: 60 });
+    }
+    if (!this._farewell) return;
+    this.roomBus.gain.setTargetAtTime(0.2 + 0.8 * level, t, 1.2);
+    this.roomFar.frequency.setTargetAtTime(1500 + 5500 * level, t, 1.2);
+  }
+  // The last work is seen: the waltz turns home. Two beats of E7 at the next
+  // bar, then the tonic, A major, rolled and held; onTonic(t) gets its time on
+  // the audio clock. Without the waltz the chord swells at once, as before.
+  cadence(onTonic) {
+    if (this._resolved || this._cadence) return;
+    if (!this._farewell || this._piece.room !== 0) { this.resolve(); onTonic?.(this.ctx.currentTime); return; }
+    this._cadence = { onTonic };
+  }
+  _cadenceBar(t0) {
+    const B = ROOM_BEAT / this._v.tempo, c = this._cadence;
+    const [bass] = ROOM_CHORDS[Math.floor((this._bar.room - 1) / 2) % ROOM_CHORDS.length];
+    let at = t0;
+    if (bass !== 40) {                                   // not on E7 already: two beats of it, and the leading tone
+      this._piano(this._m(40), t0, 0.9, 0.18);
+      [56, 59, 62, 64].forEach(n => this._piano(this._m(n), t0 + B, 0.6, 0.07));
+      this._piano(this._m(80), t0 + B, 0.9 * B, 0.12);
+      at = t0 + 2 * B;
+    }
+    // the tonic, rolled up from the bass, the third raised: A major
+    [33, 45, 57, 61, 64, 69, 73, 76].forEach((n, k) => this._piano(this._m(n), at + k * 0.035, 4.5, k < 2 ? 0.2 : 0.1));
+    this._resolved = true;                               // nothing new after it
+    this._cadence = null;
+    c.onTonic?.(at);
+    return at - t0 + 3 * B;
+  }
+
+  // ── the finale ───────────────────────────────────────────────────────────
+  // phrase schedulers stop starting new notes; the tonic major add9 of
+  // whichever key was playing swells in on a soft organ/pad and holds
+  resolve(seconds = 3) {
+    if (this._resolved) return;
+    this._resolved = true;
+    this.swell(seconds);
+  }
+  // the held chord alone, on the light's bus (after the waltz's own tonic, #94)
+  swell(seconds = 3) {
+    if (this._chordAmps.length) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const tr = (this.gram ? this._vr : this._vc)?.tr ?? 0;
+    const root = midi((this.gram ? 69 : 62) + tr);          // the tonic of whichever world was playing
+    const chord = [0, 4, 7, 14].map(iv => root * Math.pow(2, iv / 12));   // major add9
+    this.lightBus.gain.setTargetAtTime(1, t, seconds * 0.4);
+    this.corridorBus.gain.setTargetAtTime(0, t, seconds * 0.5);
+    this.roomBus.gain.setTargetAtTime(0, t, seconds * 0.5);
+    this.places.fade(0, seconds * 0.5);
+    this._chordAmps = chord.map((f, k) => {
+      const amp = ctx.createGain();
+      amp.gain.setValueAtTime(0.0001, t);
+      amp.gain.exponentialRampToValueAtTime(0.055 - k * 0.008, t + seconds);
+      amp.connect(this.lightBus);
+      for (const [type, cents] of [['sine', 0], ['triangle', 3], ['sine', -4]]) {
+        const o = ctx.createOscillator(); o.type = type; o.frequency.value = f * Math.pow(2, cents / 1200);
+        o.connect(amp); o.start(t);
+        this._chordOscs.push(o);
+      }
+      return amp;
+    });
+  }
+  // everything fades to silence
+  release(seconds = 4) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    this.mix.gain.cancelScheduledValues(t);
+    this.mix.gain.setValueAtTime(this.mix.gain.value, t);
+    this.mix.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+  }
+  // normal scheduling resumes
+  unresolve() {
+    const ctx = this.ctx, t = ctx.currentTime;
+    this.mix.gain.cancelScheduledValues(t);
+    this.mix.gain.setValueAtTime(this.mix.gain.value, t);
+    this.mix.gain.setTargetAtTime(1, t, 1.5);
+    if (!this._resolved) return;
+    this._resolved = false;
+    this._farewell = false; this._cadence = null; this._nextRoom = null; this._piece.roomUntil = 0;   // the waltz goes back behind its wall
+    this.roomFar.frequency.setTargetAtTime(this.inRoom ? 7000 : 1500, t, 1.5);
+    this.lightBus.gain.setTargetAtTime(0, t, 1.5);
+    this._mixLevels(2.5);
+    this.places.fade(1, 1.5);
+    this._chordAmps.forEach(amp => {
+      amp.gain.cancelScheduledValues(t); amp.gain.setValueAtTime(amp.gain.value, t);
+      amp.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    });
+    this._chordOscs.forEach(o => { try { o.stop(t + 1.6); } catch (e) { /* already stopped */ } });
+    this._chordAmps = []; this._chordOscs = [];
+    // resync the clocks so the next phrase starts promptly, not all at once
+    this._t.corridor = Math.max(this._t.corridor, t + 0.3);
+    this._t.room = Math.max(this._t.room, t + 0.3);
+    this._t.beep = Math.max(this._t.beep, t + 0.3);
+    this._piece.corridorUntil = 0; this._piece.roomUntil = 0;
+  }
+
+  // corridor / room / light balance
+  _mixLevels(tc) {
+    const t = this.ctx.currentTime, lit = this._bright > 0;
+    const gram = this.gram;
+    this.corridorBus.gain.setTargetAtTime(gram ? 0 : lit ? 0.12 : 1, t, tc);
+    this.roomBus.gain.setTargetAtTime(gram ? (lit ? 0.12 : this.inRoom ? 1 : 0.8) : 0, t, tc);
+  }
+
+  // ── the scheduler ───────────────────────────────────────────────────────
+  _schedule() {
+    const until = this.ctx.currentTime + LOOKAHEAD;
+    if (this.ctx.state !== 'running' || this._resolved) return;
+    while (this._t.corridor < until) this._corridorPhrase();
+    this.places.tick(until);
+    this.yard?.tick(until);
+    while (this._t.room < until) this._roomBar();
+    while (this._t.beep < until) this._monitor();
+    if (!this.gram && this.stage === 0 && this._radioAt < until) { this._radio(this._radioAt); this._radioAt += 150 + Math.random() * 180; }
+    else if (this._radioAt < until) this._radioAt = until + 20;
+    if (this.gram) while (this._t.crackle < until) this._crackle();
+    else this._t.crackle = until;
+  }
+
+  // the corridor's pieces take turns at phrase boundaries
+  _corridorPhrase() {
+    const t0 = this._t.corridor;
+    if (t0 > this._piece.corridorUntil) {
+      const pool = this.stage === 2 ? [0, 7, 8] : [0, 1, 2, 3, 4, 5, 6];   // the light: the soft ward, glass, bells
+      const next = pool.filter(i => i !== this._piece.corridor || pool.length === 1);
+      this._piece.corridor = next[Math.floor(Math.random() * next.length)];
+      this._vc = this._variation();
+      this._piece.corridorUntil = t0 + PIECE_SECONDS[0] + Math.random() * (PIECE_SECONDS[1] - PIECE_SECONDS[0]);
+      if (!this.gram) captions.say('m_' + CORRIDOR_CC[this._piece.corridor], { at: t0 + 1.5, music: true, gap: 20 });
+      this._bar.corridor = 0;
+      this._t.corridor += 1.5;                                   // a breath between pieces
+      return;
+    }
+    const play = !this.gram;                                     // keep time under the gramophone, play nothing
+    this._out = this.corridorIn; this._v = this._paced(this._vc, 0.15); this._lane = 'corridor';
+    this._t.corridor += [this._wardPhrase, this._kosmosPhrase, this._technoPhrase, this._synthPhrase, this._musicBoxBar,
+      this._radioPhrase, this._celloPhrase, this._glassPhrase, this._bellsPhrase][this._piece.corridor].call(this, t0, play);
+  }
+
+  // the ward: two bars of one chord, bass, a lazy strum, a few melody notes
+  _wardPhrase(t0, play) {
+    const B = CORRIDOR_BEAT / this._v.tempo;
+    const idx = this._bar[this._lane]++ % CORRIDOR_CHORDS.length;
+    const [bass, voicing] = (this._v.alt ? CORRIDOR_CHORDS_ALT : CORRIDOR_CHORDS)[idx];
+    if (!play) return 8 * B;
+    this._keys(this._m(bass), t0, 7 * B, 0.11, true);
+    voicing.forEach((n, k) => this._keys(this._m(n), t0 + 0.03 + k * 0.035 + Math.random() * 0.02, 3.5 * B, 0.045));
+    voicing.forEach((n, k) => this._keys(this._m(n), t0 + 5.5 * B + k * 0.03, 2.5 * B, 0.03));
+    // heartbeat, lub-dub, on each bar
+    for (const bar of [0, 4]) { this._thump(t0 + bar * B, 0.16); this._thump(t0 + bar * B + 0.26, 0.1); }
+    // melody: a handful of swung eighths, sometimes sagging like stretched tape
+    const n = 2 + Math.floor(Math.random() * 3);
+    const slots = new Set();
+    while (slots.size < n) slots.add(1 + Math.floor(Math.random() * 14));
+    for (const s of slots) {
+      const at = t0 + (Math.floor(s / 2) + (s % 2 ? 0.62 : 0)) * B;  // swing
+      const note = CORRIDOR_SCALE[Math.floor(Math.random() * CORRIDOR_SCALE.length)];
+      this._keys(this._m(note), at, 1.2 * B, 0.035 + Math.random() * 0.02, false, Math.random() < 0.12);
+    }
+    return 8 * B;
+  }
+
+  // estrada: one bar of the ballad, organ held, bass and brushes, a vibraphone line
+  _estradaPhrase(t0, play) {
+    const B = ESTRADA_BEAT / this._v.tempo, bar = this._bar[this._lane]++;
+    const [bass, chord] = ESTRADA_CHORDS[bar % ESTRADA_CHORDS.length];
+    if (!play) return 4 * B;
+    const loud = this._lane === 'room' ? 1.9 : 1;          // the horn swallows some of it
+    chord.forEach(n => this._organ(this._m(n), t0, 3.9 * B, 0.01 * loud));
+    for (const [beat, step] of [[0, 0], [1.5, 7], [2, 12], [3.5, 7]]) this._bassPluck(this._m(bass + step - 12), t0 + beat * B, 0.9 * B, 0.09 * loud);
+    for (const beat of [1, 3]) this._brush(t0 + beat * B, 0.05 * loud);
+    for (let k = 0; k < 8; k++) this._hat(t0 + k * B / 2 + (k % 2 ? B * 0.06 : 0), (k % 2 ? 0.008 : 0.013) * loud);
+    const rhythms = [[0, 1, 2], [0, 1.5, 2, 3], [0, 2], [0.5, 1, 2, 3], [0, 3]];
+    const r = rhythms[Math.floor(Math.random() * rhythms.length)];
+    let pos = this._estradaPos ?? 4;
+    r.forEach((beat, k) => {
+      if (k === 0) {                                             // start the bar on a chord tone
+        const tone = chord[Math.floor(Math.random() * chord.length)] + 12;
+        pos = ESTRADA_SCALE.reduce((b, n, i) => Math.abs(n - tone) < Math.abs(ESTRADA_SCALE[b] - tone) ? i : b, 0);
+      } else pos = Math.max(0, Math.min(ESTRADA_SCALE.length - 1, pos + [-1, 1, -1, 2, -2, 3][Math.floor(Math.random() * 6)]));
+      let note = ESTRADA_SCALE[pos];
+      if (bass === 40 && note === 79) note = 80;                 // E7 wants the G sharp
+      this._vibes(this._m(note), t0 + beat * B, ((r[k + 1] ?? 4) - beat) * B, 0.05 * loud);
+    });
+    this._estradaPos = pos;
+    return 4 * B;
+  }
+
+  // kosmos: one bar, a sixteenth-note arpeggio, a pad under it, the bass in eighths
+  _kosmosPhrase(t0, play) {
+    const B = KOSMOS_BEAT / this._v.tempo, bar = this._bar[this._lane]++;
+    const [bass, chord] = (this._v.alt ? KOSMOS_CHORDS_ALT : KOSMOS_CHORDS)[Math.floor(bar / 2) % KOSMOS_CHORDS.length];
+    if (!play) return 4 * B;
+    const sweep = 700 + 900 * (0.5 + 0.5 * Math.sin(t0 * 0.07));   // the filter opens and closes over minutes
+    const up = [...chord, chord[0] + 12, ...chord.slice(1).map(n => n + 12)];
+    for (let k = 0; k < 16; k++) {
+      const i = k % 8, n = i < 4 ? up[i] : up[7 - i + 1] ?? up[i];
+      this._sawNote(this._m(n), t0 + k * B / 4, B / 4 * 0.9, 0.022, sweep);
+    }
+    if (bar % 2 === 0) chord.forEach(n => this._pad(this._m(n - 12), t0, 7.6 * B, 0.012, this._out));
+    for (let k = 0; k < 8; k++) this._sawNote(this._m(bass - 12 + (k % 4 === 3 ? 7 : 0)), t0 + k * B / 2, B / 2 * 0.7, 0.06, 420);
+    if (bar % 8 >= 4 && Math.random() < 0.5) {                   // a lead, gliding in on the second half
+      const n = chord[Math.floor(Math.random() * chord.length)] + 12;
+      this._lead(this._m(n), this._m(n + (Math.random() < 0.5 ? 2 : -2)), t0 + B, 2.5 * B, 0.025);
+    }
+    return 4 * B;
+  }
+
+  // techno: one bar of a rave in the basement, heard through concrete. A kick
+  // on every beat with the highs gone, hats on the off-beats, a clap on two
+  // and four, a sixteen-step acid line picked when the piece started, and a
+  // dark stab every other bar.
+  _technoPhrase(t0, play) {
+    const B = TECHNO_BEAT / this._v.tempo, bar = this._bar[this._lane]++;
+    if (!play) return 4 * B;
+    const ctx = this.ctx;
+    for (let k = 0; k < 4; k++) {
+      const t = t0 + k * B, o = ctx.createOscillator();
+      o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 160;   // through the floor
+      o.connect(g); g.connect(lp); lp.connect(this._out); o.start(t); o.stop(t + 0.35);
+      this._hat(t + B / 2, 0.012);
+    }
+    for (const beat of [1, 3]) this._noiseHit(t0 + beat * B, 0.035, 'bandpass', 1400, 0.9, 0.12);
+    const root = this._v.alt ? 33 : 28;              // A1 or E1
+    this._v.acid.forEach((step, k) => {
+      if (step === null) return;
+      const accent = k % 4 === 0 ? 1.6 : 1;
+      this._sawNote(this._m(root + 12 + step), t0 + k * B / 4, B / 4 * 0.85, 0.02 * accent, 380 + 520 * (0.5 + 0.5 * Math.sin((t0 + k) * 0.21)));
+    });
+    if (bar % 2 === 1) [0, 3, 7, 10].forEach(n => this._sawNote(this._m(root + 36 + n), t0 + 2.5 * B, B * 0.5, 0.008, 900));
+    return 4 * B;
+  }
+
+  // synthwave: two bars on each chord, an eighth-note arpeggio that never
+  // lets go under a filter breathing over minutes, a pad, the bass held low;
+  // now and then a thin lead line over the top. No drums: only the pulse
+  _synthPhrase(t0, play) {
+    const B = SYNTH_BEAT / this._v.tempo, bar = this._bar[this._lane]++;
+    const [bass, chord] = (this._v.alt ? SYNTH_CHORDS_ALT : SYNTH_CHORDS)[Math.floor(bar / 2) % SYNTH_CHORDS.length];
+    if (!play) return 4 * B;
+    const [a, b, c] = chord, sweep = 520 + 820 * (0.5 + 0.5 * Math.sin(t0 * 0.05));
+    [a, b, c, a + 12, c, b, a + 12, b].forEach((n, k) => this._sawNote(this._m(n), t0 + k * B / 2, B / 2 * 0.8, k % 4 ? 0.016 : 0.022, sweep));
+    if (bar % 2 === 0) chord.forEach(n => this._pad(this._m(n - 12), t0, 7.6 * B, 0.011, this._out));
+    this._sawNote(this._m(bass - 12), t0, 3.9 * B, 0.05, 240);
+    if (bar % 8 >= 6 && Math.random() < 0.6) {
+      const n = chord[Math.floor(Math.random() * 3)] + 12;
+      this._lead(this._m(n), this._m(n), t0 + B, 2 * B, 0.016);
+    }
+    return 4 * B;
+  }
+
+  // a child's music box left in a ward: a little waltz high up, the spring
+  // running down, the tempo sagging until it stops and something else begins
+  _musicBoxBar(t0, play) {
+    const bar = this._bar[this._lane]++;
+    const sag = 1 + Math.max(0, bar - 20) * 0.025;
+    const B = MUSICBOX_BEAT / this._v.tempo * sag;
+    if (sag > 1.7) { this._piece.corridorUntil = 0; return 3 * B; }   // wound down
+    if (!play) return 3 * B;
+    const [low, chord] = MUSICBOX_CHORDS[Math.floor(bar / 2) % MUSICBOX_CHORDS.length];
+    this._musicBox(this._m(low + 12), t0, 0.05);
+    chord.forEach((n, k) => this._musicBox(this._m(n), t0 + B + k * 0.012, 0.018));
+    let pos = this._mbPos ?? 3;
+    for (const beat of [[0, 1, 2], [0, 1.5, 2], [0, 2], [0, 0.5, 1, 2]][Math.floor(Math.random() * 4)]) {
+      pos = Math.max(0, Math.min(MUSICBOX_SCALE.length - 1, pos + [-1, 1, -2, 2, 1][Math.floor(Math.random() * 5)]));
+      this._musicBox(this._m(MUSICBOX_SCALE[pos]), t0 + beat * B, 0.045);
+    }
+    this._mbPos = pos;
+    return 3 * B;
+  }
+
+  // a radio turned slowly between stations: static that whistles as the dial
+  // moves, and out of it for a moment a few bars of something far away
+  _radioPhrase(t0, play) {
+    const L = 3.5 + Math.random() * 2;
+    if (!play) return L;
+    const station = Math.random() < 0.55;
+    const f0 = 500 + Math.random() * 2500, f1 = 500 + Math.random() * 2500;
+    this._static(t0, L, station ? 0.04 : 0.1, f0, f1);
+    if (station) {
+      const out = this._out; this._out = this.radioIn;
+      const at = t0 + 0.6 + Math.random() * 0.5, B = 0.42;
+      const inst = Math.random() < 0.5 ? (f, t, d, v) => this._organ(f, t, d, v * 0.5) : (f, t, d, v) => this._vibes(f, t, d, v);
+      let pos = Math.floor(Math.random() * ESTRADA_SCALE.length);
+      for (let k = 0; k < 4 + Math.floor(Math.random() * 3); k++) {
+        pos = Math.max(0, Math.min(ESTRADA_SCALE.length - 1, pos + [-1, 1, -2, 2][Math.floor(Math.random() * 4)]));
+        if (at + (k + 1) * B < t0 + L) inst(this._m(ESTRADA_SCALE[pos] - 12), at + k * B, B * 0.9, 0.12);
+      }
+      this._out = out;
+    }
+    return L;
+  }
+
+  // a cello alone in the empty wing: long notes walking the minor scale,
+  // sliding into the next one now and then, the corridor answering
+  _celloPhrase(t0, play) {
+    const B = CELLO_BEAT / this._v.tempo;
+    this._bar[this._lane]++;
+    if (!play) return 8 * B;
+    if (Math.random() < 0.4) this._bow(this._m(38), this._m(38), t0, 7.5 * B, 0.016);   // the open D under it
+    let pos = this._celloPos ?? 7, at = 0;
+    const lens = [[4, 4], [3, 3, 2], [2, 2, 4], [6, 2]][Math.floor(Math.random() * 4)];
+    lens.forEach((len, k) => {
+      const from = CELLO_SCALE[pos];
+      pos = Math.max(0, Math.min(CELLO_SCALE.length - 1, pos + [-1, 1, -2, 2, -1, 3][Math.floor(Math.random() * 6)]));
+      const slide = k > 0 && Math.random() < 0.3;
+      this._bow(this._m(slide ? from : CELLO_SCALE[pos]), this._m(CELLO_SCALE[pos]), t0 + at * B, len * B * 0.95, 0.035);
+      at += len;
+    });
+    this._celloPos = pos;
+    return 8 * B;
+  }
+
+  // the light: a glass harmonica, chords swelling out of nothing and a
+  // note or two above them
+  _glassPhrase(t0, play) {
+    const B = GLASS_BEAT / this._v.tempo, bar = this._bar[this._lane]++;
+    const [bass, chord] = GLASS_CHORDS[bar % GLASS_CHORDS.length];
+    if (!play) return 8 * B;
+    this._glass(this._m(bass - 12), t0, 7.5 * B, 0.024);
+    chord.forEach((n, k) => this._glass(this._m(n), t0 + k * 0.25, 7 * B, 0.018));
+    for (let k = 0; k < 1 + Math.floor(Math.random() * 3); k++) {
+      const n = chord[Math.floor(Math.random() * 3)] + 12;
+      this._glass(this._m(n), t0 + (2 + k * 2) * B, 2.2 * B, 0.015);
+    }
+    return 8 * B;
+  }
+
+  // the light: slow bells, far apart, over a low held chord
+  _bellsPhrase(t0, play) {
+    const B = BELLS_BEAT / this._v.tempo, bar = this._bar[this._lane]++;
+    if (!play) return 4 * B;
+    if (bar % 2 === 0) [50, 57, 62, 66].forEach(n => this._pad(this._m(n), t0, 7.6 * B, 0.008, this._out));
+    for (let k = 0; k < 1 + Math.floor(Math.random() * 2); k++) {
+      const n = BELLS_SCALE[Math.floor(Math.random() * BELLS_SCALE.length)];
+      this._bell(this._m(n), t0 + (k * 2 + Math.random() * 0.2) * B, 0.03, this._out, 4.5);
+    }
+    return 4 * B;
+  }
+
+  // the radio breaking through: tuning noise, then the six pips of the time signal
+  _radio(t) {
+    captions.say('radio', { at: t });
+    const ctx = this.ctx;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1400; bp.Q.value = 1.4;
+    const out = ctx.createGain(); out.gain.value = 1;
+    bp.connect(out); out.connect(this.corridorBus); out.connect(this.wardSend);
+    const hiss = ctx.createBufferSource(); hiss.buffer = this._noise; hiss.loop = true;
+    const hg = ctx.createGain();
+    hg.gain.setValueAtTime(0.0001, t); hg.gain.exponentialRampToValueAtTime(0.03, t + 0.8);
+    hg.gain.setValueAtTime(0.03, t + 7.5); hg.gain.exponentialRampToValueAtTime(0.0001, t + 9);
+    const sweepF = ctx.createBiquadFilter(); sweepF.type = 'bandpass'; sweepF.Q.value = 6;
+    sweepF.frequency.setValueAtTime(400, t); sweepF.frequency.exponentialRampToValueAtTime(3000, t + 1.4); sweepF.frequency.exponentialRampToValueAtTime(1100, t + 2);
+    hiss.connect(sweepF); sweepF.connect(hg); hg.connect(bp);
+    hiss.start(t); hiss.stop(t + 9.2);
+    for (let k = 0; k < 6; k++) {
+      const pt = t + 2.5 + k, o = ctx.createOscillator(); o.frequency.value = 1000;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, pt); g.gain.exponentialRampToValueAtTime(0.07, pt + 0.005);
+      g.gain.setValueAtTime(0.07, pt + 0.1); g.gain.exponentialRampToValueAtTime(0.0001, pt + 0.115);
+      o.connect(g); g.connect(bp); o.start(pt); o.stop(pt + 0.13);
+    }
+    setTimeout(() => { try { out.disconnect(); } catch (e) { /* gone */ } }, (t - ctx.currentTime + 10) * 1000);
+  }
+
+  // the room's records take turns; out of the room they only keep time
+  _roomBar() {
+    const t0 = this._t.room;
+    if (this._resolved) { this._t.room += 1; return; }
+    if (this._nextRoom) {                                // the last work's waltz takes over at a bar line
+      this._piece.room = this._nextRoom.room; this._vr = this._nextRoom.v; this._nextRoom = null;
+      this._bar.room = 0; this._piece.roomUntil = Infinity;
+    }
+    if (this._cadence && this._piece.room === 0) { this._out = this.roomIn; this._v = this._vr; this._t.room += this._cadenceBar(t0); return; }
+    if (t0 > this._piece.roomUntil) {
+      this._piece.room = (this._piece.room + 1 + Math.floor(Math.random() * 6)) % 7;
+      this._vr = this._variation();
+      this._piece.roomUntil = t0 + 80 + Math.random() * 60;
+      this._bar.room = 0;
+      this._t.room += 2;                                          // the needle lifted and set down
+      if (this.gram) this._click(t0 + 0.4, 0.3, 700, this.roomBus);
+      if (this.gram) captions.say('r_' + ROOM_CC[this._piece.room] + (this.inRoom ? '' : 'Far'), { at: t0 + 2, music: true, gap: 20 });
+      return;
+    }
+    this._out = this.roomIn; this._v = this._paced(this._vr, 0.08); this._lane = 'room';
+    this._t.room += [this._waltzBar, this._tangoBar, this._estradaPhrase, this._romanceBar,
+      this._foxtrotBar, this._gypsyBar, this._kidsBar][this._piece.room].call(this, t0, this.gram);
+  }
+
+  // one bar of the waltz: bass on one, the chord on two and three, a melody line
+  _waltzBar(t0, play) {
+    const B = ROOM_BEAT / this._v.tempo, bar = this._bar[this._lane]++;
+    if (!play) return 3 * B;
+    const [bass, chord] = ROOM_CHORDS[Math.floor(bar / 2) % ROOM_CHORDS.length];
+    this._piano(this._m(bar % 2 ? bass + 7 : bass), t0, 0.9, 0.16);
+    for (const beat of [1, 2]) chord.forEach(n => this._piano(this._m(n), t0 + beat * B, 0.35, 0.06));
+    // the tune: on the first bar of a chord start from a chord tone, then walk
+    const rhythms = [[0, 3], [0, 1, 2], [0, 2], [0, 1.5, 2, 2.5]];
+    const r = rhythms[Math.floor(Math.random() * rhythms.length)];
+    let pos = this._melody ?? 4;
+    if (bar % 2 === 0) {
+      const tone = chord[Math.floor(Math.random() * chord.length)] + 12;
+      pos = ROOM_SCALE.reduce((best, n, i) => Math.abs(n - tone) < Math.abs(ROOM_SCALE[best] - tone) ? i : best, 0);
+    }
+    r.forEach((beat, k) => {
+      if (k) pos = Math.max(0, Math.min(ROOM_SCALE.length - 1, pos + [-1, 1, -2, 1, 2][Math.floor(Math.random() * 5)]));
+      const len = (r[k + 1] ?? 3) - beat;
+      this._piano(this._m(ROOM_SCALE[pos]), t0 + beat * B, len * B * 0.95, 0.11);
+    });
+    this._melody = pos;
+    return 3 * B;
+  }
+
+  // one bar of the tango: the habanera in the bass, bayan chords, a dotted, dramatic line
+  _tangoBar(t0, play) {
+    const B = TANGO_BEAT / this._v.tempo, bar = this._bar[this._lane]++;
+    const [bass, chord] = TANGO_CHORDS[bar % TANGO_CHORDS.length];
+    if (!play) return 4 * B;
+    for (const [beat, step, len] of [[0, 0, 1.2], [1.5, 7, 0.4], [2, 12, 0.8], [3, 7, 0.6]]) this._piano(this._m(bass + step), t0 + beat * B, len * B, 0.11);
+    for (const beat of [1, 3]) chord.forEach(n => this._bayan(this._m(n), t0 + beat * B, 0.35 * B, 0.03));
+    const rhythms = [[0, 1.5, 2, 3], [0, 0.75, 1, 2], [0, 2, 2.5, 3], [0.5, 1, 1.5, 2, 3]];
+    const r = rhythms[Math.floor(Math.random() * rhythms.length)];
+    let pos = this._tangoPos ?? 3;
+    r.forEach((beat, k) => {
+      if (k === 0) { const tone = chord[Math.floor(Math.random() * chord.length)] + 12; pos = TANGO_SCALE.reduce((b, n, i) => Math.abs(n - tone) < Math.abs(TANGO_SCALE[b] - tone) ? i : b, 0); }
+      else pos = Math.max(0, Math.min(TANGO_SCALE.length - 1, pos + [-1, 1, -1, -2, 2][Math.floor(Math.random() * 5)]));
+      this._bayan(this._m(TANGO_SCALE[pos]), t0 + beat * B, ((r[k + 1] ?? 4) - beat) * B * 0.92, 0.06);
+    });
+    this._tangoPos = pos;
+    return 4 * B;
+  }
+
+  // one bar of the romance: the bass on one, the guitar picking through the chord,
+  // now and then a melody note on top
+  _romanceBar(t0, play) {
+    const B = ROMANCE_BEAT / this._v.tempo, bar = this._bar[this._lane]++;
+    const [bass, chord] = ROMANCE_CHORDS[bar % ROMANCE_CHORDS.length];
+    if (!play) return 3 * B;
+    this._guitar(this._m(bass), t0, 0.16);
+    const pick = [chord[1], chord[2], chord[3], chord[2], chord[1]];
+    pick.forEach((n, k) => this._guitar(this._m(n), t0 + (k + 1) * B / 2 + Math.random() * 0.015, 0.07));
+    if (Math.random() < 0.7) {
+      let pos = this._romancePos ?? 4;
+      pos = Math.max(0, Math.min(ROMANCE_SCALE.length - 1, pos + [-1, 1, -2, 2, 0][Math.floor(Math.random() * 5)]));
+      this._guitar(this._m(ROMANCE_SCALE[pos]), t0 + (Math.random() < 0.5 ? 0 : 1) * B, 0.13);
+      this._romancePos = pos;
+    }
+    return 3 * B;
+  }
+
+  // one bar of the foxtrot: a dance band of the thirties. Tuba on one and
+  // three, banjo chords on two and four, brushes, a clarinet on top
+  _foxtrotBar(t0, play) {
+    const B = FOX_BEAT / this._v.tempo, bar = this._bar[this._lane]++;
+    const [bass, chord] = FOX_CHORDS[Math.floor(bar / 2) % FOX_CHORDS.length];
+    if (!play) return 4 * B;
+    const loud = this._lane === 'room' ? 1.9 : 1;
+    this._bassPluck(this._m(bass), t0, 0.8 * B, 0.065 * loud);
+    this._bassPluck(this._m(bass + 7), t0 + 2 * B, 0.8 * B, 0.06 * loud);
+    for (const beat of [1, 3]) {
+      chord.forEach((n, k) => this._pluck(this._m(n), t0 + beat * B + k * 0.012, 0.022 * loud, 0.3));
+      this._brush(t0 + beat * B, 0.04 * loud);
+    }
+    const r = [[0, 0.75, 1, 2, 3], [0, 1, 1.5, 2], [0, 2, 2.75, 3], [0.5, 1, 1.5, 2.5, 3]][Math.floor(Math.random() * 4)];
+    let pos = this._foxPos ?? 5;
+    r.forEach((beat, k) => {
+      if (k === 0 && bar % 2 === 0) { const tone = chord[Math.floor(Math.random() * 3)] + 12; pos = FOX_SCALE.reduce((b, n, i) => Math.abs(n - tone) < Math.abs(FOX_SCALE[b] - tone) ? i : b, 0); }
+      else pos = Math.max(0, Math.min(FOX_SCALE.length - 1, pos + [-1, 1, -1, 2, -2][Math.floor(Math.random() * 5)]));
+      this._reed(this._m(FOX_SCALE[pos]), t0 + beat * B, ((r[k + 1] ?? 4) - beat) * B * 0.9, 0.03 * loud);
+    });
+    this._foxPos = pos;
+    return 4 * B;
+  }
+
+  // one bar of the gypsy romance: the guitar's bass and chord, a violin that
+  // slides between its notes; it gathers speed the longer it plays
+  _gypsyBar(t0, play) {
+    const bar = this._bar[this._lane]++;
+    const B = GYPSY_BEAT / this._v.tempo / Math.min(1.55, 1 + bar * 0.012);
+    const [bass, chord] = GYPSY_CHORDS[bar % GYPSY_CHORDS.length];
+    if (!play) return 4 * B;
+    const loud = this._lane === 'room' ? 1.9 : 1;
+    this._guitar(this._m(bass), t0, 0.15);
+    this._guitar(this._m(bass + 7), t0 + 2 * B, 0.12);
+    for (const beat of [1, 1.5, 3, 3.5]) chord.forEach((n, k) => this._guitar(this._m(n), t0 + beat * B + k * 0.01, 0.035));
+    const r = [[0, 2], [0, 1.5, 2, 3], [0, 3], [0, 1, 2, 3]][Math.floor(Math.random() * 4)];
+    let pos = this._gypsyPos ?? 4;
+    r.forEach((beat, k) => {
+      const from = GYPSY_SCALE[pos];
+      pos = Math.max(0, Math.min(GYPSY_SCALE.length - 1, pos + [-1, 1, -2, 2, -3][Math.floor(Math.random() * 5)]));
+      this._bow(this._m(Math.random() < 0.35 ? from : GYPSY_SCALE[pos]), this._m(GYPSY_SCALE[pos]), t0 + beat * B, ((r[k + 1] ?? 4) - beat) * B * 0.95, 0.024 * loud);
+    });
+    this._gypsyPos = pos;
+    return 4 * B;
+  }
+
+  // one bar of a children's record: a xylophone tune and a pipe, simple as a
+  // skipping rope, on a disc played so often that the needle sometimes jumps
+  _kidsBar(t0, play) {
+    const B = KIDS_BEAT / this._v.tempo, bar = this._bar[this._lane]++;
+    if (!play) return 2 * B;
+    const loud = this._lane === 'room' ? 1.9 : 1;
+    if (Math.random() < 0.06) {                                // the needle jumps: half a bar is lost
+      this._click(t0, 0.3, 900, this.roomBus);
+      return 1.5 * B;
+    }
+    this._bassPluck(this._m(bar % 2 ? 43 : 48), t0, 0.4 * B, 0.07 * loud);
+    let pos = this._kidsPos ?? 2;
+    for (let k = 0; k < 4; k++) {
+      if (k && Math.random() < 0.25) continue;
+      pos = Math.max(0, Math.min(KIDS_SCALE.length - 1, pos + [-1, 1, 0, 1, -1, 2][Math.floor(Math.random() * 6)]));
+      this._xylo(this._m(KIDS_SCALE[pos]), t0 + k * B / 2, 0.06 * loud);
+    }
+    if (bar % 4 === 0) this._pipe(this._m(KIDS_SCALE[pos] - 12), t0, 3.8 * B, 0.03 * loud);
+    this._kidsPos = pos;
+    return 2 * B;
+  }
+
+  // the monitor down the ward: its own unsteady pulse, skips, and an alarm
+  _monitor() {
+    const t = this._t.beep;
+    this._hr += (Math.random() - 0.5) * 3;
+    this._hr = Math.max(58, Math.min(92, this._hr + (72 - this._hr) * 0.05));
+    this._t.beep += 60 / this._hr;
+    this._alarmIn -= 60 / this._hr;
+    if (this.gram || this.stage !== 0) return;
+    if (this._alarmIn <= 0) {                                    // three falling pulses
+      this._alarmIn = 45 + Math.random() * 60;
+      [84, 81, 77].forEach((n, k) => this._beep(midi(n), t + k * 0.19, 0.13, 0.03));
+      this._t.beep += 0.8;
+      return;
+    }
+    if (Math.random() < 0.06) return;                            // a missed beat
+    this._beep(987.8, t, 0.075, 0.028);
+  }
+
+  // gramophone crackle: dense small clicks, a louder one now and then, and the
+  // needle's knock once a revolution
+  _crackle() {
+    const t = this._t.crackle;
+    this._t.crackle += 0.03 + Math.random() * 0.06;
+    this._click(t, 0.02 + Math.random() * 0.05, 1500 + Math.random() * 5000, this.roomBus);
+    if (Math.random() < 0.04) this._click(t + 0.01, 0.25, 900, this.roomBus);
+    if (Math.floor(t / 0.77) !== Math.floor(this._t.crackle / 0.77)) this._click(t, 0.12, 300, this.roomBus);
+  }
+
+  // ── instruments ─────────────────────────────────────────────────────────
+  // electric piano: a sine carrier with an FM bark on the attack and a tine
+  _keys(f, t, dur, vel, bass = false, sag = false) {
+    const ctx = this.ctx;
+    f *= Math.pow(2, (Math.random() - 0.5) * 0.08 / 12);        // never quite in tune
+    const car = ctx.createOscillator(); car.frequency.setValueAtTime(f, t);
+    if (sag) car.frequency.setTargetAtTime(f * 0.982, t + 0.15, 0.4);
+    const mod = ctx.createOscillator(); mod.frequency.value = f * (bass ? 1 : 2);
+    const mg = ctx.createGain();
+    mg.gain.setValueAtTime(f * (bass ? 0.6 : 1.4), t); mg.gain.exponentialRampToValueAtTime(f * 0.08, t + 0.4);
+    mod.connect(mg); mg.connect(car.frequency);
+    const amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(vel, t + 0.006);
+    amp.gain.exponentialRampToValueAtTime(vel * 0.35, t + 0.5); amp.gain.exponentialRampToValueAtTime(0.0001, t + dur + 1.2);
+    car.connect(amp); amp.connect(this._out);
+    const end = t + dur + 1.3;
+    car.start(t); mod.start(t); car.stop(end); mod.stop(end);
+    if (!bass) {                                                   // the tine
+      const tine = ctx.createOscillator(); tine.frequency.value = f * 7.02;
+      const tg = ctx.createGain(); tg.gain.setValueAtTime(vel * 0.12, t); tg.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+      tine.connect(tg); tg.connect(this._out); tine.start(t); tine.stop(t + 0.15);
+    }
+  }
+  // a tinny upright: three partials, a fast decay
+  _piano(f, t, dur, vel) {
+    const ctx = this.ctx, amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(vel, t + 0.004);
+    amp.gain.exponentialRampToValueAtTime(vel * 0.3, t + 0.25); amp.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.6);
+    amp.connect(this.roomIn);
+    for (const [m, v] of [[1, 1], [2.003, 0.45], [3.01, 0.18]]) {
+      const o = ctx.createOscillator(); o.frequency.value = f * m;
+      const g = ctx.createGain(); g.gain.value = v;
+      o.connect(g); g.connect(amp); o.start(t); o.stop(t + dur + 0.7);
+    }
+  }
+  // electric organ, the Yunost kind: two detuned pulse waves and a sub, a
+  // vibrato, softened by a lowpass
+  _organ(f, t, dur, vel) {
+    const ctx = this.ctx, amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(vel, t + 0.03);
+    amp.gain.setValueAtTime(vel, t + dur); amp.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.2);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2000;
+    lp.connect(amp); amp.connect(this._out);
+    const vib = ctx.createOscillator(); vib.frequency.value = 5.8;
+    const vg = ctx.createGain(); vg.gain.value = f * 0.004; vib.connect(vg);
+    for (const [type, mul, cents, v] of [['square', 1, 4, 0.5], ['square', 1, -4, 0.5], ['sine', 0.5, 0, 0.6]]) {
+      const o = ctx.createOscillator(); o.type = type; o.frequency.value = f * mul * Math.pow(2, cents / 1200);
+      vg.connect(o.frequency);
+      const g = ctx.createGain(); g.gain.value = v; o.connect(g); g.connect(lp);
+      o.start(t); o.stop(t + dur + 0.25);
+    }
+    vib.start(t); vib.stop(t + dur + 0.25);
+  }
+  // vibraphone: a sine and its bar partial, trembling
+  _vibes(f, t, dur, vel) {
+    const ctx = this.ctx, amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(vel, t + 0.005);
+    amp.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(1.2, dur + 0.8));
+    const trem = ctx.createGain(); trem.gain.value = 0.75;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 5; const lg = ctx.createGain(); lg.gain.value = 0.25;
+    lfo.connect(lg); lg.connect(trem.gain);
+    amp.connect(trem); trem.connect(this._out);
+    for (const [m, v] of [[1, 1], [4, 0.12]]) { const o = ctx.createOscillator(); o.frequency.value = f * m; const g = ctx.createGain(); g.gain.value = v; o.connect(g); g.connect(amp); o.start(t); o.stop(t + dur + 1.3); }
+    lfo.start(t); lfo.stop(t + dur + 1.3);
+  }
+  _bassPluck(f, t, dur, vel) {
+    const ctx = this.ctx, amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(vel, t + 0.006); amp.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.3);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 650;
+    lp.connect(amp); amp.connect(this._out);
+    for (const [type, v] of [['triangle', 1], ['sine', 0.7]]) { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; const g = ctx.createGain(); g.gain.value = v; o.connect(g); g.connect(lp); o.start(t); o.stop(t + dur + 0.35); }
+  }
+  _noiseHit(t, vel, type, freq, q, len) {
+    const ctx = this.ctx, s = ctx.createBufferSource(); s.buffer = this._noise;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain(); g.gain.setValueAtTime(vel, t); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    s.connect(f); f.connect(g); g.connect(this._out); s.start(t, Math.random() * 0.5); s.stop(t + len + 0.02);
+  }
+  _brush(t, vel) { this._noiseHit(t, vel, 'bandpass', 2800, 0.6, 0.16); }
+  _hat(t, vel) { this._noiseHit(t, vel, 'highpass', 7500, 0.7, 0.04); }
+  // a sawtooth through a lowpass that snaps shut: the arpeggiator's voice
+  _sawNote(f, t, dur, vel, cut) {
+    const ctx = this.ctx, o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 4;
+    lp.frequency.setValueAtTime(cut * 1.8, t); lp.frequency.exponentialRampToValueAtTime(cut * 0.5, t + dur);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.05);
+    o.connect(lp); lp.connect(g); g.connect(this._out); o.start(t); o.stop(t + dur + 0.08);
+  }
+  // a square lead gliding from one note to the next
+  _lead(f0, f1, t, dur, vel) {
+    const ctx = this.ctx, o = ctx.createOscillator(); o.type = 'square';
+    o.frequency.setValueAtTime(f0, t); o.frequency.setTargetAtTime(f1, t + dur * 0.5, 0.15);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + 0.12); g.gain.setValueAtTime(vel, t + dur); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.6);
+    o.connect(lp); lp.connect(g); g.connect(this._out); g.connect(this.corridorSend); o.start(t); o.stop(t + dur + 0.7);
+  }
+  // bayan: two reeds a little apart (the musette beat), reedy, into the gramophone
+  _bayan(f, t, dur, vel) {
+    const ctx = this.ctx, amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(vel, t + 0.04);
+    amp.gain.setValueAtTime(vel, t + dur); amp.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.12);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
+    lp.connect(amp); amp.connect(this.roomIn);
+    for (const cents of [-9, 9]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f * Math.pow(2, cents / 1200); o.connect(lp); o.start(t); o.stop(t + dur + 0.15); }
+  }
+  // a guitar string: bright at the pluck, dying away
+  _guitar(f, t, vel) {
+    const ctx = this.ctx, amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(vel, t + 0.003);
+    amp.gain.exponentialRampToValueAtTime(vel * 0.25, t + 0.3); amp.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+    amp.connect(this.roomIn);
+    for (const [m, v] of [[1, 1], [2, 0.5], [3, 0.25], [4.02, 0.12]]) { const o = ctx.createOscillator(); o.frequency.value = f * m; const g = ctx.createGain(); g.gain.value = v; o.connect(g); g.connect(amp); o.start(t); o.stop(t + 2.3); }
+  }
+
+  // a music-box comb: a pure tine and its bright, inharmonic overtones
+  _musicBox(f, t, vel) {
+    const ctx = this.ctx;
+    for (const [m, v, d] of [[1, 1, 1.8], [4.2, 0.25, 0.5], [9.8, 0.08, 0.2]]) {
+      const o = ctx.createOscillator(); o.frequency.value = f * m;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel * v, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g); g.connect(this._out); o.start(t); o.stop(t + d + 0.05);
+    }
+  }
+  // static between stations: noise through a narrow band that follows the dial
+  _static(t, dur, vel, f0, f1) {
+    const ctx = this.ctx, s = ctx.createBufferSource(); s.buffer = this._noise; s.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 5;
+    bp.frequency.setValueAtTime(f0, t); bp.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + 0.3);
+    g.gain.setValueAtTime(vel, t + dur - 0.4); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const whistle = ctx.createOscillator(); whistle.frequency.setValueAtTime(f0 * 1.5, t); whistle.frequency.exponentialRampToValueAtTime(f1 * 1.5, t + dur);
+    const wg = ctx.createGain(); wg.gain.value = vel * 0.08;
+    s.connect(bp); bp.connect(g); whistle.connect(wg); wg.connect(g); g.connect(this.radioIn);
+    s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05); whistle.start(t); whistle.stop(t + dur + 0.05);
+  }
+  // a bowed string (cello low, violin high): two saws a hair apart, a body
+  // resonance, the bow's slow attack, a vibrato that comes in late, and a
+  // slide from f0 to f1 when they differ
+  _bow(f0, f1, t, dur, vel) {
+    const ctx = this.ctx, amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(vel, t + 0.22);
+    amp.gain.setValueAtTime(vel, t + dur); amp.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.5);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = Math.min(5000, f1 * 6); lp.Q.value = 0.7;
+    const body = ctx.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = f1 < 200 ? 280 : 900; body.gain.value = 5; body.Q.value = 1.4;
+    lp.connect(body); body.connect(amp); amp.connect(this._out);
+    if (this._lane === 'corridor') amp.connect(this.corridorSend);   // the empty wing answers
+    const vib = ctx.createOscillator(); vib.frequency.value = 5.2;
+    const vg = ctx.createGain(); vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(f1 * 0.006, t + Math.min(0.8, dur));
+    vib.connect(vg);
+    for (const cents of [-5, 5]) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f0 * Math.pow(2, cents / 1200), t);
+      if (f1 !== f0) o.frequency.setTargetAtTime(f1 * Math.pow(2, cents / 1200), t + Math.min(0.25, dur * 0.3), 0.08);
+      vg.connect(o.frequency); o.connect(lp); o.start(t); o.stop(t + dur + 0.55);
+    }
+    vib.start(t); vib.stop(t + dur + 0.55);
+  }
+  // glass harmonica: a wet finger on a turning glass, almost a sine, slow in
+  _glass(f, t, dur, vel) {
+    const ctx = this.ctx, amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(vel, t + 0.4);
+    amp.gain.setValueAtTime(vel, t + dur); amp.gain.exponentialRampToValueAtTime(0.0001, t + dur + 1.4);
+    amp.connect(this._out);
+    for (const [m, v] of [[1, 1], [2, 0.22], [3.01, 0.06]]) {
+      const o = ctx.createOscillator(); o.frequency.value = f * m;
+      const g = ctx.createGain(); g.gain.value = v; o.connect(g); g.connect(amp); o.start(t); o.stop(t + dur + 1.5);
+    }
+  }
+  // a plucked string that dies fast: the banjo
+  _pluck(f, t, vel, decay) {
+    const ctx = this.ctx, amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(vel, t + 0.002); amp.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    amp.connect(this._out);
+    for (const [m, v] of [[1, 1], [2, 0.6], [3, 0.35], [5.02, 0.15]]) { const o = ctx.createOscillator(); o.frequency.value = f * m; const g = ctx.createGain(); g.gain.value = v; o.connect(g); g.connect(amp); o.start(t); o.stop(t + decay + 0.05); }
+  }
+  // clarinet: a hollow square (odd harmonics), softened, a light vibrato
+  _reed(f, t, dur, vel) {
+    const ctx = this.ctx, o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = f;
+    const vib = ctx.createOscillator(); vib.frequency.value = 4.8; const vg = ctx.createGain(); vg.gain.value = f * 0.003; vib.connect(vg); vg.connect(o.frequency);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = f * 3.5;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + 0.04);
+    g.gain.setValueAtTime(vel, t + dur); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.1);
+    o.connect(lp); lp.connect(g); g.connect(this._out); o.start(t); o.stop(t + dur + 0.12); vib.start(t); vib.stop(t + dur + 0.12);
+  }
+  // xylophone: a wooden bar, knocked
+  _xylo(f, t, vel) {
+    const ctx = this.ctx;
+    for (const [m, v, d] of [[1, 1, 0.45], [3.93, 0.3, 0.12]]) {
+      const o = ctx.createOscillator(); o.frequency.value = f * m;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel * v, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g); g.connect(this._out); o.start(t); o.stop(t + d + 0.03);
+    }
+  }
+  // a wooden pipe: soft, breathy at the start, wavering
+  _pipe(f, t, dur, vel) {
+    const ctx = this.ctx, amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(vel, t + 0.07);
+    amp.gain.setValueAtTime(vel, t + dur); amp.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.15);
+    amp.connect(this._out);
+    const vib = ctx.createOscillator(); vib.frequency.value = 5.5; const vg = ctx.createGain(); vg.gain.value = f * 0.005; vib.connect(vg);
+    for (const [type, v] of [['sine', 1], ['triangle', 0.3]]) { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; vg.connect(o.frequency); const g = ctx.createGain(); g.gain.value = v; o.connect(g); g.connect(amp); o.start(t); o.stop(t + dur + 0.2); }
+    vib.start(t); vib.stop(t + dur + 0.2);
+    this._noiseHit(t, vel * 0.4, 'bandpass', f * 2, 2, 0.08);    // the breath
+  }
+
+  _beep(f, t, dur, vel) {
+    const ctx = this.ctx, o = ctx.createOscillator(); o.frequency.value = f;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + 0.004);
+    g.gain.setValueAtTime(vel, t + dur); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.02);
+    const pan = ctx.createStereoPanner(); pan.pan.value = 0.55;
+    o.connect(g); g.connect(pan); pan.connect(this.wardBus); o.start(t); o.stop(t + dur + 0.05);
+  }
+  _thump(t, vel) {
+    const ctx = this.ctx, o = ctx.createOscillator();
+    o.frequency.setValueAtTime(62, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.16);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    o.connect(g); g.connect(this.beatBus); o.start(t); o.stop(t + 0.22);
+  }
+  _click(t, vel, freq, dest) {
+    const ctx = this.ctx, s = ctx.createBufferSource(); s.buffer = this._clickBuf;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = 0.8;
+    const g = ctx.createGain(); g.gain.value = vel;
+    s.connect(bp); bp.connect(g); g.connect(dest); s.start(t);
+  }
+  _pad(f, t, dur, vel, dest = this.lightBus) {
+    const ctx = this.ctx, amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(vel, t + 0.9);
+    amp.gain.setValueAtTime(vel, t + dur); amp.gain.exponentialRampToValueAtTime(0.0001, t + dur + 1.8);
+    amp.connect(dest);
+    for (const [type, cents] of [['sine', 0], ['triangle', 4], ['sine', -5]]) {
+      const o = ctx.createOscillator(); o.type = type; o.frequency.value = f * Math.pow(2, cents / 1200);
+      o.connect(amp); o.start(t); o.stop(t + dur + 2);
+    }
+  }
+  _bell(f, t, vel, dest = this.lightBus, decay = 1.6) {
+    const ctx = this.ctx;
+    for (const [m, v] of [[1, 1], [2.76, 0.4]]) {
+      const o = ctx.createOscillator(); o.frequency.value = f * m;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel * v, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + decay * (m > 1 ? 0.5 : 1));
+      o.connect(g); g.connect(dest); o.start(t); o.stop(t + decay + 0.1);
+    }
+  }
+}
+
+// Je suis le spectre d'une rose que tu portais hier au bal.

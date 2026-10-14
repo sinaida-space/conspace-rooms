@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>
+  // Old GitHub Pages link: forward to the Vercel home, keeping the page, ?lang and #hash.
+  // ?mirror keeps the visitor on GitHub Pages and is remembered.
+  var mirror = /[?&]mirror\b/.test(location.search);
+  try { if (mirror) localStorage.setItem('mirror', '1'); mirror = mirror || localStorage.getItem('mirror') === '1'; } catch (e) {}
+  if (location.hostname.endsWith('github.io') && !mirror) {
+    location.replace('https://conspace-rooms.vercel.app' +
+      location.pathname.replace(/^\/conspace-rooms/, '') + location.search + location.hash);
+  }
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CONSPACE ROOMS · Sinaida × UVALISS</title>
+<meta name="description" content="CONSPACE ROOMS. An interactive web installation by UVALISS and Sinaida. Experience design: https://sinaida.eu. Walk an infinite labyrinth housing the SOULS series by UVALISS.">
+<meta name="theme-color" content="#010805">
+<link rel="canonical" href="https://conspace-rooms.vercel.app/">
+
+<link rel="icon" href="assets/icons/favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="manifest" href="assets/icons/site.webmanifest">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="CONSPACE ROOMS">
+<meta property="og:description" content="An interactive web installation by UVALISS and Sinaida. Experience design: https://sinaida.eu. Walk an infinite labyrinth housing the SOULS series by UVALISS.">
+<meta property="og:url" content="https://conspace-rooms.vercel.app/">
+<meta property="og:image" content="https://conspace-rooms.vercel.app/assets/icons/og-cover.jpg">
+<meta property="og:image:alt" content="A dark green corridor with red candles on a table and a dog in the distance. Neon title: CONSPACE ROOMS, by UVALISS and SINAIDA.">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="CONSPACE ROOMS">
+<meta name="twitter:description" content="An interactive web installation by UVALISS and Sinaida. Experience design: https://sinaida.eu">
+<meta name="twitter:image" content="https://conspace-rooms.vercel.app/assets/icons/og-cover.jpg">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VisualArtwork",
+  "name": "CONSPACE ROOMS",
+  "url": "https://conspace-rooms.vercel.app/",
+  "artform": "Interactive web installation",
+  "inLanguage": ["ru", "en"],
+  "description": "A walk-through web installation by Sinaida and UVALISS (Alisa Feer). Eighteen works from the SOULS series hang in an endless, procedurally generated labyrinth that the browser builds as you walk, following the series from fear (Soviet hospital corridors) through memory (a grandmother's flat) to acceptance (rooms of light). Generative music, gesture control by webcam, no tracking.",
+  "creator": [
+    { "@type": "Person", "name": "Sinaida Krivchenko", "alternateName": "Sinaida", "url": "https://sinaida.eu/", "jobTitle": "Experience design, code" },
+    { "@type": "Person", "name": "Alisa Feer", "alternateName": "UVALISS", "url": "https://uvaliss.ru/", "jobTitle": "Artist, the SOULS series" }
+  ],
+  "isBasedOn": { "@type": "CreativeWorkSeries", "name": "SOULS", "creator": { "@type": "Person", "name": "UVALISS" } }
+}
+</script>
+<link rel="preload" href="assets/fonts/DepartureMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="lang-gate">
+  <div class="consent-panel">
+    <header class="gate-intro">
+      <h1 class="gate-title">CONSPACE ROOMS</h1>
+      <div class="gate-lang gate-ru" lang="ru">
+        <span class="gate-lang-tag">RU</span>
+        <p>Веб-инсталляция Sinaida и&nbsp;UVALISS.<br>18&nbsp;работ из&nbsp;серии SOULS висят в&nbsp;бесконечном лабиринте, который браузер строит на&nbsp;ходу: больничные коридоры страха, бабушкина квартира, полная памяти, комнаты света.<br>Иди медленно.</p>
+      </div>
+      <div class="gate-lang gate-en" lang="en">
+        <span class="gate-lang-tag">EN</span>
+        <p>A&nbsp;walk-through web installation by&nbsp;<a href="https://sinaida.eu/" target="_blank" rel="noopener">Sinaida</a> and <a href="https://uvaliss.ru/" target="_blank" rel="noopener">UVALISS</a>.<br>18&nbsp;works from the SOULS series hang in&nbsp;an&nbsp;endless labyrinth that the browser builds as&nbsp;you walk: hospital corridors of&nbsp;fear, a&nbsp;grandmother’s flat full of&nbsp;memory, rooms of&nbsp;light.<br>Go&nbsp;slowly.</p>
+      </div>
+    </header>
+    <div id="lang-boot" aria-live="polite"></div>
+    <div class="lang-actions">
+      <button type="button" class="btn-enter" data-lang="ru" lang="ru">Русский</button>
+      <button type="button" class="btn-enter" data-lang="en" lang="en">English</button>
+    </div>
+  </div>
+</div>
+
+<div id="cookie-gate" class="hidden">
+  <div class="consent-panel">
+    <div id="cookie-boot" aria-live="polite"></div>
+    <section class="tw" role="note">
+      <p class="tw-title" data-i18n="twTitle"></p>
+      <ul class="tw-list" data-i18n-list="twList"></ul>
+    </section>
+    <p class="consent-copy" data-i18n="consentCopy"></p>
+    <div class="consent-actions">
+      <button type="button" id="btn-consent" class="btn-enter" data-i18n="consentBtn"></button>
+      <a href="privacy.html" data-i18n-href="privacy.html" target="_blank" rel="noopener" class="privacy-link" data-i18n="privacyLink"></a>
+    </div>
+  </div>
+</div>
+
+<div id="welcome" class="hidden">
+ <div class="welcome-col">
+  <h1><button type="button" id="wordmark" class="wordmark">CONSPACE ROOMS</button></h1>
+  <p class="statement" data-i18n="statement"></p>
+  <p class="welcome-version" id="welcome-version"></p>
+  <section class="tw" role="note">
+    <p class="tw-title" data-i18n="twTitle"></p>
+    <ul class="tw-list" data-i18n-list="twList"></ul>
+  </section>
+
+  <section class="about">
+    <h2 data-i18n="aboutTitle"></h2>
+    <p data-i18n="aboutText"></p>
+    <h2 data-i18n="expectTitle"></h2>
+    <ul class="expect" data-i18n-list="expect"></ul>
+  </section>
+
+  <div class="credits-panel">
+    <h2 data-i18n="credits"></h2>
+    <div class="artist">
+      <p class="role" data-i18n="role1"></p>
+      <p class="name">Sinaida</p>
+      <p data-i18n="bio1"></p>
+      <div class="links">
+        <a href="https://sinaida.eu/" target="_blank" rel="noopener">sinaida.eu</a>
+        <a href="https://www.instagram.com/sin.ai.da" target="_blank" rel="noopener">@sin.ai.da</a>
+      </div>
+    </div>
+    <div class="artist">
+      <p class="role" data-i18n="role2"></p>
+      <p class="name" data-i18n="name2"></p>
+      <p data-i18n="bio2"></p>
+      <div class="links">
+        <a href="https://uvaliss.ru/" target="_blank" rel="noopener">uvaliss.ru</a>
+        <a href="https://www.instagram.com/uvaliss/" target="_blank" rel="noopener">@uvaliss</a>
+        <a href="https://uvaliss.ru/souls" target="_blank" rel="noopener">SOULS</a>
+      </div>
+    </div>
+  </div>
+
+  <div id="boot-sequence" aria-live="polite"></div>
+  <p id="capability-result" class="capability hidden"></p>
+
+  <h2 id="controls-title" class="controls-title hidden" data-i18n="controlsTitle"></h2>
+  <div id="mode-select" class="hidden">
+    <button type="button" data-mode="keys"><span data-i18n="modeKeys"></span><span class="mode-legend" data-i18n="legendKeys"></span></button>
+    <button type="button" data-mode="hands" class="mode-secondary"><span data-i18n="modeHands"></span><span class="mode-legend" data-i18n="legendHands"></span></button>
+  </div>
+  <button type="button" id="btn-cc-welcome" class="cc-switch" role="switch" aria-checked="false"><span data-i18n="a11yMode"></span>: <span class="cc-state"></span><span class="cc-legend" data-i18n="ccWelcome"></span></button>
+  <div id="gesture-note" class="gesture-note">
+    <p class="gesture-title" data-i18n="gestureTitle"></p>
+    <ul class="expect" data-i18n-list="gestureList"></ul>
+    <p class="gesture-privacy" data-i18n="gesturePrivacy"></p>
+  </div>
+
+  <div class="welcome-actions">
+    <button type="button" id="btn-enter" class="btn-enter hidden" data-i18n="enter"></button>
+    <button type="button" id="btn-train" class="btn-enter btn-train" data-i18n="train"></button>
+  </div>
+  <footer id="site-footer"></footer>
+ </div>
+</div>
+
+<!-- one menu, like a strip of masking tape stuck on an old set; the rest hides in it -->
+<div id="hud-toolbar" class="hidden">
+  <button type="button" id="btn-menu" class="tape" aria-expanded="false" aria-controls="hud-menu"><span data-i18n="menu"></span><kbd>Tab</kbd></button>
+  <div id="hud-menu" class="hidden" role="menu">
+    <button type="button" id="btn-fullscreen" class="tape" role="menuitem"><span data-i18n="fullscreen"></span><kbd>F</kbd></button>
+    <button type="button" id="btn-mute" class="tape hidden" role="menuitem"><span data-i18n="soundOn"></span><kbd>N</kbd></button>
+    <label id="vol" class="tape hidden" role="menuitem"><span data-i18n="volume"></span><input type="range" id="vol-range" min="0" max="100" step="5" value="100"><kbd>[ ]</kbd></label>
+    <button type="button" id="btn-calm" class="tape" role="menuitemcheckbox" aria-checked="true"><span data-i18n="flickerOn"></span></button>
+    <button type="button" id="btn-cc" class="tape" role="menuitemcheckbox" aria-checked="false"><span data-i18n="ccOff"></span></button>
+    <button type="button" id="btn-main-screen" class="tape" role="menuitem"><span data-i18n="mainScreen"></span><kbd>H</kbd></button>
+    <button type="button" id="btn-clip" class="tape hidden" role="menuitem"><span data-i18n="clip"></span><kbd>C</kbd></button>
+    <button type="button" id="btn-finish" class="tape" role="menuitem"><span data-i18n="finish"></span><kbd>Q</kbd></button>
+  </div>
+</div>
+
+<div id="webgl-error" class="hidden">
+  <p data-i18n="webglError"></p>
+</div>
+
+<div id="farewell" class="hidden">
+  <div class="farewell-inner">
+    <p class="farewell-q" id="farewell-question"></p>
+    <div class="farewell-credits">
+      <p class="role" data-i18n="farewellRole"></p>
+      <div class="links">
+        <a href="https://sinaida.eu/" target="_blank" rel="noopener">sinaida.eu</a>
+        <a href="https://www.instagram.com/sin.ai.da" target="_blank" rel="noopener">@sin.ai.da</a>
+        <a href="https://uvaliss.ru/" target="_blank" rel="noopener">uvaliss.ru</a>
+        <a href="https://www.instagram.com/uvaliss/" target="_blank" rel="noopener">@uvaliss</a>
+      </div>
+      <p class="role playlist-label" data-i18n="playlistLabel"></p>
+      <div class="links">
+        <a href="https://open.spotify.com/playlist/0145rQE2XluEkz3YWbEQLp?si=6c33fb59e0ad4ff4" target="_blank" rel="noopener" data-i18n="playlistLink"></a>
+      </div>
+    </div>
+    <button type="button" id="btn-walk-again" class="btn-enter" data-i18n="walkAgain"></button>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+<script type="module">import { registerWebMcp } from './src/webmcp.js'; registerWebMcp();</script>
+<!-- Je suis le spectre d'une rose que tu portais hier au bal. -->
+</body>
+</html>
