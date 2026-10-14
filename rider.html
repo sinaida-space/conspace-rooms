@@ -163,7 +163,8 @@
   <h2>Компьютер</h2>
   <p>Дискретная видеокарта (например, NVIDIA RTX&nbsp;3060 или&nbsp;новее) или&nbsp;Apple M1 или&nbsp;новее, 16&nbsp;ГБ памяти, свежий Chrome, выход HDMI. Автозапуск при&nbsp;включении питания, спящий режим отключён.</p>
   <p>Команда для запуска в&nbsp;режиме киоска:</p>
-  <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required --use-fake-ui-for-media-stream "https://conspace-rooms.vercel.app/gallery"</code></pre>
+  <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required "https://conspace-rooms.vercel.app/gallery"</code></pre>
+  <p>Перед первым показом откройте этот адрес один раз в&nbsp;том же профиле Chrome и&nbsp;разрешите доступ к&nbsp;камере: Chrome запомнит разрешение для&nbsp;сайта.</p>
   <p>С&nbsp;локальной сборкой в&nbsp;команде стоит локальный адрес, его даём вместе со&nbsp;сборкой. Полные подробности галерейного режима смотрите в&nbsp;<a href="tech.html?lang=ru">спецификациях</a>.</p>
 
   <h2>Веб-камера</h2>
@@ -381,7 +382,8 @@
   <h2>Computer</h2>
   <p>A&nbsp;discrete GPU (for&nbsp;example, NVIDIA RTX&nbsp;3060 or&nbsp;better) or&nbsp;Apple M1 or&nbsp;newer, 16&nbsp;GB RAM, a&nbsp;recent Chrome, HDMI out. It&nbsp;should auto-start on&nbsp;power, with sleep turned off.</p>
   <p>Kiosk command:</p>
-  <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required --use-fake-ui-for-media-stream "https://conspace-rooms.vercel.app/gallery"</code></pre>
+  <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required "https://conspace-rooms.vercel.app/gallery"</code></pre>
+  <p>Before the first showing, open this address once in&nbsp;the same Chrome profile and allow the camera: Chrome remembers the permission for&nbsp;the site.</p>
   <p>With a&nbsp;local build the command points to&nbsp;a&nbsp;local address, which comes with the build. See the <a href="tech.html?lang=en">specs</a> for&nbsp;the full gallery-mode details.</p>
 
   <h2>Webcam</h2>

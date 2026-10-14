@@ -191,16 +191,16 @@ visitor. The code is in `src/gallery.js`.
    screen facing the visitor at about chest height, and speakers or headphones.
 2. Light the visitor's face and hands from the front; the hand tracker needs to see
    both hands clearly at a step or two from the camera.
-3. Start Chrome in kiosk mode so it opens full screen, plays sound and uses the
-   camera without anyone clicking:
+3. Open the address once in the same Chrome profile and allow the camera; Chrome
+   remembers the permission. Then start Chrome in kiosk mode so it opens full
+   screen and plays sound without anyone clicking:
 
    ```
-   chrome --kiosk --autoplay-policy=no-user-gesture-required --use-fake-ui-for-media-stream "https://conspace-rooms.vercel.app/gallery?lang=ru"
+   chrome --kiosk --autoplay-policy=no-user-gesture-required "https://conspace-rooms.vercel.app/gallery?lang=ru"
    ```
 
    On macOS: `/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome` with
-   the same flags. Without kiosk mode, allow the camera once when Chrome asks (it
-   remembers the site) and press `F` for full screen; the first key press or click
+   the same flags. Without kiosk mode, press `F` for full screen; the first key press or click
    also wakes the sound.
 4. Test it: step in front of the camera, the walk should start; step away and after
    the idle time the attract screen should return.
