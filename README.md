@@ -4,6 +4,8 @@
 
 **Live:** https://conspace-rooms.vercel.app/ (RU / EN)
 
+> Production mirror. Development and issue tracking run in a private development environment; releases are published here.
+
 ## Links
 
 | | Main site (Vercel) | Mirror (GitHub Pages) |
