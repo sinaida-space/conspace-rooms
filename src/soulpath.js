@@ -227,14 +227,22 @@ function slotNearCell(slot, gi, gj) {
   return cx > slot.position.x - half - 0.05 && cx < slot.position.x + half + 0.05;
 }
 
+// The zone that weighs most, so a wall written mid-crossing (0.5 / 0.5)
+// still gets its own hand instead of falling back to fear.
+function mainZone(zone) {
+  return zone.accept >= zone.memory && zone.accept >= zone.fear ? 'accept'
+    : zone.memory >= zone.fear ? 'memory' : 'fear';
+}
+
 // Chalk / pencil scrawl on a transparent canvas: each letter jittered and
 // tilted a little, the stroke roughened, so it reads as written by hand.
 function scrawlTexture(text, zone) {
   const c = document.createElement('canvas');
   c.width = 512; c.height = 96;
   const ctx = c.getContext('2d');
-  const ink = zone.memory > 0.5 ? 'rgba(40,30,22,0.85)'        // pencil on wallpaper
-    : zone.accept > 0.5 ? 'rgba(90,96,88,0.7)'                 // faint graphite on pale plaster
+  const main = mainZone(zone);
+  const ink = main === 'memory' ? 'rgba(40,30,22,0.85)'        // pencil on wallpaper
+    : main === 'accept' ? 'rgba(90,96,88,0.7)'                 // faint graphite on pale plaster
       : 'rgba(225,232,220,0.8)';                               // chalk on green paint
   ctx.fillStyle = ink;
   ctx.textBaseline = 'middle';
@@ -1402,7 +1410,7 @@ export class SoulPath {
   }
 
   _writeOn(w) {
-    const listKey = w.zone.accept > 0.5 ? 'wallAccept' : w.zone.memory > 0.5 ? 'wallMemory' : 'wallFear';
+    const listKey = { fear: 'wallFear', memory: 'wallMemory', accept: 'wallAccept' }[mainZone(w.zone)];
     const text = pick(t(listKey), w.seed);
     const old = w.mesh.material.map;
     w.mesh.material.map = scrawlTexture(text, w.zone);
