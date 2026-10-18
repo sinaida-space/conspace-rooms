@@ -112,7 +112,6 @@ export class UI {
     await new Promise(res => {
       $('btn-consent')?.addEventListener('click', () => {
         try { localStorage.setItem('conspace-consent', '1'); } catch (e) { /* storage blocked */ }
-        document.body.classList.add('tw-read');   // the warning was just read here: the welcome need not repeat it
         res();
       }, { once: true });
     });
@@ -140,28 +139,29 @@ export class UI {
     el.textContent = t('capability', { gpu: caps.gpuClass, dpr: caps.dpr, touch: t(caps.touch ? 'touchYes' : 'touchNo') });
   }
 
-  // DOS-style typed boot sequence, run once on load before the capability
-  // line and mode-select settle in. Purely decorative — resolves regardless
-  // of typing state so it never blocks entry.
+  // DOS-style typed boot sequence, run once on load. Purely decorative and
+  // quick (well under a second); everything below it waits in .booting until
+  // the last line is typed, so nothing jumps in while it prints.
   async runBootSequence(caps) {
     const el = $('boot-sequence');
     if (!el) return;
     this._armPacman();
     const lines = t('boot', { gpu: (caps.gpuClass || 'unknown').toUpperCase() });
     for (const line of lines) {
-      await this._typeLine(el, line);
-      await wait(120);
+      await this._typeLine(el, line, true);
+      await wait(40);
     }
   }
 
-  _typeLine(el, text) {
+  // fast: the welcome boot, two characters per tick (whole lines under reduced motion)
+  _typeLine(el, text, fast = false) {
     return new Promise(res => {
       const row = document.createElement('div');
       el.appendChild(row);
-      let i = 0;
+      let i = fast && matchMedia('(prefers-reduced-motion: reduce)').matches ? text.length : 0;
       const step = () => {
         row.textContent = text.slice(0, i);
-        if (i < text.length) { i++; setTimeout(step, 14); }
+        if (i < text.length) { i += fast ? 2 : 1; setTimeout(step, fast ? 8 : 14); }
         else res();
       };
       step();

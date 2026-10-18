@@ -95,7 +95,6 @@ body::after {
 .tw-list { list-style: none; padding: 0; margin: 0; font-size: 0.92em; }
 .tw-list li { position: relative; padding-left: 1.3em; margin-bottom: 0.35em; }
 .tw-list li::before { content: '>'; position: absolute; left: 0; color: #ff5a5a; }
-.statement + .tw { margin-top: 1.2em; }
 .consent-actions {
   display: flex; flex-wrap: wrap; align-items: center; gap: 1em 1.6em;
 }
@@ -295,6 +294,10 @@ body::after {
 }
 .btn-mute.muted { color: var(--dim); }
 
+/* everything under the boot lines waits until they are typed (main.js boot()) */
+.welcome-col > #boot-sequence ~ * { transition: opacity 0.35s ease; }
+.welcome-col.booting > #boot-sequence ~ * { opacity: 0; visibility: hidden; }
+@media (prefers-reduced-motion: reduce) { .welcome-col > #boot-sequence ~ * { transition: none; } }
 #boot-sequence {
   font-size: 0.85em; color: var(--dim); margin-bottom: 1em;
   min-height: 6.5em; white-space: pre-wrap;
@@ -466,7 +469,6 @@ body.inspecting #control-hud, body.inspecting #hand-legend, body.inspecting #pad
 #pad .pad-arrows { transition: opacity 1.2s ease; }
 body.hints-away #control-hud, body.hints-away #hand-legend { opacity: 0; transition-duration: 1.2s; }
 body.pad-away #pad .pad-arrows { opacity: 0; }
-body.tw-read #welcome .tw { display: none; }
 
 /* on-screen pad for the buttons mode: arrows bottom-left, LOOK CLOSER bottom-right above mute */
 #pad {
