@@ -64,13 +64,18 @@ if (!caps.webgl2) {
 }
 
 async function boot() {
-  if (!GALLERY && !DIRECT) {
-    await ui.runBootSequence(caps);
-    ui.showCapabilityResult(caps);
-    ui.initModeSelect(caps.recommendedMode, caps);
-    document.getElementById('controls-title')?.classList.remove('hidden');
-    document.getElementById('mode-select')?.classList.remove('hidden');
-    document.getElementById('btn-enter')?.classList.remove('hidden');
+  try {
+    if (!GALLERY && !DIRECT) {
+      await ui.runBootSequence(caps);
+      ui.showCapabilityResult(caps);
+      ui.initModeSelect(caps.recommendedMode, caps);
+      document.getElementById('controls-title')?.classList.remove('hidden');
+      document.getElementById('mode-select')?.classList.remove('hidden');
+      document.getElementById('btn-enter')?.classList.remove('hidden');
+    }
+  } finally {
+    // the boot lines are done (or skipped, or failed): let the rest of the welcome screen in
+    document.querySelector('.welcome-col.booting')?.classList.remove('booting');
   }
 
   const quality = new Quality();
