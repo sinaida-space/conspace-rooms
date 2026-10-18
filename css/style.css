@@ -416,6 +416,8 @@ body::after {
 /* Welcome: the about block and more air between paragraphs */
 #welcome p { margin-bottom: 1.3em; line-height: 1.7; }
 .about { margin: 0.4em 0 2.2em; }
+/* the way in comes first; the story waits below the button */
+.welcome-actions + .about { margin-top: 3.2em; }
 .about h2, .credits-panel h2 {
   font-size: 0.8em; letter-spacing: 0.16em; color: var(--dim);
   text-transform: uppercase; margin: 1.8em 0 0.9em;

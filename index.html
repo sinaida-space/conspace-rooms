@@ -105,6 +105,26 @@
     <ul class="tw-list" data-i18n-list="twList"></ul>
   </section>
 
+  <div id="boot-sequence" aria-live="polite"></div>
+  <p id="capability-result" class="capability hidden"></p>
+
+  <h2 id="controls-title" class="controls-title hidden" data-i18n="controlsTitle"></h2>
+  <div id="mode-select" class="hidden">
+    <button type="button" data-mode="keys"><span data-i18n="modeKeys"></span><span class="mode-legend" data-i18n="legendKeys"></span></button>
+    <button type="button" data-mode="hands" class="mode-secondary"><span data-i18n="modeHands"></span><span class="mode-legend" data-i18n="legendHands"></span></button>
+  </div>
+  <button type="button" id="btn-cc-welcome" class="cc-switch" role="switch" aria-checked="false"><span data-i18n="a11yMode"></span>: <span class="cc-state"></span><span class="cc-legend" data-i18n="ccWelcome"></span></button>
+  <div id="gesture-note" class="gesture-note">
+    <p class="gesture-title" data-i18n="gestureTitle"></p>
+    <ul class="expect" data-i18n-list="gestureList"></ul>
+    <p class="gesture-privacy" data-i18n="gesturePrivacy"></p>
+  </div>
+
+  <div class="welcome-actions">
+    <button type="button" id="btn-enter" class="btn-enter hidden" data-i18n="enter"></button>
+    <button type="button" id="btn-train" class="btn-enter btn-train" data-i18n="train"></button>
+  </div>
+
   <section class="about">
     <h2 data-i18n="aboutTitle"></h2>
     <p data-i18n="aboutText"></p>
@@ -133,26 +153,6 @@
         <a href="https://uvaliss.ru/souls" target="_blank" rel="noopener">SOULS</a>
       </div>
     </div>
-  </div>
-
-  <div id="boot-sequence" aria-live="polite"></div>
-  <p id="capability-result" class="capability hidden"></p>
-
-  <h2 id="controls-title" class="controls-title hidden" data-i18n="controlsTitle"></h2>
-  <div id="mode-select" class="hidden">
-    <button type="button" data-mode="keys"><span data-i18n="modeKeys"></span><span class="mode-legend" data-i18n="legendKeys"></span></button>
-    <button type="button" data-mode="hands" class="mode-secondary"><span data-i18n="modeHands"></span><span class="mode-legend" data-i18n="legendHands"></span></button>
-  </div>
-  <button type="button" id="btn-cc-welcome" class="cc-switch" role="switch" aria-checked="false"><span data-i18n="a11yMode"></span>: <span class="cc-state"></span><span class="cc-legend" data-i18n="ccWelcome"></span></button>
-  <div id="gesture-note" class="gesture-note">
-    <p class="gesture-title" data-i18n="gestureTitle"></p>
-    <ul class="expect" data-i18n-list="gestureList"></ul>
-    <p class="gesture-privacy" data-i18n="gesturePrivacy"></p>
-  </div>
-
-  <div class="welcome-actions">
-    <button type="button" id="btn-enter" class="btn-enter hidden" data-i18n="enter"></button>
-    <button type="button" id="btn-train" class="btn-enter btn-train" data-i18n="train"></button>
   </div>
   <footer id="site-footer"></footer>
  </div>
