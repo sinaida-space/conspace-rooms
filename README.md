@@ -254,7 +254,7 @@ opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 - Offline / fallback: a GitHub Pages mirror at sinaida-space.github.io/conspace-rooms, kept as a backup copy (`?mirror`)
 - Performance tiers: light mode on touch devices runs at reduced quality (tier 0, tighter draw radius, no post-processing, half-resolution artwork textures)
 - Requirements: WebGL2; a webcam is optional and used only for gesture mode (opt-in)
-- Handing over: the rider is rider.html, the specs are tech.html and tech.md; licence terms are in LICENSE, LICENSE-ARTWORK and NOTICE
+- Handing over: the rider is rider.html, the specs are tech.html and tech.md; licence terms are in LICENSE, LICENSE-ARTWORK, NOTICE and THIRD-PARTY.md
 - Contact: https://sinaida.eu/collaborate
 
 ## How this was made
@@ -262,6 +262,8 @@ opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 Sinaida comes up with the idea, the concept and the way to make it into a system. The making uses whatever the piece needs, from drawing by hand to AI-native production. She cares about integrity and a smooth experience, so every work adjusts to its environment, and each project ships with a rider, a contingency plan and her support.
 
 ## Rights
+
+Idea, experience design, game mechanics and agentic coding: Sinaida Krivchenko. SOULS artworks and voice: UVALISS (Alisa Feer).
 
 © Sinaida Krivchenko & UVALISS (Alisa Feer). Artworks all rights reserved. The window views (`assets/windows/`), the stairwell pictures (`assets/stairs/`) and the carpet pictures (`assets/carpets/`) are by Sinaida Krivchenko, made in Midjourney; the other carpets and the runners are drawn in code.
 
