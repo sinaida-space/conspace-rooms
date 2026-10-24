@@ -2,7 +2,11 @@
 
 > CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko (https://sinaida.eu), a new media artist, who came up with the idea and designed the experience. It presents SOULS, a series of artworks by UVALISS, the artist Alisa Feer (https://uvaliss.ru/). Eighteen SOULS works hang in an endless, procedurally generated labyrinth that the browser builds as you walk. The first screen only asks for a language (Russian or English); the piece itself starts after it.
 
-The labyrinth follows the arc of the SOULS series, from trauma to accepting oneself: Soviet hospital corridors of fear, then a grandmother's flat full of memory, then pale rooms that dissolve into light. Portals move the visitor from one stage to the next. Every visit builds a new labyrinth, seeded by the date and time. A rose in the corner of the screen grows with every work seen; with all eighteen a tunnel of roses ends the walk with a card of the questions the souls asked. Music is generated live: lo-fi, synth and muffled techno in the hospital, gramophone records in grandmother's world. Controls: keyboard and mouse, on-screen buttons and drag on touch screens, or hand gestures through the webcam (processed only in the browser). No analytics, no accounts.
+The labyrinth follows the arc of the SOULS series, from fear to acceptance: Soviet hospital corridors of fear, then a grandmother's flat full of memory, then pale rooms that dissolve into light. Portals move the visitor from one stage to the next. Every visit builds a new labyrinth, seeded by the date and time. A rose in the corner of the screen grows with every work seen; with all eighteen a tunnel of roses ends the walk with a card of the questions the souls asked. Music is generated live: lo-fi, synth and muffled techno in the hospital, gramophone records in grandmother's world. Controls: keyboard and mouse, on-screen buttons and drag on touch screens, or hand gestures through the webcam (processed only in the browser). No analytics, no accounts.
+
+## For entertainment only
+
+CONSPACE ROOMS is for entertainment only. It is not therapy or a psychological or medical service, and nothing in it is advice. What others write about the work is their own view. If you are going through a hard time, we suggest talking to a specialist.
 
 ## Pages
 

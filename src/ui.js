@@ -98,17 +98,14 @@ export class UI {
     gate?.classList.add('hidden');
   }
 
-  // Cookie/consent gate: shown once (persisted in localStorage) before the
-  // welcome screen. Resolves immediately if consent was already given.
+  // Consent and content-warning gate before the welcome screen, on every visit:
+  // the warnings and the entertainment-only line are read each time. Once
+  // consent is stored, the typed boot is skipped so a return is quick.
   async gateConsent() {
     let consented = false;
     try { consented = localStorage.getItem('conspace-consent') === '1'; } catch (e) { /* storage blocked */ }
-    if (consented) {
-      $('cookie-gate')?.classList.add('hidden');
-      return;
-    }
     $('cookie-gate')?.classList.remove('hidden');
-    await this._typeCookieBoot();
+    if (!consented) await this._typeCookieBoot();
     await new Promise(res => {
       $('btn-consent')?.addEventListener('click', () => {
         try { localStorage.setItem('conspace-consent', '1'); } catch (e) { /* storage blocked */ }

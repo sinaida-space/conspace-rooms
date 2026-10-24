@@ -4,6 +4,10 @@ CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko 
 
 Live: <https://conspace-rooms.vercel.app/> (Russian and English)
 
+## For entertainment only
+
+CONSPACE ROOMS is for entertainment only. It is not therapy or a psychological or medical service, and nothing in it is advice. What others write about the work is their own view. If you are going through a hard time, we suggest talking to a specialist.
+
 ## What it is
 
 Eighteen works from the SOULS series hang in an endless labyrinth of half-lit rooms that the browser builds as you walk. SOULS is a series about looking into your own inner world and accepting it as it is, dedicated to the artist's grandmother. The labyrinth follows the same road in three stages:

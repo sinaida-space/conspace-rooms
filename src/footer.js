@@ -18,6 +18,7 @@ const COPY = {
     more: 'More',
     playlist: 'Companion playlist',
     released: 'October 2026',
+    disclaimer: 'For entertainment only. Not~therapy or~a~psychological or~medical service.',
   },
   ru: {
     tagline: 'Бесконечный лабиринт, в~котором живёт серия~SOULS.',
@@ -32,6 +33,7 @@ const COPY = {
     more: 'Ещё',
     playlist: 'Плейлист к~работе',
     released: 'октябрь 2026',
+    disclaimer: 'Только для~развлечения. Не~терапия и~не~психологическая или медицинская услуга.',
   },
 };
 
@@ -48,6 +50,7 @@ export function renderFooter(lang, target = document.getElementById('site-footer
       <h2><a class="footer-brand" href="index.html?lang=${l}">CONSPACE ROOMS</a></h2>
       <p>${c.tagline}</p>
       <p><a href="https://sinaida.eu/" ${ext}>${c.created}</a></p>
+      <p>${c.disclaimer}</p>
       <p class="footer-version">${VERSION} · ${c.released}</p>
     </div>
     <nav class="footer-col" aria-label="${c.navigate}">
