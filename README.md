@@ -25,6 +25,10 @@ walk. There is no map and no signage. A rose in the corner grows with every work
 you meet; find all eighteen and an arch of roses rises out of the clouds to let you out. Put on headphones
 and go slowly.
 
+## For entertainment only
+
+CONSPACE ROOMS is for entertainment only. It is not therapy or a psychological or medical service, and nothing in it is advice. What others write about the work is their own view. If you are going through a hard time, we suggest talking to a specialist.
+
 ## What it is about
 
 SOULS is a series about looking into your own inner world and accepting it as it
@@ -153,8 +157,7 @@ Pages copy works as a mirror; `gallery.html` never redirects.
 
 ## Soul path
 
-The labyrinth follows the arc of the SOULS series, from trauma to accepting
-oneself. Distance from spawn picks the zone (`src/zones.js`, blended in the
+The labyrinth follows the arc of the SOULS series, from fear to acceptance. Distance from spawn picks the zone (`src/zones.js`, blended in the
 shaders in `src/materials.js`):
 
 - **Fear** (0–45 m): hospital corridors, green oil paint under whitewash, damp,

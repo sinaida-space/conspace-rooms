@@ -13,6 +13,7 @@ const STRINGS = {
     ],
     twTitle: '! Content warning',
     twList: [
+      'For entertainment only: this is~not therapy or~a~psychological or~medical service. If~you are going through a~hard time, talk to~a~specialist.',
       'Flicker, flashes and~sudden colour shifts. For people with photosensitive epilepsy this work may be unsafe; the flicker can be softened in~the~menu.',
       'This is a~story of~fear, grief and~losing someone close, with darkness and~sudden sounds. It~may touch something personal and~bring up anxiety.',
       'If~it gets heavy or~your head starts to~spin, stop: Finish is~always on~screen.',
@@ -21,8 +22,9 @@ const STRINGS = {
     consentBtn: 'Accept necessary~only',
     privacyLink: 'Privacy policy~→',
     statement: 'A~collaboration between Sinaida and~UVALISS.',
+    disclaimerShort: 'For entertainment only. Not~therapy or~a~psychological or~medical service.',
     aboutTitle: 'What this is',
-    aboutText: 'A~web installation built on~the SOULS series by~UVALISS. The series is~dedicated to~her grandmother and follows a~soul’s path through trauma to~accepting itself. Here that path becomes an~endless labyrinth: eighteen works hang on~its walls, and you meet them in~whatever order the corridors unfold.',
+    aboutText: 'A~web installation built on~the SOULS series by~UVALISS. The series is~dedicated to~her grandmother and follows a~soul’s path from fear to~acceptance. Here that path becomes an~endless labyrinth: eighteen works hang on~its walls, and you meet them in~whatever order the corridors unfold.',
     expectTitle: 'What to~expect',
     expect: [
       'The corridors remember more than they show.',
@@ -444,6 +446,7 @@ const STRINGS = {
     ],
     twTitle: '! Предупреждение о~содержании',
     twList: [
+      'Только для~развлечения: это не~терапия и~не~психологическая или медицинская услуга. Если тебе тяжело, поговори со~специалистом.',
       'Мерцание, вспышки и~резкая смена цвета. При светочувствительной эпилепсии эта работа может быть опасна, мерцание можно приглушить в~меню.',
       'Это история о~страхе, горе и~утрате близкого, с~темнотой и~внезапными звуками. Она может задеть что-то личное и~вызвать тревогу.',
       'Если станет тяжело или закружится голова, остановись: кнопка «Завершить» всегда на~экране.',
@@ -452,8 +455,9 @@ const STRINGS = {
     consentBtn: 'Принять только~необходимое',
     privacyLink: 'Политика конфиденциальности~→',
     statement: 'Совместный проект Sinaida и~UVALISS.',
+    disclaimerShort: 'Только для~развлечения. Не~терапия и~не~психологическая или медицинская услуга.',
     aboutTitle: 'Что это',
-    aboutText: 'Веб-инсталляция по~серии SOULS художницы UVALISS. Серия посвящена её бабушке и~рассказывает о~пути души через травму к~принятию себя. Здесь этот путь стал бесконечным лабиринтом: восемнадцать работ висят на~его стенах, и~ты встречаешь их в~том порядке, в~каком сложатся коридоры.',
+    aboutText: 'Веб-инсталляция по~серии SOULS художницы UVALISS. Серия посвящена её бабушке и~рассказывает о~пути души от~страха к~принятию. Здесь этот путь стал бесконечным лабиринтом: восемнадцать работ висят на~его стенах, и~ты встречаешь их в~том порядке, в~каком сложатся коридоры.',
     expectTitle: 'Чего ждать',
     expect: [
       'Коридоры помнят больше, чем показывают.',
@@ -473,7 +477,7 @@ const STRINGS = {
     bio1: 'Визуальный артист и~цифровой стратег. Работает с~интерактивными проекциями, генеративными системами и~кодом. Эта инсталляция задумана как пространство для блуждания. Решать здесь~нечего.',
     role2: 'Работы: серия~SOULS',
     name2: 'UVALISS (Алиса~Феер)',
-    bio2: 'Визуальный артист из~Санкт-Петербурга. Исследует темы света и~тьмы, детства и~снов. Её~работы помогают заглянуть в~свой внутренний мир и~принять его таким, какой он~есть.',
+    bio2: 'Визуальный артист из~Санкт-Петербурга. Исследует темы света и~тьмы, детства и~снов. Её~работы о~том, как заглянуть в~свой внутренний мир и~принять его таким, какой он~есть.',
     boot: [
       'C:\\CONSPACE>ЗАГРУЖАЮ KERNEL.SYS…',
       'C:\\CONSPACE>МОНТИРУЮ SOULS.DAT…',
