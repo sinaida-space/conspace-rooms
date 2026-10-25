@@ -127,7 +127,7 @@ export function drawCard(canvas, { questions, heading, empty, boot, first = 1, p
   const u = '@uvaliss'; g.fillText(u, W - PAD - g.measureText(u).width, H - 110);
   g.fillStyle = DIM; const x = '×'; g.fillText(x, (W - g.measureText(x).width) / 2, H - 110);
   // travels with the card wherever it is posted
-  g.font = `400 24px ${FONT}`; const fe = 'for entertainment only';
+  g.font = `400 24px ${FONT}`; const fe = 'an artwork · 16+';
   g.fillText(fe, (W - g.measureText(fe).width) / 2, H - 52);
 
   // CRT: scanlines, a faint phosphor grain, darker corners

@@ -18,7 +18,7 @@ const COPY = {
     more: 'More',
     playlist: 'Companion playlist',
     released: 'October 2026',
-    disclaimer: 'For entertainment only. Not~therapy or~a~psychological or~medical service.',
+    disclaimer: 'An~artwork. Not~therapy or~a~psychological or~medical service. 16+.',
   },
   ru: {
     tagline: 'Бесконечный лабиринт, в~котором живёт серия~SOULS.',
@@ -33,7 +33,7 @@ const COPY = {
     more: 'Ещё',
     playlist: 'Плейлист к~работе',
     released: 'октябрь 2026',
-    disclaimer: 'Только для~развлечения. Не~терапия и~не~психологическая или медицинская услуга.',
+    disclaimer: 'Художественная работа. Не~терапия и~не~психологическая или медицинская услуга. 16+.',
   },
 };
 

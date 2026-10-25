@@ -144,6 +144,8 @@ body::after {
 /* gestures chosen: ВОЙТИ lights up as the choice, ТРЕНИРОВКА stands beside it in outline */
 #btn-train { display: none; }
 .welcome-actions.two #btn-enter:not(.hidden) + #btn-train { display: inline-block; }
+/* the short disclaimer stays next to ENTER, the moment a visitor commits */
+.enter-disclaimer { margin: 0.9em 0 0; font-size: 0.85em; opacity: 0.65; }
 .welcome-actions.two #btn-enter { background: var(--accent); color: var(--bg); }
 #wordmark {
   font: inherit; letter-spacing: inherit; color: inherit; text-shadow: inherit;
