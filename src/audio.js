@@ -347,7 +347,7 @@ export class AudioEngine {
     }
   }
 
-  // A question going back into its cloud or balloon (#96): a little run of
+  // A question going back into its cloud or balloon: a little run of
   // glass bells up a D major add9, each from a different side, and a breath of air
   fairy() {
     if (!this.ctx || this.muted) return;
@@ -646,7 +646,7 @@ export class AudioEngine {
     o.start(t); slip.start(t); o.stop(t + seconds + 0.05); slip.stop(t + seconds + 0.05);
   }
 
-  // ── the metal door onto the stairwell (#34) ──────────────────────────────
+  // ── the metal door onto the stairwell ──────────────────────────────
   // The building coming down, heard through a door that only opens for a
   // moment: a low rumble that swells, concrete cracking in bursts, debris
   // clicking as it falls, and a long hiss settling after. All into bed, so

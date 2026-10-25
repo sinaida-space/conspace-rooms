@@ -4,7 +4,7 @@ import { roundedBox } from './geom.js';
 import { buildDoorway, buildLightRays } from './doorway.js';
 
 // ── conspace-rooms · stairwell.js ───────────────────────────────────────────
-// The metal door in the fear stage (#34): a solid steel leaf set into an
+// The metal door in the fear stage: a solid steel leaf set into an
 // ordinary wall, on the route to the first portal. Every time the visitor
 // passes it gives way, holds long enough to show what is behind it — a ruined
 // stairwell — and shuts again, while light in the tone of the photograph

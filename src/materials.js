@@ -211,7 +211,7 @@ float lampVis(vec3 P, vec3 N, vec2 lamp){
   // penumbra: crisp in the hospital, wide and soft in the light, where a hard
   // edge across an open hall reads as a painted stripe
   float soft = mix(3.0, 0.9, zoneWeights(P.xz).z);
-  int steps = 8;                     // the same on both upper tiers: when the governor steps down, the light must not change (#43)
+  int steps = 8;                     // the same on both upper tiers: when the governor steps down, the light must not change
   for (int i = 0; i < 10; i++) {
     if (i >= steps || t > len - 0.3) break;
     float h = wallDist(o + d * t);
@@ -467,7 +467,7 @@ vec3 acceptWall(float h, float y, int oct, out float gloss){
   // at the portal a little darker and more lilac; with every work found the
   // crowns go to milk and the lilac keeps only to the folds
   vec3 fold = mix(vec3(0.50, 0.43, 0.57), vec3(0.66, 0.61, 0.72), uProgress);
-  vec3 top  = mix(vec3(0.76, 0.67, 0.68), vec3(0.88, 0.84, 0.82), uProgress);   // pearl, never paper-white: the light must still have form (#96)
+  vec3 top  = mix(vec3(0.76, 0.67, 0.68), vec3(0.88, 0.84, 0.82), uProgress);   // pearl, never paper-white: the light must still have form
   vec3 col = mix(fold, top, crown);
   col += 0.03 * vec3(sin(c * 11.0), sin(c * 11.0 + 2.1), sin(c * 11.0 + 4.2)) * crown;   // nacre: the hue slides a little over the billows
   return col * (0.97 + 0.06 * vnoise(vec2(h, y) * 3.0 + uTime * 0.05));
@@ -1047,7 +1047,7 @@ void main(){
     lit = cloth * (amb * (0.55 + 0.45 * wrap) + d * 0.25) * lo + sheen * 0.16 * vec3(1.0, 0.96, 0.97) * lo;
   }
   if (uGlow > 0.0) {
-    float fl = step(0.12, vnoise(vec2(uTime * 7.0, uSeed)));        // now and then it dies for a blink
+    float fl = step(0.12, vnoise(vec2(uTime * 2.5, uSeed)));        // now and then it dies for a blink (at most 2.5 a second)
     lit += base * uGlow * (0.75 + 0.25 * fl);
   }
   if (vanished(vWorldPos)) discard;
@@ -1076,7 +1076,7 @@ function clearLine(x0, z0, x1, z1) {
 
 const TRAIL_N = 4;
 const TRAIL_EVERY = 2.4;   // metres walked between trail samples
-const TRAIL_FADE = 0;      // strength lost per second: none, so the light is even from the first step and does not sink while standing (#43)
+const TRAIL_FADE = 0;      // strength lost per second: none, so the light is even from the first step and does not sink while standing
 
 // The wall-distance field: for each cell around the visitor, the distance
 // from its centre to the nearest wall face (negative inside a wall), packed
@@ -1184,7 +1184,7 @@ export function createMaterials(quality) {
     setWater(level, accept, time, calm, progress = 0) { shared.uWater.value.set(level, accept, time, calm); shared.uProgress.value = progress; },
     setWaveTex(tex) { shared.uWaveTex.value = tex; },
     setVanish(v) { shared.uVanish.value = v; },
-    setFloor(on) { materials.floor.visible = on; },   // the finale: under the clouds there is no floor (#96)
+    setFloor(on) { materials.floor.visible = on; },   // the finale: under the clouds there is no floor
     // the event director (events.js): a fixture near the visitor stutters (strength ~1), the candles shudder (seconds)
     flicker(strength = 1) { pending = strength; },
     shiverCandles(seconds = 1.5) { shiver = seconds; },
@@ -1218,9 +1218,10 @@ export function createMaterials(quality) {
       const fear = zone ? zone.fear : 1;
       if (active > 0) {
         active -= dt;
-        const s = Math.sin(t * 41.0) * Math.sin(t * 19.0); // two beating sines → hard dips
+        // one slow sine, so the lamp dips at most ~2.4 times a second (WCAG 2.3.1: 3 flashes a second at most; the two beating sines it replaces dipped ~7 times a second)
+        const s = Math.sin(t * 15.0);
         // calm: the lamp dims once and comes back, no stutter
-        shared.uFlickerAmt.value = calm.on ? 1 - 0.55 * Math.sin(Math.PI * Math.min(1, Math.max(0, 1 - active / activeFor))) : (s > 0.15 ? 0.12 : 1.0);
+        shared.uFlickerAmt.value = calm.on ? 1 - 0.55 * Math.sin(Math.PI * Math.min(1, Math.max(0, 1 - active / activeFor))) : (s > 0.3 ? 0.12 : 1.0);
         if (active <= 0) {
           shared.uFlickerAmt.value = 1;
           shared.uFlickerTile.value.set(1e5, 1e5);

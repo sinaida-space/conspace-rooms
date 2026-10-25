@@ -1,4 +1,4 @@
-// The finale's clouds (#96). After the last work the view turns to the
+// The finale's clouds. After the last work the view turns to the
 // corridor and clouds well up from the floor all round, thick enough to hide
 // the walls as they go; then the world is only cloud, and the visitor flies
 // on through it, a sea of it below, banks of it above, a few puffs passed

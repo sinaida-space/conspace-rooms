@@ -230,7 +230,7 @@ const SHADES = [                       // velvet: fold, body, ridge; fringe; lin
 ];
 // The lampshade a room at (X, Z) will have: buildKitchen draws the same
 // three numbers before it picks, so a rug laid first can match it.
-// A flowerpot thrown like her teapot (#43): the same porcelain with its
+// A flowerpot thrown like her teapot: the same porcelain with its
 // crackle, gold bands and cabbage roses, a bellied body with a rolled lip,
 // standing on a plain white saucer. y = 0 is the floor.
 let PORCELAIN_POT = null;
@@ -341,7 +341,7 @@ function lampshade(shade = SHADES[0], wide = 1) {
   };
 }
 
-// ── the light's copy of the room (#94) ─────────────────────────────────────
+// ── the light's copy of the room ─────────────────────────────────────
 // In the light the same kitchen stands again, faded the way a room is in a
 // memory that no longer hurts: no lamp, no candles, the colours washed toward
 // milk, and the television and the table with the teapot under thin linen
@@ -602,7 +602,7 @@ export function buildKitchen(parent, X, Z, busy = [], opts = {}) {
 
   // ── the abazhur: a velvet lampshade low over the table ──
   // In the light it has been taken down: it stands on the floor by the
-  // table under its own sheet, the fringe showing at the hem (#96).
+  // table under its own sheet, the fringe showing at the hem.
   const L = lampshade(shadeLook, 0.8 + rnd() * 0.4);
   const LX = veil ? 1.15 : 0, LY = veil ? 0.3 : 2.2, LZ = veil ? -0.95 : 0;
   for (const [geo, mat] of L.parts) add(geo, mat, LX, LY, LZ, false).receiveShadow = false;
@@ -614,7 +614,7 @@ export function buildKitchen(parent, X, Z, busy = [], opts = {}) {
   if (!veil) add(new THREE.CylinderGeometry(0.005, 0.005, CEIL_H - 2.52, 4), plastic, 0, (CEIL_H + 2.52) / 2, 0, false);
   else for (let k = 0; k < 6; k++) add(new THREE.CylinderGeometry(0.005, 0.005, 0.32, 4).rotateZ(Math.PI / 2).rotateY(0.5 * Math.sin(k * 1.3)), plastic, LX + 0.55 + k * 0.28, 0.006, LZ + 0.12 * Math.sin(k * 0.9), false);   // its cord left lying out from under the sheet
 
-  // ── warmth (#38): a window with a radiator under it and plants on the sill,
+  // ── warmth: a window with a radiator under it and plants on the sill,
   // two fabric sconces on the side walls, a living ficus in a majolica pot in
   // the corner by the window. The corridor lattice runs through these rooms,
   // so their walls have gaps: each thing looks along a wall, stepping 0.4 m
@@ -775,7 +775,7 @@ export function buildKitchen(parent, X, Z, busy = [], opts = {}) {
       wg.updateMatrixWorld(true);
       const w = wg.localToWorld(new THREE.Vector3(fx, 0.5, 0.35)), back = wg.localToWorld(new THREE.Vector3(fx, 1.0, -0.06));
       if (solidAt(w) || !solidAt(back) || Math.hypot(w.x - table.x, w.z - table.z) < 1.3 || taken.some(t => Math.hypot(t.x - w.x, t.z - w.z) < t.r + 0.45)) continue;
-      // one of the light's plants, smaller, in a pot thrown like her teapot (#43)
+      // one of the light's plants, smaller, in a pot thrown like her teapot
       const rp = roomPlant(ROOM_PLANTS[Math.floor(rnd() * ROOM_PLANTS.length)]);
       rp.group.position.set(fx, 0, 0.35); rp.group.rotation.y = side * 0.7;
       rp.group.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
@@ -1012,7 +1012,7 @@ function paperBoat() {
   const bot = [[-0.085, 0], [-0.05, -0.04], [0.05, -0.04], [0.085, 0], [0.05, 0.04], [-0.05, 0.04]];
   const top = [[-0.16, 0, TIP], [-0.055, -0.062, H], [0.055, -0.062, H], [0.16, 0, TIP], [0.055, 0.062, H], [-0.055, 0.062, H]];   // bow and stern drawn up to a point
   const P = [], C = [];
-  const PAPER = [0.94, 0.8, 0.58];                                    // an old exercise book's page, ochre against the pearl floor (#96)
+  const PAPER = [0.94, 0.8, 0.58];                                    // an old exercise book's page, ochre against the pearl floor
   const tri = (a, b, c, col) => { P.push(...a, ...b, ...c); for (const v of [a, b, c]) C.push(...col(v)); };
   const inside = crease => v => { const k = (0.86 + 0.08 * (1 - v[1] / TIP)) * crease; return [PAPER[0] * k * 1.04, PAPER[1] * k * 0.95, PAPER[2] * k * 0.8]; };
   const outside = crease => v => {
@@ -1113,7 +1113,7 @@ export function createKitchenRig(scene, renderer, quality) {
       lamp.position.copy(room.lamp);
       tv.position.copy(room.tv);
       lamp.intensity = 5.5 * (0.96 + 0.04 * Math.sin(time * 9.1));
-      tv.intensity = 2.2 * (0.8 + 0.2 * Math.random());          // picture flicker
+      tv.intensity = 2.2 * (0.9 + 0.1 * Math.sin(time * 8.0));   // picture flicker, slow (~1.3 Hz); a random value per frame flashed at frame rate
       fill.intensity = 0.55;
     },
   };

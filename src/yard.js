@@ -1,5 +1,5 @@
 // ── conspace-rooms · yard.js ────────────────────────────────────────────────
-// The courtyard outside the light's windows (#94): a swing creaking, a ball on
+// The courtyard outside the light's windows: a swing creaking, a ball on
 // the asphalt, sparrows, someone beating a carpet, a tram going by with its
 // bell. Life going on outside, by day, heard only while passing a window.
 // These are the piece's only recorded sounds besides Alisa's voice: short

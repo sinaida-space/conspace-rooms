@@ -64,7 +64,7 @@ export class Quality {
     const target = this.isMobile ? 1 / 24 : 1 / 52; // desktop aims for 60: step down below ~52
     if (median <= target || this._cooldown > 0) return;
     // a desktop never drops to tier 0: that tier has no lamp shadows and a
-    // denser fog, and the whole corridor would change its light mid-walk (#43).
+    // denser fog, and the whole corridor would change its light mid-walk.
     // At the lowest tier allowed it renders fewer pixels instead, which the
     // television of the post pass hides, down to 0.6 of them
     if (this.tier <= (this.isMobile ? 0 : 1)) {

@@ -35,7 +35,7 @@ export const CEIL_H = 3.2;               // ceiling height
 // the required crossing cells 4 and 11 open on every edge.
 const BAND = new Set([4, 5, 10, 11]);
 
-// The light opens (#80): there, the more works the visitor has noticed, the
+// The light opens: there, the more works the visitor has noticed, the
 // wider the corridors of the chunks still ahead. Each chunk's width is fixed
 // the first time anything asks about it and kept for the whole visit, so walls,
 // collision, works and props always agree and no wall moves in view; the
@@ -320,7 +320,7 @@ export class World {
     return segs;
   }
 
-  // Straight wall runs ≥2 cells for artwork placement (#4). Deterministic.
+  // Straight wall runs ≥2 cells for artwork placement. Deterministic.
   // Returns [{ position:{x,y,z}, normal:{x,y,z}, cellKey, length }]. position is
   // the run's mid-point on the wall face at mid-height; normal faces the open
   // space (where a viewer stands).

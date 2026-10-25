@@ -158,10 +158,10 @@ async function boot() {
         mixZone(scene.fog.color, zone, 0x0e1f14, 0x030905, accFog);
         const base = quality.tier === 0 ? 1.5 : 1;
         scene.fog.density = base * (0.03 * zone.fear + 0.045 * zone.memory + 0.06 * zone.accept    // the light stage stands in milky fog,
-          * (1 - 0.4 * (window.__app.soul?._acceptShare() ?? 0)));                                // thinning as its corridors widen (#94)
+          * (1 - 0.4 * (window.__app.soul?._acceptShare() ?? 0)));                                // thinning as its corridors widen
         const vanish = window.__app.vanish ?? 0;           // the finale: the haze swells while the walls go, then thins over open water
         if (vanish > 0) scene.fog.density *= 1 + 1.6 * Math.sin(Math.PI * vanish) - 0.35 * vanish;
-        scene.fog.density *= window.__app.finaleFog ?? 1;     // the arch on the water stands in a little more haze (#96)
+        scene.fog.density *= window.__app.finaleFog ?? 1;     // the arch on the water stands in a little more haze
         renderer.setClearColor(scene.fog.color);
       }
       if (atmo) atmo.update(dt, elapsed, camera.position, zone);
@@ -396,12 +396,12 @@ async function boot() {
     const { SoulPath } = await import('./soulpath.js');
     window.__app.soul = new SoulPath({ scene, world, player, camera, artworks, audio, post, quality, renderer, stage, atmo });
     const { EventDirector } = await import('./events.js');
-    window.__app.events = new EventDirector({ scene, world, player, audio, atmo, stage, soul: window.__app.soul });   // one event every 20-40 s (#43)
+    window.__app.events = new EventDirector({ scene, world, player, audio, atmo, stage, soul: window.__app.soul });   // one event every 20-40 s
     if (['clouds', 'fogtop', 'plants'].some(k => sketchParam(k) !== null)) stage.set(2);   // a ceiling sketch: straight into the light to judge it
-    const plantDraft = sketchParam('plantdraft');   // fear|room|accept|strelitzia|alocasia|fiddle|calathea: one draft plant in front of the visitor (#39)
+    const plantDraft = sketchParam('plantdraft');   // fear|room|accept|strelitzia|alocasia|fiddle|calathea: one draft plant in front of the visitor
     if (plantDraft && !['fear', 'room'].includes(plantDraft)) stage.set(2);
     if (plantDraft) import('./plants.js').then(m => m.placePlantDraft(plantDraft, { scene, player, atmo, renderer }));
-    const wide = sketchParam('wide');   // 0..3: straight into the light, and the chunks met from now on that wide (#80)
+    const wide = sketchParam('wide');   // 0..3: straight into the light, and the chunks met from now on that wide
     if (wide !== null) { stage.set(2); import('./world.js').then(m => m.setCorridorWidth(() => +wide || 0)); }
     if (new URLSearchParams(location.search).has('dbg')) import('./debug.js').then(m => m.openDebug({ renderer, quality, post, atmo }));   // phone debugging
   }

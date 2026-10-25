@@ -1,4 +1,4 @@
-// The way on, by ear (#96). Once a portal is summoned it calls from where it
+// The way on, by ear. Once a portal is summoned it calls from where it
 // stands, in 3D (HRTF), so headphones can follow it through the labyrinth.
 // The sound does not come through the walls: it sits a few cells ahead on
 // the walked route to the portal, so it turns round the corners the way the

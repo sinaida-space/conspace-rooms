@@ -172,7 +172,7 @@ export class Music {
 
     // ── room chain: notes → overdrive → horn band → honk → wow → bus
     this.roomBus = g(0);
-    // the last waltz is heard from where the last work hangs (#96): the room's
+    // the last waltz is heard from where the last work hangs: the room's
     // bus goes dry (as ever) or through a 3D panner, by crossfade
     this.roomDry = g(1); this.roomWet = g(0);
     this.roomPan = ctx.createPanner();
@@ -311,7 +311,7 @@ export class Music {
   }
   stop() { clearInterval(this._timer); }
 
-  // ── the last work (#94) ──────────────────────────────────────────────────
+  // ── the last work ──────────────────────────────────────────────────
   // Nearing the last work in the light, grandmother's waltz plays again, for
   // the first time without the wall: in A minor, at its own tempo, clearer and
   // louder the nearer (level 0..1). It stays the waltz until the end.

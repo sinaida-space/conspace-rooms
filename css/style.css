@@ -309,6 +309,7 @@ body::after {
   animation: blink 1s steps(1) infinite;
 }
 @keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #boot-sequence .cursor { animation: none; } }
 
 .credits-panel {
   border: 1px solid var(--dim); padding: 1em 1.2em; margin-bottom: 1.6em;
@@ -639,7 +640,7 @@ body:has(#pad) #artwork-prompt { display: none; }   /* the pad's own tape says i
 /* Finish: the last screen, all in light violet */
 #final-card.fc-end { --lv: #dccbff; --lv-dim: #8f7cc0; color: var(--lv); }
 #final-card .fc-bye { width: min(640px, calc(100vw - 32px)); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 1.4em; max-height: 100%; overflow-y: auto; padding: 1em 16px; }
-/* thanks first and largest, the farewell a size down, then the credits small (#96) */
+/* thanks first and largest, the farewell a size down, then the credits small */
 #final-card .fc-thanks {
   font-size: clamp(1.7rem, 4.6vw, 2.8rem); line-height: 1.3; color: var(--lv);
   text-shadow: 0 0 16px rgba(170, 130, 255, 0.5); animation: fc-rise 2s ease both;
