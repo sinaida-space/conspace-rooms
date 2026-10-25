@@ -52,7 +52,7 @@ waltz, a tango on a bayan, a 70s estrada ballad, a romance on a guitar.
 
 ## Why it exists
 
-Paintings usually wait in rooms you have to travel to. This one opens in any
+Artworks usually wait in rooms you have to travel to. This one opens in any
 browser, on a laptop or a phone, and you meet the works alone, at your own pace.
 It keeps nothing about you: no analytics, no accounts, and the camera image
 never leaves your device.
@@ -73,7 +73,7 @@ darkness, childhood and dreams.
 | Turn                   | point right hand = turn right, point left hand = turn left; heading into a wall, the view turns along the corridor by itself (or round, in a dead end) | ← / →, or mouse look (click to lock); heading into a wall while walking, the view turns along the corridor by itself (or round, in a dead end) | horizontal drag |
 | Zoom                   | both palms open, spread/pinch the two hands | mouse wheel         | two-finger pinch (desktop-touch fallback) |
 | Strafe                 | —                            | A / D                         | —                                |
-| Inspect                | paintings show themselves when passed, 3 s each; open palm holds | E, click        | tap an artwork                  |
+| Inspect                | works show themselves when passed, 3 s each; open palm holds | E, click        | tap an artwork                  |
 | Close inspect / stop   | both palms open              | Escape                        | tap again                       |
 | Back to the middle     | Space (keyboard works in every mode) | Space                 | —                                |
 | Full screen            | F                            | F                             | —                                |

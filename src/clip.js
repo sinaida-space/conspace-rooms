@@ -56,7 +56,7 @@ export function createClip({ source, audio, getCount, total, strings }) {
     g.fillText('conspace-rooms.vercel.app', W / 2, H - 82);
     g.font = '18px "Departure Mono", monospace';
     g.fillStyle = 'rgba(232,245,234,0.6)';
-    g.fillText('for entertainment only', W / 2, H - 46);
+    g.fillText('an artwork · 16+', W / 2, H - 46);
   }
 
   function start() {
