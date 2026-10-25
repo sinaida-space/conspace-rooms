@@ -32,6 +32,7 @@ try {
   await context.addInitScript(() => { try { localStorage.setItem('conspace-consent', '1'); } catch (e) {} });
   const page = await context.newPage();
   await page.goto(`http://127.0.0.1:${server.address().port}/index.html?lang=en&seed=1224&tier=${TIER}`);
+  await page.locator('#btn-consent').click({ timeout: 60_000 });   // the content warning comes up on every visit
   await page.locator('#mode-select [data-mode="keys"]').click({ timeout: 60_000 });
   await page.locator('#btn-enter').click();
   await page.waitForFunction(() => window.__app?.player && window.__app?.soul && window.__app?.tunnel && window.__app?.post, null, { timeout: 120_000 });

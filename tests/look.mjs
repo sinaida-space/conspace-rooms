@@ -8,6 +8,7 @@ const page = await (await browser.newContext({ viewport: { width: 1280, height: 
 page.on('pageerror', e => console.log('pageerror', e.message));
 await page.addInitScript(() => { try { localStorage.setItem('conspace-consent', '1'); } catch (e) {} });
 await page.goto(`${base}/index.html?lang=ru&seed=1224&tier=${process.env.TIER ?? 2}`);
+await page.locator('#btn-consent').click({ timeout: 60_000 });   // the content warning comes up on every visit
 await page.locator('#mode-select [data-mode="keys"]').click({ timeout: 60_000 });
 await page.locator('#btn-enter').click();
 await page.waitForFunction(() => window.__app?.player && window.__app?.soul, null, { timeout: 120_000 });

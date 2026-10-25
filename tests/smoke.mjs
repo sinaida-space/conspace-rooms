@@ -88,6 +88,7 @@ try {
   for (let i = errors.length - 1; i >= 0; i--) if (/^404 \/no-such-page|Failed to load resource.*404/.test(errors[i])) errors.splice(i, 1);   // the 404 we asked for
 
   await page.goto(`${base}/index.html?lang=en&seed=1224&tier=${TIER}`);
+  await page.locator('#btn-consent').click({ timeout: 60_000 });   // the content warning comes up on every visit
   await page.locator(`#mode-select [data-mode="${HANDS ? 'hands' : 'keys'}"]`).click({ timeout: 60_000 });
   await page.locator('#btn-enter').click();
   await page.waitForFunction(() => window.__app?.player && window.__app?.soul && window.__app?.artworks, null, { timeout: 120_000 });
