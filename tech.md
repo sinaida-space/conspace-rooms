@@ -20,7 +20,7 @@ CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko 
 
 ## Gallery mode
 
-`/gallery` runs the piece as an installation: no start screens or buttons, the webcam watches for a face, the walk starts when someone stands in front of the screen and resets to a new labyrinth when nobody has been there for a while. URL parameters: `lang` (ru or en), `idle` (seconds, default 40), `card` (seconds, default 25), `volume` (0 to 1), `seed` (a fixed labyrinth). For unattended use, open the address once and allow the camera (Chrome remembers it), then run Chrome with `--kiosk --autoplay-policy=no-user-gesture-required`.
+Gallery mode runs the piece as an installation, only from a local build on the venue's computer, provided for a showing: no start screens or buttons, the webcam watches for a face, the walk starts when someone stands in front of the screen and resets to a new labyrinth when nobody has been there for a while. URL parameters: `lang` (ru or en), `idle` (seconds, default 40), `card` (seconds, default 25), `volume` (0 to 1), `seed` (a fixed labyrinth). The camera never starts on page load: the attendant turns it on with the space bar at opening. Run Chrome with `--kiosk --autoplay-policy=no-user-gesture-required`.
 
 ## Licenses
 

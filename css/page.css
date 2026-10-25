@@ -44,3 +44,4 @@ html[lang="ru"] section[lang="en"], html[lang="en"] section[lang="ru"] { display
 .yt-note { align-self: end; justify-self: end; z-index: 2; margin: 0 8px 8px 24px; padding: 4px 6px; font-size: 11px; line-height: 1.4; text-align: right; color: rgba(255, 255, 255, 0.8); background: rgba(1, 8, 5, 0.7); text-shadow: none; pointer-events: none; }
 .yt:has(iframe) .yt-note { display: none; }
 .yt figcaption { font-size: 0.85em; color: var(--dim); margin-top: 0.4em; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; }   /* long commands wrap on a phone instead of widening the page */

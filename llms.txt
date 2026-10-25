@@ -13,10 +13,9 @@ CONSPACE ROOMS is for entertainment only. It is not therapy or a psychologi
 - [Overview in Markdown](https://conspace-rooms.vercel.app/index.md): the same page for agents; also served for Accept: text/markdown
 
 - [The piece](https://conspace-rooms.vercel.app/): language choice, then the welcome screen and the walk
-- [Specs](https://conspace-rooms.vercel.app/tech.html): requirements, how it is made, licenses, gallery mode
+- [Specs](https://conspace-rooms.vercel.app/tech.html): requirements, how it is made, licenses, gallery mode (offline build for venues)
 - [Gallery rider](https://conspace-rooms.vercel.app/rider.html): technical rider for galleries showing the installation
 - [Privacy](https://conspace-rooms.vercel.app/privacy.html)
-- [Gallery mode](https://conspace-rooms.vercel.app/gallery): installation mode for a projector and a webcam
 - [Source code](https://github.com/sinaida-space/conspace-rooms)
 
 ## Usage

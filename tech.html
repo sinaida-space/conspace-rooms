@@ -58,7 +58,7 @@
   </dl>
 
   <h2>Галерейный режим</h2>
-  <p>Для показа в&nbsp;пространстве: проектор или экран, компьютер и&nbsp;веб-камера у&nbsp;экрана. Откройте <a href="gallery.html">conspace-rooms.vercel.app/gallery</a>. Здесь нет стартовых экранов и&nbsp;кнопок. Камера замечает лицо: человек постоял перед экраном около секунды, и&nbsp;прогулка начинается, управление жестами. Если перед экраном никого нет 40&nbsp;секунд, возвращается заставка, а&nbsp;следующий посетитель попадает в&nbsp;новый лабиринт. Итоговая карточка с&nbsp;вопросами держится 25&nbsp;секунд.</p>
+  <p>Для показа в&nbsp;пространстве: проектор или экран, компьютер и&nbsp;веб-камера у&nbsp;экрана. Галерейный режим запускается только с&nbsp;локальной сборки на&nbsp;компьютере площадки, сборку мы передаём для показа. Здесь нет стартовых экранов и&nbsp;кнопок. Камера замечает лицо: человек постоял перед экраном около секунды, и&nbsp;прогулка начинается, управление жестами. Если перед экраном никого нет 40&nbsp;секунд, возвращается заставка, а&nbsp;следующий посетитель попадает в&nbsp;новый лабиринт. Итоговая карточка с&nbsp;вопросами держится 25&nbsp;секунд.</p>
   <p>Параметры в&nbsp;адресе:</p>
   <dl>
     <dt>lang</dt><dd>ru или en, по&nbsp;умолчанию ru.</dd>
@@ -67,10 +67,8 @@
     <dt>volume</dt><dd>громкость от&nbsp;0 до&nbsp;1, по&nbsp;умолчанию 0.9.</dd>
     <dt>seed</dt><dd>число: один постоянный лабиринт вместо нового для каждого посетителя.</dd>
   </dl>
-  <p>Пример: <code>/gallery?lang=en&amp;idle=60&amp;volume=0.7</code></p>
-  <p>Чтобы звук и&nbsp;камера включались без нажатий, запустите Chrome в&nbsp;режиме киоска:</p>
-  <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required "https://conspace-rooms.vercel.app/gallery"</code></pre>
-  <p>Перед первым показом откройте этот адрес один раз в&nbsp;том же профиле Chrome и&nbsp;разрешите доступ к&nbsp;камере: Chrome запомнит разрешение для&nbsp;сайта.</p>
+  <p>Пример: <code>gallery?lang=en&amp;idle=60&amp;volume=0.7</code></p>
+  <p>Камера не&nbsp;включается при&nbsp;загрузке страницы: в&nbsp;начале дня её включает смотритель клавишей пробел, и&nbsp;до&nbsp;закрытия браузера она остаётся включённой. Звук стартует без нажатий, если запустить Chrome в&nbsp;режиме киоска с&nbsp;флагом <code>--autoplay-policy=no-user-gesture-required</code>; точная команда приходит со&nbsp;сборкой.</p>
   <p>Клавиша F включает полный экран, если браузер открыт не&nbsp;в&nbsp;киоске. Без камеры режим ждёт нажатия любой клавиши и&nbsp;включает кнопки. Изображение с&nbsp;камеры, как и&nbsp;в&nbsp;обычном режиме жестов, обрабатывается только в&nbsp;браузере и&nbsp;никуда не&nbsp;отправляется.</p>
   <p>Требования к&nbsp;залу и&nbsp;технике: <a href="rider.html?lang=ru">райдер для галерей</a>.</p>
 
@@ -121,7 +119,7 @@
   </dl>
 
   <h2>Приватность</h2>
-  <p>Аналитики, трекеров и&nbsp;рекламы нет. В&nbsp;браузере хранятся только уровень качества графики и&nbsp;отметка о&nbsp;прочитанном уведомлении. Язык хранится в&nbsp;адресе страницы. Изображение с&nbsp;камеры обрабатывается на&nbsp;устройстве и&nbsp;никуда не&nbsp;уходит. Подробнее в&nbsp;<a href="privacy.html?lang=ru">политике конфиденциальности</a>.</p>
+  <p>Аналитики, трекеров и&nbsp;рекламы нет. В&nbsp;браузере хранятся только настройки самой работы, например качество графики и&nbsp;громкость. Язык хранится в&nbsp;адресе страницы. Изображение с&nbsp;камеры обрабатывается на&nbsp;устройстве и&nbsp;никуда не&nbsp;уходит. Подробнее в&nbsp;<a href="privacy.html?lang=ru">политике конфиденциальности</a>.</p>
 
   <h2>Хостинг</h2>
   <p>Сайт размещён на&nbsp;Vercel. Библиотека MediaPipe и&nbsp;её&nbsp;модели лежат на&nbsp;этом&nbsp;же сайте, другие домены работе не&nbsp;нужны. Если режим жестов не&nbsp;запустится, включатся кнопки.</p>
@@ -162,7 +160,7 @@
   </dl>
 
   <h2>Gallery mode</h2>
-  <p>For a&nbsp;space: a&nbsp;projector or&nbsp;a&nbsp;screen, a&nbsp;computer and&nbsp;a&nbsp;webcam by&nbsp;the screen. Open <a href="gallery.html?lang=en">conspace-rooms.vercel.app/gallery</a>. There are no start screens and no buttons. The camera notices a&nbsp;face: someone stands in&nbsp;front of&nbsp;the screen for about a&nbsp;second and the walk begins, steered by&nbsp;hands. When nobody has been in&nbsp;front for 40&nbsp;seconds, the attract screen comes back and the next visitor gets a&nbsp;new labyrinth. The closing card of&nbsp;questions stays up for 25&nbsp;seconds.</p>
+  <p>For a&nbsp;space: a&nbsp;projector or&nbsp;a&nbsp;screen, a&nbsp;computer and&nbsp;a&nbsp;webcam by&nbsp;the screen. Gallery mode runs only from a&nbsp;local build on&nbsp;the venue’s computer, which we&nbsp;provide for&nbsp;a&nbsp;showing. There are no start screens and no buttons. The camera notices a&nbsp;face: someone stands in&nbsp;front of&nbsp;the screen for about a&nbsp;second and the walk begins, steered by&nbsp;hands. When nobody has been in&nbsp;front for 40&nbsp;seconds, the attract screen comes back and the next visitor gets a&nbsp;new labyrinth. The closing card of&nbsp;questions stays up for 25&nbsp;seconds.</p>
   <p>URL parameters:</p>
   <dl>
     <dt>lang</dt><dd>ru or&nbsp;en, Russian by&nbsp;default.</dd>
@@ -171,10 +169,8 @@
     <dt>volume</dt><dd>0 to&nbsp;1, 0.9 by&nbsp;default.</dd>
     <dt>seed</dt><dd>a&nbsp;number: one fixed labyrinth instead of&nbsp;a&nbsp;new one for each visitor.</dd>
   </dl>
-  <p>Example: <code>/gallery?lang=en&amp;idle=60&amp;volume=0.7</code></p>
-  <p>For sound and camera to&nbsp;start without a&nbsp;click, run Chrome in&nbsp;kiosk mode:</p>
-  <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required "https://conspace-rooms.vercel.app/gallery"</code></pre>
-  <p>Before the first showing, open this address once in&nbsp;the same Chrome profile and allow the camera: Chrome remembers the permission for&nbsp;the site.</p>
+  <p>Example: <code>gallery?lang=en&amp;idle=60&amp;volume=0.7</code></p>
+  <p>The camera never starts on&nbsp;page load: at&nbsp;the start of&nbsp;the day the attendant turns it&nbsp;on&nbsp;with the space bar, and it&nbsp;stays on&nbsp;until the browser closes. Sound starts without a&nbsp;click when Chrome runs in&nbsp;kiosk mode with <code>--autoplay-policy=no-user-gesture-required</code>; the exact command comes with the build.</p>
   <p>F toggles fullscreen when the browser is&nbsp;not in&nbsp;kiosk mode. Without a&nbsp;camera the mode waits for any key and switches to&nbsp;buttons. As&nbsp;in&nbsp;the ordinary gesture mode, the camera image is&nbsp;processed only in&nbsp;the browser and never sent anywhere.</p>
   <p>Venue and&nbsp;hardware requirements: the <a href="rider.html?lang=en">gallery rider</a>.</p>
 
@@ -225,7 +221,7 @@
   </dl>
 
   <h2>Privacy</h2>
-  <p>No&nbsp;analytics, no&nbsp;trackers, no&nbsp;ads. Your browser keeps only the graphics tier and a&nbsp;note that you have read the notice. The language lives in&nbsp;the page address. The camera image is processed on&nbsp;your device and goes nowhere. Details in&nbsp;the <a href="privacy.html?lang=en">privacy policy</a>.</p>
+  <p>No&nbsp;analytics, no&nbsp;trackers, no&nbsp;ads. Your browser keeps only the piece’s own settings, such as&nbsp;graphics quality and volume. The language lives in&nbsp;the page address. The camera image is processed on&nbsp;your device and goes nowhere. Details in&nbsp;the <a href="privacy.html?lang=en">privacy policy</a>.</p>
 
   <h2>Hosting</h2>
   <p>The site runs on&nbsp;Vercel. MediaPipe and its models are served from this site, so&nbsp;the piece needs no&nbsp;other domain. If&nbsp;gesture mode fails to&nbsp;start, the on-screen buttons take over.</p>
