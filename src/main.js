@@ -30,6 +30,10 @@ const ui = new UI();
 // gallery.html: an installation, no gates or buttons (gallery.js)
 const GALLERY = document.body.classList.contains('gallery');
 let gallery = null;
+// the offline build is served from the venue's own computer
+function galleryLocal() {
+  return location.protocol === 'file:' || ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+}
 // ?enter=hands: straight into a fresh labyrinth on gestures, no gates (after Тренировка)
 const DIRECT = !GALLERY && new URLSearchParams(location.search).get('enter') === 'hands' && langFromUrl();
 // once only: a reload shows the gates again (the seed goes once world.js has read it)
@@ -39,6 +43,14 @@ if (DIRECT) dropParams('enter');
 if (!caps.webgl2) {
   applyStatic();
   ui.showWebglError();
+} else if (GALLERY && !galleryLocal()) {
+  // the public site only says that gallery mode exists: it runs from the
+  // offline build on the venue's own computer, never from a public address
+  setLang(langFromUrl() || 'ru');
+  applyStatic();
+  document.body.classList.add('gallery-notice');
+  document.getElementById('attract-line').textContent = t('galleryOffline');
+  document.getElementById('attract-links')?.classList.remove('hidden');
 } else if (GALLERY) {
   setLang(langFromUrl() || 'ru');
   applyStatic();

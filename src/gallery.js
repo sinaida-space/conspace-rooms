@@ -14,6 +14,10 @@
 //   seed=<int>    one fixed labyrinth instead of a new one each time
 //
 // All video stays in the browser, as in the ordinary gesture mode.
+//
+// The camera never starts on page load: the attendant turns it on with the
+// space bar at opening. The tab remembers that until the browser closes, so
+// the reload between visitors keeps it on and the next morning asks again.
 
 import { HandInput } from './hands.js';
 import { t } from './i18n.js';
@@ -28,7 +32,7 @@ export function createGallery() {
   const attract = document.getElementById('attract');
   const line = document.getElementById('attract-line');
   const note = document.getElementById('attract-note');
-  let hands = null, cameraOk = false;
+  let hands = null, cameraOk = false, noCamera = false;
 
   const show = (text) => { if (text) line.textContent = text; attract.classList.remove('gone'); };
   const hide = () => attract.classList.add('gone');
@@ -41,6 +45,17 @@ export function createGallery() {
 
     // Start the camera and the detectors while the attract screen is up.
     async startCamera() {
+      let on = false;
+      try { on = sessionStorage.getItem('conspace-gallery-camera') === '1'; } catch (e) { /* storage blocked: ask each time */ }
+      if (!on) {
+        line.textContent = t('galleryStart');
+        note.textContent = t('galleryCam');
+        await new Promise(res => {
+          const key = e => { if (e.code === 'Space') { removeEventListener('keydown', key); res(); } };
+          addEventListener('keydown', key);
+        });
+        try { sessionStorage.setItem('conspace-gallery-camera', '1'); } catch (e) {}
+      }
       line.textContent = t('galleryCome');
       note.textContent = t('galleryCam');
       try {
@@ -50,6 +65,7 @@ export function createGallery() {
         cameraOk = true;
       } catch (e) {
         console.warn('[gallery] no camera:', e);
+        noCamera = true;
         line.textContent = t('galleryNoCam');
       }
     },
@@ -65,7 +81,7 @@ export function createGallery() {
           held = hands.faceWithin(400) ? held + 0.2 : 0;
           if (held >= 0.8) enter('hands');
         }, 200);
-        const any = () => { if (!cameraOk) { removeEventListener('keydown', any); removeEventListener('pointerdown', any); enter('keys'); } };
+        const any = () => { if (noCamera) { removeEventListener('keydown', any); removeEventListener('pointerdown', any); enter('keys'); } };
         addEventListener('keydown', any);
         addEventListener('pointerdown', any);
       });

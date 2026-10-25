@@ -17,7 +17,7 @@ CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko 
 - Eighteen SOULS works hang in an endless labyrinth generated anew on every visit, moving from Soviet hospital corridors (fear) through a grandmother's flat (memory) to rooms of light (acceptance).
 - Souls ask questions; a rose grows with every work seen; with all eighteen a tunnel of roses ends the walk with a card of the questions asked.
 - Controls: keyboard, touch (hold and drag), or hand gestures through the webcam, processed only in the browser.
-- For exhibitions there is a gallery mode at /gallery (see https://conspace-rooms.vercel.app/tech.html).
+- For exhibitions there is a gallery mode, provided to venues as an offline build (see https://conspace-rooms.vercel.app/tech.html).
 
 ## Rules
 

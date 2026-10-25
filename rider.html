@@ -39,7 +39,7 @@
     <dt>Опыт</dt><dd>один гость идёт по&nbsp;лабиринту, который строится заново для&nbsp;каждого, и&nbsp;встречает 18&nbsp;работ; 4–6&nbsp;человек смотрят рядом; 16+. Визит длится около 10&nbsp;минут (от&nbsp;6 до&nbsp;15), за&nbsp;час проходят около 5&nbsp;ведущих и&nbsp;25–30 зрителей.</dd>
     <dt>Площадь</dt><dd>зал для&nbsp;проекции от&nbsp;4×5&nbsp;м, потолок от&nbsp;3&nbsp;м, полное затемнение; второй зал для&nbsp;работ.</dd>
     <dt>Форматы</dt><dd>два зала, один зал или&nbsp;киоск без затемнения, <a href="#formats-ru">подробнее</a>.</dd>
-    <dt>Интернет</dt><dd>не&nbsp;обязателен: по&nbsp;запросу передаём <a href="#offline-ru">локальную сборку</a>.</dd>
+    <dt>Интернет</dt><dd>не&nbsp;нужен: работа показывается с&nbsp;<a href="#offline-ru">локальной сборки</a>.</dd>
     <dt>Галерея даёт</dt><dd>залы, проектор, компьютер, веб-камеру, звук, свет, монтаж и&nbsp;смотрителя.</dd>
     <dt>Монтаж</dt><dd>2–3&nbsp;дня, демонтаж 1&nbsp;день; настройку Sinaida проводит на&nbsp;месте или&nbsp;по&nbsp;видеосвязи.</dd>
     <dt>Статус</dt><dd>некоммерческий художественный проект.</dd>
@@ -62,7 +62,7 @@
   <h2>Кто что предоставляет</h2>
   <p><strong>Художники</strong> дают:</p>
   <ul>
-    <li>показ сайта <a href="gallery.html">/gallery</a>;</li>
+    <li>локальную сборку галерейного режима;</li>
     <li>работы серии SOULS: формат и&nbsp;число согласуются с&nbsp;UVALISS;</li>
     <li>помощь Sinaida с&nbsp;монтажом и&nbsp;калибровкой, на&nbsp;месте или&nbsp;удалённо: формат оговаривается;</li>
     <li>макет панели с&nbsp;жестами, по&nbsp;запросу.</li>
@@ -70,7 +70,7 @@
   <p><strong>Галерея</strong> даёт всё остальное:</p>
   <ul>
     <li>залы, ткань, проектор, компьютер, веб-камеру, колонки, кабели и&nbsp;крепления;</li>
-    <li>питание, а&nbsp;для&nbsp;онлайн-показа ещё и&nbsp;интернет;</li>
+    <li>питание;</li>
     <li>свет, таблички и&nbsp;тексты на&nbsp;стенах, печать;</li>
     <li>перевозку и&nbsp;страховку работ;</li>
     <li>смотрителя на&nbsp;входе.</li>
@@ -163,12 +163,11 @@
   <h2>Компьютер</h2>
   <p>Дискретная видеокарта (например, NVIDIA RTX&nbsp;3060 или&nbsp;новее) или&nbsp;Apple M1 или&nbsp;новее, 16&nbsp;ГБ памяти, свежий Chrome, выход HDMI. Автозапуск при&nbsp;включении питания, спящий режим отключён.</p>
   <p>Команда для запуска в&nbsp;режиме киоска:</p>
-  <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required "https://conspace-rooms.vercel.app/gallery"</code></pre>
-  <p>Перед первым показом откройте этот адрес один раз в&nbsp;том же профиле Chrome и&nbsp;разрешите доступ к&nbsp;камере: Chrome запомнит разрешение для&nbsp;сайта.</p>
-  <p>С&nbsp;локальной сборкой в&nbsp;команде стоит локальный адрес, его даём вместе со&nbsp;сборкой. Полные подробности галерейного режима смотрите в&nbsp;<a href="tech.html?lang=ru">спецификациях</a>.</p>
+  <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required "&lt;локальный адрес из&nbsp;сборки&gt;/gallery"</code></pre>
+  <p>Локальный адрес и&nbsp;инструкция по&nbsp;запуску приходят вместе со&nbsp;сборкой. Перед первым показом откройте этот адрес один раз в&nbsp;том же профиле Chrome и&nbsp;разрешите доступ к&nbsp;камере. Подробности галерейного режима в&nbsp;<a href="tech.html?lang=ru">спецификациях</a>.</p>
 
   <h2>Веб-камера</h2>
-  <p>USB, 1080p, 30&nbsp;fps, угол обзора около 80–90°. Камера спрятана, виден только объектив (чёрный короб или&nbsp;за&nbsp;тканью), по&nbsp;центру над&nbsp;изображением или&nbsp;под&nbsp;ним, направлена на&nbsp;зону посетителей в&nbsp;1,5–3&nbsp;м, на&nbsp;высоте, которая видит руки стоящего и&nbsp;сидящего гостя. Если кабель длиннее 3&nbsp;м, нужен активный USB-удлинитель.</p>
+  <p>USB, 1080p, 30&nbsp;fps, угол обзора около 80–90°. Камера стоит на&nbsp;виду, рядом с&nbsp;ней табличка (текст ниже), по&nbsp;центру над&nbsp;изображением или&nbsp;под&nbsp;ним, направлена на&nbsp;зону посетителей в&nbsp;1,5–3&nbsp;м, на&nbsp;высоте, которая видит руки стоящего и&nbsp;сидящего гостя. Если кабель длиннее 3&nbsp;м, нужен активный USB-удлинитель.</p>
   <p>Свет: мягкий тёплый свет на&nbsp;зоне посетителей, не&nbsp;доходящий до&nbsp;экрана. Без него камера не&nbsp;видит&nbsp;рук.</p>
 
   <h2>Жесты на стене</h2>
@@ -185,8 +184,7 @@
   <p>Два активных монитора (5&nbsp;дюймов или&nbsp;больше) по&nbsp;бокам экрана, стерео, 70–80&nbsp;дБ в&nbsp;зоне посетителей. Зал должен быть акустически отделён от&nbsp;соседних помещений галереи.</p>
 
   <h2 id="offline-ru">Показ без интернета</h2>
-  <p>Работа автономна: библиотеки, модели распознавания рук, шрифт и&nbsp;звук лежат внутри неё, внешние сервисы ей не&nbsp;нужны. По&nbsp;запросу передаём локальную сборку (архив или&nbsp;флешку). Она запускается на&nbsp;компьютере площадки и&nbsp;работает без сети. На&nbsp;время выставки версия фиксируется: один номер сборки на&nbsp;весь срок, обновления не&nbsp;выходят.</p>
-  <p>Если показ идёт онлайн, за&nbsp;две недели до&nbsp;монтажа откройте <a href="gallery.html">ссылку на&nbsp;работу</a> с&nbsp;сети площадки и&nbsp;сообщите нам результат. Если ссылка не&nbsp;открывается, переходим на&nbsp;локальную сборку или&nbsp;на&nbsp;запасную копию <a href="https://sinaida-space.github.io/conspace-rooms/gallery.html?mirror">sinaida-space.github.io/conspace-rooms</a>. Для онлайн-показа нужен стабильный интернет, лучше проводной, от&nbsp;10&nbsp;Мбит/с.</p>
+  <p>Работа автономна: библиотеки, модели распознавания рук, шрифт и&nbsp;звук лежат внутри неё, внешние сервисы ей не&nbsp;нужны. Для показа передаём локальную сборку (архив или&nbsp;флешку). Она запускается на&nbsp;компьютере площадки и&nbsp;работает без сети. На&nbsp;время выставки версия фиксируется: один номер сборки на&nbsp;весь срок, обновления не&nbsp;выходят.</p>
 
   <h2>Питание</h2>
   <dl>
@@ -202,7 +200,7 @@
   <h2>Предупреждение перед входом</h2>
   <p>Обязательно у&nbsp;входа в&nbsp;комнату&nbsp;1: хорошо заметная табличка на&nbsp;местном языке и&nbsp;английском. Текст для печати:</p>
   <div class="warning">
-    <p lang="ru">Внимание. Внутри вспышки света и&nbsp;мерцание, резкие звуки, темнота и&nbsp;тревожная атмосфера: больничные коридоры, образы страха и&nbsp;памяти. Не&nbsp;рекомендуется людям с&nbsp;фоточувствительной эпилепсией и&nbsp;чувствительностью к&nbsp;вспышкам. 16+. Только для&nbsp;развлечения: это не&nbsp;терапия и&nbsp;не&nbsp;психологическая или медицинская услуга.</p>
+    <p lang="ru">Внимание. Внутри вспышки света и&nbsp;мерцание, резкие звуки, темнота и&nbsp;тревожная атмосфера: больничные коридоры, образы страха и&nbsp;памяти. Не&nbsp;рекомендуется людям с&nbsp;фоточувствительной эпилепсией и&nbsp;чувствительностью к&nbsp;вспышкам. 16+. Только для&nbsp;развлечения: это не&nbsp;терапия и&nbsp;не&nbsp;психологическая или медицинская услуга. В&nbsp;зале работает камера: она замечает человека перед экраном и&nbsp;следит за&nbsp;руками, изображение не&nbsp;записывается.</p>
   </div>
   <p>Персонал предупреждает гостей, что они могут выйти в&nbsp;любой момент.</p>
 
@@ -212,7 +210,7 @@
   <p>В&nbsp;затемнённом зале знак аварийного выхода остаётся видимым: лучше низкий, тёплый, у&nbsp;пола, чтобы не&nbsp;засвечивать экран. Шлюз и&nbsp;шторы не&nbsp;запираются. Одновременно в&nbsp;зале один ведущий и&nbsp;до&nbsp;шести зрителей.</p>
 
   <h2>Данные посетителей</h2>
-  <p>Изображение с&nbsp;камеры обрабатывается в&nbsp;браузере на&nbsp;компьютере площадки, не&nbsp;записывается, никуда не&nbsp;передаётся и&nbsp;не&nbsp;используется для&nbsp;идентификации личности. Само произведение персональных данных не&nbsp;собирает. Когда страница загружается, хостинг-провайдер видит обычные технические данные запроса, например IP-адрес компьютера площадки. Биометрические персональные данные не&nbsp;обрабатываются. Аналитики и&nbsp;аккаунтов нет.</p>
+  <p>Изображение с&nbsp;камеры обрабатывается в&nbsp;браузере на&nbsp;компьютере площадки, не&nbsp;записывается, никуда не&nbsp;передаётся и&nbsp;не&nbsp;используется для&nbsp;идентификации личности. Само произведение персональных данных не&nbsp;собирает. Сборка работает без сети, поэтому никаких запросов в&nbsp;интернет нет. Биометрические персональные данные не&nbsp;обрабатываются. Аналитики и&nbsp;аккаунтов нет.</p>
   <p>Если площадка снимает посетителей, например репортаж с&nbsp;открытия, согласие на&nbsp;обнародование изображения по&nbsp;местному праву получает площадка.</p>
   <p>Табличка рядом с&nbsp;камерой, текст для печати:</p>
   <div class="warning">
@@ -225,7 +223,7 @@
 
   <h2>Монтаж и каждый день</h2>
   <p>Монтаж: 1–2&nbsp;дня на&nbsp;подготовку зала (ткань, свет, крепления), 1&nbsp;день на&nbsp;технику и&nbsp;калибровку с&nbsp;Sinaida, на&nbsp;месте или по&nbsp;видеосвязи, как договоримся. На&nbsp;демонтаж нужен 1&nbsp;день.</p>
-  <p>Ежедневное включение: сначала компьютер (Chrome стартует в&nbsp;режиме киоска), затем проектор. Проверьте одну прогулку.</p>
+  <p>Ежедневное включение: сначала компьютер (Chrome стартует в&nbsp;режиме киоска), затем проектор. Камера выключена, пока смотритель не&nbsp;нажмёт пробел; до&nbsp;закрытия Chrome она остаётся включённой. Проверьте одну прогулку.</p>
   <p>Ежедневное выключение: сначала проектор, дайте ему остыть, затем компьютер.</p>
   <p>Персоналу: если изображение зависло, перезапустите Chrome или&nbsp;компьютер; если камера перестала видеть людей, проверьте свет и&nbsp;кабель; если ничего не&nbsp;помогает, напишите нам.</p>
   <p>Если камера не&nbsp;работает совсем, работа ждёт нажатия любой клавиши и&nbsp;включает кнопки на&nbsp;экране: прогулка продолжается без жестов.</p>
@@ -259,7 +257,7 @@
     <dt>Experience</dt><dd>one visitor walks a&nbsp;labyrinth built anew for each person and meets 18&nbsp;works; 4–6&nbsp;people watch nearby; 16+. A&nbsp;visit takes about 10&nbsp;minutes (6 to&nbsp;15), so about 5&nbsp;people steer and 25–30 watch per hour.</dd>
     <dt>Space</dt><dd>a projection room from 4×5&nbsp;m, ceiling from 3&nbsp;m, full blackout; a&nbsp;second room for the works.</dd>
     <dt>Formats</dt><dd>two rooms, one room, or&nbsp;a&nbsp;kiosk without blackout, <a href="#formats-en">details</a>.</dd>
-    <dt>Internet</dt><dd>optional: we&nbsp;provide a&nbsp;<a href="#offline-en">local build</a> on&nbsp;request.</dd>
+    <dt>Internet</dt><dd>not needed: the piece runs from a&nbsp;<a href="#offline-en">local build</a>.</dd>
     <dt>The gallery provides</dt><dd>rooms, projector, computer, webcam, sound, light, installation and an&nbsp;attendant.</dd>
     <dt>Setup</dt><dd>2–3&nbsp;days, dismantling 1&nbsp;day; Sinaida calibrates on site or&nbsp;by&nbsp;video call.</dd>
     <dt>Status</dt><dd>a&nbsp;non-commercial art project.</dd>
@@ -282,7 +280,7 @@
   <h2>Who provides what</h2>
   <p><strong>The artists</strong> provide:</p>
   <ul>
-    <li>the showing of&nbsp;the site <a href="gallery.html">/gallery</a>;</li>
+    <li>a&nbsp;local build of&nbsp;the gallery mode;</li>
     <li>the artworks: format and&nbsp;number agreed with&nbsp;UVALISS;</li>
     <li>Sinaida’s help with&nbsp;installation and&nbsp;calibration, on&nbsp;site or&nbsp;remotely: format agreed separately;</li>
     <li>a&nbsp;gesture panel layout, on&nbsp;request.</li>
@@ -290,7 +288,7 @@
   <p><strong>The gallery</strong> provides everything else:</p>
   <ul>
     <li>rooms, fabric, projector, computer, webcam, speakers, cables, and&nbsp;mounts;</li>
-    <li>power, plus internet for&nbsp;an&nbsp;online showing;</li>
+    <li>power;</li>
     <li>lighting, signage, and&nbsp;wall texts, printing;</li>
     <li>transport and&nbsp;insurance of&nbsp;the works;</li>
     <li>an&nbsp;attendant at&nbsp;the entrance.</li>
@@ -383,12 +381,11 @@
   <h2>Computer</h2>
   <p>A&nbsp;discrete GPU (for&nbsp;example, NVIDIA RTX&nbsp;3060 or&nbsp;better) or&nbsp;Apple M1 or&nbsp;newer, 16&nbsp;GB RAM, a&nbsp;recent Chrome, HDMI out. It&nbsp;should auto-start on&nbsp;power, with sleep turned off.</p>
   <p>Kiosk command:</p>
-  <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required "https://conspace-rooms.vercel.app/gallery"</code></pre>
-  <p>Before the first showing, open this address once in&nbsp;the same Chrome profile and allow the camera: Chrome remembers the permission for&nbsp;the site.</p>
-  <p>With a&nbsp;local build the command points to&nbsp;a&nbsp;local address, which comes with the build. See the <a href="tech.html?lang=en">specs</a> for&nbsp;the full gallery-mode details.</p>
+  <pre><code>chrome --kiosk --autoplay-policy=no-user-gesture-required "&lt;local address from the build&gt;/gallery"</code></pre>
+  <p>The local address and start-up instructions come with the build. Before the first showing, open this address once in&nbsp;the same Chrome profile and allow the camera. Gallery-mode details are inGallery-mode details are in&nbsp;the <a href="tech.html?lang=en">specs</a>.nbsp;theGallery-mode details are in&nbsp;the <a href="tech.html?lang=en">specs</a>.nbsp;<a href="tech.html?lang=en">specs</a>.</p>
 
   <h2>Webcam</h2>
-  <p>USB, 1080p, 30&nbsp;fps, a&nbsp;field of&nbsp;view around 80–90°. Hidden, with only the lens visible (a&nbsp;black box or&nbsp;behind the fabric), centred above or&nbsp;below the image, facing the visitor zone 1.5–3&nbsp;m away, at&nbsp;a&nbsp;height that sees the hands of&nbsp;a&nbsp;standing and&nbsp;a&nbsp;seated visitor. A&nbsp;cable longer than 3&nbsp;m needs an&nbsp;active USB extension.</p>
+  <p>USB, 1080p, 30&nbsp;fps, a&nbsp;field of&nbsp;view around 80–90°. In&nbsp;plain view, with a&nbsp;sign next to&nbsp;it (text below), centred above or&nbsp;below the image, facing the visitor zone 1.5–3&nbsp;m away, at&nbsp;a&nbsp;height that sees the hands of&nbsp;a&nbsp;standing and&nbsp;a&nbsp;seated visitor. A&nbsp;cable longer than 3&nbsp;m needs an&nbsp;active USB extension.</p>
   <p>Light: a&nbsp;soft, warm light on&nbsp;the visitor zone that does not reach the screen. Without it&nbsp;the camera cannot see hands.</p>
 
   <h2>Gestures on the wall</h2>
@@ -405,8 +402,7 @@
   <p>Two active monitors (5″ or&nbsp;larger) flanking the screen, stereo, 70–80&nbsp;dB at&nbsp;the visitor zone. The room should be&nbsp;acoustically separated from&nbsp;neighbouring halls.</p>
 
   <h2 id="offline-en">Showing without internet</h2>
-  <p>The piece is&nbsp;self-contained: its libraries, hand-tracking models, font and sound live inside it, and it&nbsp;calls no&nbsp;outside service. On&nbsp;request we&nbsp;send a&nbsp;local build (an&nbsp;archive or&nbsp;a&nbsp;USB stick) that runs on&nbsp;the venue’s computer with no&nbsp;network. The version is&nbsp;frozen for the run of&nbsp;the show: one build number throughout, no&nbsp;updates.</p>
-  <p>For an&nbsp;online showing, open the <a href="gallery.html">link to&nbsp;the piece</a> from the venue’s network two weeks before installation and tell us the result. If&nbsp;it does not open, we&nbsp;switch to&nbsp;the local build or&nbsp;the backup copy at&nbsp;<a href="https://sinaida-space.github.io/conspace-rooms/gallery.html?mirror">sinaida-space.github.io/conspace-rooms</a>. An&nbsp;online showing needs stable internet, wired preferred, 10&nbsp;Mbit/s or&nbsp;more.</p>
+  <p>The piece is&nbsp;self-contained: its libraries, hand-tracking models, font and sound live inside it, and it&nbsp;calls no&nbsp;outside service. For a&nbsp;showing we&nbsp;send a&nbsp;local build (an&nbsp;archive or&nbsp;a&nbsp;USB stick) that runs on&nbsp;the venue’s computer with no&nbsp;network. The version is&nbsp;frozen for the run of&nbsp;the show: one build number throughout, no&nbsp;updates.</p>
 
   <h2>Power</h2>
   <dl>
@@ -422,7 +418,7 @@
   <h2>Warning before the entrance</h2>
   <p>Mandatory: at&nbsp;the entrance to&nbsp;Room&nbsp;1, a&nbsp;clearly visible sign in&nbsp;the local language and&nbsp;English. Text to&nbsp;print:</p>
   <div class="warning">
-    <p lang="en">Warning. Inside: flashing and&nbsp;flickering light, loud sudden sounds, darkness, and&nbsp;an&nbsp;unsettling atmosphere: hospital corridors, images of&nbsp;fear and&nbsp;memory. Not recommended for&nbsp;people with&nbsp;photosensitive epilepsy or&nbsp;sensitivity to&nbsp;flashing light. 16+. For entertainment only: this is&nbsp;not therapy or&nbsp;a&nbsp;psychological or&nbsp;medical service.</p>
+    <p lang="en">Warning. Inside: flashing and&nbsp;flickering light, loud sudden sounds, darkness, and&nbsp;an&nbsp;unsettling atmosphere: hospital corridors, images of&nbsp;fear and&nbsp;memory. Not recommended for&nbsp;people with&nbsp;photosensitive epilepsy or&nbsp;sensitivity to&nbsp;flashing light. 16+. For entertainment only: this is&nbsp;not therapy or&nbsp;a&nbsp;psychological or&nbsp;medical service. A&nbsp;camera works in&nbsp;the room: it&nbsp;notices a&nbsp;person in&nbsp;front of&nbsp;the screen and follows their hands; the image is&nbsp;not recorded.</p>
   </div>
   <p>Staff tell visitors they can leave at&nbsp;any moment.</p>
 
@@ -432,7 +428,7 @@
   <p>In&nbsp;the blacked-out room the emergency exit sign stays visible, ideally low and warm, near the floor, so&nbsp;it&nbsp;does not wash out the screen. The light lock and curtains are&nbsp;never locked. One person steers and up&nbsp;to&nbsp;six watch at&nbsp;a&nbsp;time.</p>
 
   <h2>Visitor data</h2>
-  <p>The camera image is&nbsp;processed in&nbsp;the browser on&nbsp;the venue’s computer, is&nbsp;never recorded or&nbsp;sent, and is&nbsp;not used to&nbsp;identify anyone. The piece itself collects no&nbsp;personal data. When the page loads, the hosting provider sees the usual technical request data, such as&nbsp;the IP address of&nbsp;the venue’s computer. No&nbsp;biometric data is&nbsp;processed. There is&nbsp;no&nbsp;analytics and no&nbsp;accounts.</p>
+  <p>The camera image is&nbsp;processed in&nbsp;the browser on&nbsp;the venue’s computer, is&nbsp;never recorded or&nbsp;sent, and is&nbsp;not used to&nbsp;identify anyone. The piece itself collects no&nbsp;personal data. The build runs with no&nbsp;network, so&nbsp;nothing is&nbsp;requested from the internet. No&nbsp;biometric data is&nbsp;processed. There is&nbsp;no&nbsp;analytics and no&nbsp;accounts.</p>
   <p>If&nbsp;the venue films visitors, for example at&nbsp;the opening, obtaining consent to&nbsp;publish their image under local law is&nbsp;the venue’s responsibility.</p>
   <p>A&nbsp;sign next to&nbsp;the camera, text to&nbsp;print:</p>
   <div class="warning">
@@ -445,7 +441,7 @@
 
   <h2>Setup and daily routine</h2>
   <p>Setup: 1–2&nbsp;days to&nbsp;prepare the room (fabric, light, mounts), 1&nbsp;day for&nbsp;tech and&nbsp;calibration with&nbsp;Sinaida, on&nbsp;site or&nbsp;by&nbsp;video call, as&nbsp;agreed. Dismantling takes 1&nbsp;day.</p>
-  <p>Daily on: the computer first (Chrome starts in&nbsp;kiosk mode), then the projector. Check one walk.</p>
+  <p>Daily on: the computer first (Chrome starts in&nbsp;kiosk mode), then the projector. The camera stays off until the attendant presses the space bar, and stays on&nbsp;until Chrome closes. Check one walk.</p>
   <p>Daily off: the projector first, let&nbsp;it cool, then the computer.</p>
   <p>For&nbsp;staff: if&nbsp;the image freezes, restart Chrome or&nbsp;the computer; if&nbsp;the camera stops seeing people, check the light and&nbsp;the cable; if&nbsp;nothing helps, write to&nbsp;us.</p>
   <p>If&nbsp;the camera fails completely, the piece waits for any key and switches on&nbsp;on-screen buttons, so&nbsp;the walk goes on&nbsp;without gestures.</p>

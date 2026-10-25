@@ -12,7 +12,7 @@ const ABOUT = 'CONSPACE ROOMS is an interactive web installation created by Sina
   + 'Eighteen works hang in an endless labyrinth generated anew on every visit, moving from Soviet hospital corridors '
   + '(fear) through a grandmother\'s flat (memory) to rooms of light (acceptance). Souls ask questions; a rose grows with '
   + 'every work seen; with all eighteen a tunnel of roses ends the walk. Music is generated live. Controls: keyboard, '
-  + 'touch, or hand gestures through the webcam (processed only in the browser). Gallery mode: /gallery. '
+  + 'touch, or hand gestures through the webcam (processed only in the browser). Gallery mode: an offline build for venues. '
   + 'More: https://conspace-rooms.vercel.app/llms.txt';
 
 const text = s => ({ content: [{ type: 'text', text: s }] });

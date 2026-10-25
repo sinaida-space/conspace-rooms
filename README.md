@@ -9,7 +9,6 @@
 | | Main site (Vercel) | Mirror (GitHub Pages) |
 |---|---|---|
 | **The labyrinth** | [conspace-rooms.vercel.app](https://conspace-rooms.vercel.app/) | [sinaida-space.github.io/conspace-rooms](https://sinaida-space.github.io/conspace-rooms/?mirror) |
-| **Gallery mode** | [/gallery](https://conspace-rooms.vercel.app/gallery) | [/gallery.html](https://sinaida-space.github.io/conspace-rooms/gallery.html) |
 | **Gallery rider** | [/rider.html](https://conspace-rooms.vercel.app/rider.html?lang=en) | [/rider.html](https://sinaida-space.github.io/conspace-rooms/rider.html?lang=en&mirror) |
 | **Specs** | [/tech.html](https://conspace-rooms.vercel.app/tech.html?lang=en) | [/tech.html](https://sinaida-space.github.io/conspace-rooms/tech.html?lang=en&mirror) |
 
@@ -180,8 +179,10 @@ pins one labyrinth for testing.
 
 ## Gallery mode
 
-`/gallery` runs the piece as an installation for a projector or a screen with a
-webcam. There are no start screens, menus or buttons and the cursor is hidden.
+`gallery.html` runs the piece as an installation for a projector or a screen
+with a webcam. It runs only from a local build on the venue's computer
+(`localhost` or a file); on the public site the page only says that gallery mode
+exists and links to the rider. There are no start screens, menus or buttons and the cursor is hidden.
 An attract screen waits until the webcam sees a face for about a second; then the
 walk starts and the visitor steers with their hands. When nobody has been in front
 of the camera for a while (or the closing card has been up long enough), the
@@ -194,13 +195,16 @@ visitor. The code is in `src/gallery.js`.
    screen facing the visitor at about chest height, and speakers or headphones.
 2. Light the visitor's face and hands from the front; the hand tracker needs to see
    both hands clearly at a step or two from the camera.
-3. Open the address once in the same Chrome profile and allow the camera; Chrome
-   remembers the permission. Then start Chrome in kiosk mode so it opens full
-   screen and plays sound without anyone clicking:
+3. Serve the build locally, open the address once in the same Chrome profile and
+   allow the camera; Chrome remembers the permission. Then start Chrome in kiosk
+   mode so it opens full screen and plays sound without anyone clicking:
 
    ```
-   chrome --kiosk --autoplay-policy=no-user-gesture-required "https://conspace-rooms.vercel.app/gallery?lang=ru"
+   chrome --kiosk --autoplay-policy=no-user-gesture-required "http://localhost:4800/gallery.html?lang=ru"
    ```
+
+   The camera never starts on page load: the attendant turns it on with the space
+   bar at opening, and the tab keeps it on until the browser closes.
 
    On macOS: `/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome` with
    the same flags. Without kiosk mode, press `F` for full screen; the first key press or click
@@ -218,7 +222,7 @@ visitor. The code is in `src/gallery.js`.
 | `volume`  | `0.9`   | master volume, 0 to 1 |
 | `seed`    | time    | an integer for one fixed labyrinth instead of a new one per visitor |
 
-Example: `/gallery?lang=en&idle=60&card=30&volume=0.7`
+Example: `gallery.html?lang=en&idle=60&card=30&volume=0.7`
 
 ### Keys
 

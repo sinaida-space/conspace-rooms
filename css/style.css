@@ -688,6 +688,12 @@ body.gallery #final-card .fc-actions, body.gallery #final-card .fc-palette { dis
 .attract-line { font-size: clamp(1.2rem, 2.6vw, 1.9rem); margin-bottom: 1.4em; }
 #attract .expect { display: inline-block; text-align: left; margin-bottom: 1.6em; }
 .attract-note { color: var(--dim); font-size: 0.9em; }
+body.gallery-notice { cursor: auto; }   /* the public notice is a page to read and click */
+body.gallery-notice #attract { overflow-y: auto; }
+body.gallery-notice #attract .expect { display: none; }
+.attract-links { display: flex; flex-wrap: wrap; gap: 1em 2em; justify-content: center; margin-top: 2em; }
+.attract-links a { white-space: nowrap; }
+.attract-links.hidden { display: none; }
 
 /* ── masking tape ─────────────────────────────────────────────────────────
    Controls are strips of paper tape stuck on the screen like labels on an
