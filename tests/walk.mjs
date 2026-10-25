@@ -56,6 +56,7 @@ try {
   const page = await context.newPage();
   page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
   await page.goto(`${base}/index.html?lang=en&seed=${SEED}&tier=${TIER}`);
+  await page.locator('#btn-consent').click({ timeout: 60_000 });   // the content warning comes up on every visit
   await page.locator('#mode-select [data-mode="keys"]').click({ timeout: 60_000 });
   await page.locator('#btn-enter').click();
   await page.waitForFunction(() => window.__app?.player && window.__app?.soul && window.__app?.artworks, null, { timeout: 120_000 });
