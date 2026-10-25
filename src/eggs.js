@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
 import { roundedBox } from './geom.js';
 import { t, getLang } from './i18n.js';
+import { calm } from './calm.js';
 
 // ── conspace-rooms · eggs.js ────────────────────────────────────────────────
 // A quiet nightstand tucked against a corridor wall, deep in the memory ring:
@@ -101,7 +102,7 @@ function shared(atmo) {
 
   clearInterval(blinkTimer);                    // one shared clock: every nook blinks in sync
   let on = true;
-  blinkTimer = setInterval(() => { on = !on; faceMat.uniforms.uMap.value = on ? faceOn : faceOff; }, 500);
+  blinkTimer = setInterval(() => { on = calm.on || !on; faceMat.uniforms.uMap.value = on ? faceOn : faceOff; }, 500);   // 1 flash a second; calm: colon stays lit
 
   SHARED = { standGeo, standMat, faceGeo, faceMat, clockY, blockGeo, blockMat, letterGeo, matA, matB };
   return SHARED;

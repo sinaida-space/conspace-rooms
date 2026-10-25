@@ -444,7 +444,7 @@ export function buildRoseArch() {
     new THREE.ShaderMaterial({ uniforms: pathU, vertexShader: PATH_VERT, fragmentShader: PATH_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   path.renderOrder = 1;                                 // over the water, which draws first
   g.add(path);
-  // over the clouds (#96) moonlight cannot show: a warm runner of light
+  // over the clouds moonlight cannot show: a warm runner of light
   // lies under it, gold in the middle, softening to nothing at its edges
   const trailU = { uTime: pathU.uTime };
   const trail = new THREE.Mesh(new THREE.PlaneGeometry(1.25, PATH_NEAR + PATH_FAR + 2, 1, 24).rotateX(-Math.PI / 2).translate(0, 0, (PATH_NEAR - PATH_FAR - 2) / 2),
@@ -539,7 +539,7 @@ export function findArchSpot(px, pz, yaw, blocked = () => false) {
   const open = (x, z) => !solid(x, z);
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].sort((a, b) => (b[0] * fx + b[1] * fz) - (a[0] * fx + a[1] * fz));
-  // further out to the sides last: the light's widened corridors (#80) put the
+  // further out to the sides last: the light's widened corridors put the
   // visitor up to a metre and a half off a corridor's middle
   const sides = [0, 0.1, -0.1, 0.2, -0.2, 0.3, -0.3, 0.4, -0.4, 0.5, -0.5, 0.6, -0.6, 0.7, -0.7, 0.8, -0.8,
     1.0, -1.0, 1.2, -1.2, 1.4, -1.4, 1.6, -1.6];

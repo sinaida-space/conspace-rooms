@@ -122,7 +122,7 @@ const FEAR = {
   } },
 };
 
-// the hospital's leftovers (#43): a drip stand, a wheelchair, a gurney, a
+// the hospital's leftovers: a drip stand, a wheelchair, a gurney, a
 // folding screen, a bedside cabinet and the scales with a height rod.
 // Local frame as above: x along the wall, -z toward it.
 const ENAMEL = 0xd9d6c8, VINYL = 0x2f3b36, CURTAIN = 0xb9c4b0;
@@ -709,8 +709,8 @@ export function createPropKit(atmo, quality = { tier: 2 }) {
   // kinds a stage can leave on the floor, with weights
   const KINDS = [
     [['chair', 1.2], ['bucket', 1.5], ['bottles', 1.5], ['box', 1.2], ['oxygen', 1], ['drip', 2], ['wheelchair', 1.5], ['gurney', 1], ['screen', 1.3], ['cabinet', 1.8], ['scales', 1], ['window', 0.8]],
-    [['nevalyashka', 2], ['pyramid', 2], ['yula', 1.5], ['matryoshki', 2], ['ball', 1.5], ['slippers', 2], ['stool', 1.5], ['jars', 1.5], ['newspapers', 1], ['armchair', 2.5], ['window', 4]],   // windows and her armchair: the red rooms breathe (#96)
-    [['armchair', 2], ['mirror', 1.5], ['piano', 1], ['window', 3]],   // no sheeted chair: it read as anything but; plants wait for the drafts (#39)
+    [['nevalyashka', 2], ['pyramid', 2], ['yula', 1.5], ['matryoshki', 2], ['ball', 1.5], ['slippers', 2], ['stool', 1.5], ['jars', 1.5], ['newspapers', 1], ['armchair', 2.5], ['window', 4]],   // windows and her armchair: the red rooms breathe
+    [['armchair', 2], ['mirror', 1.5], ['piano', 1], ['window', 3]],   // no sheeted chair in the light; plants wait for the drafts
   ];
   const pick = (stage, r, allowWindow = true) => {
     const list = allowWindow ? KINDS[stage] : KINDS[stage].filter(([name]) => name !== 'window');

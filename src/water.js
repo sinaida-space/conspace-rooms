@@ -263,7 +263,7 @@ const FRAG = /* glsl */`
 #include <common>
 #include <fog_pars_fragment>
 uniform vec4  uWater;              // level (a tenth of the tide), accept, phase, calm: as the world shaders get it
-uniform float uDeep;               // the ending: open water over nothing, with a body and a colour of its own (#96)
+uniform float uDeep;               // the ending: open water over nothing, with a body and a colour of its own
 uniform float uTime;
 uniform int   uTier;
 uniform vec4  uRipples[${RIPPLES}];   // x, z, start time, strength
@@ -392,7 +392,7 @@ const FRAG_REAL = /* glsl */`
 #include <packing>
 #include <fog_pars_fragment>
 uniform vec4  uWater;              // level (a tenth of the tide), accept, phase, calm
-uniform float uDeep;               // the ending: open water over nothing, with a body and a colour of its own (#96)
+uniform float uDeep;               // the ending: open water over nothing, with a body and a colour of its own
 uniform float uTime;
 uniform vec4  uRipples[${RIPPLES}];
 uniform vec3  uFinale;
@@ -652,7 +652,7 @@ export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
       // calm: stand still ~2 s and the surface settles; walking breaks it quickly
       const speed = player ? player.vel.length() : 0;
       stillFor = speed < 0.05 ? stillFor + dt : 0;
-      api.calm = api.stirred ? 0 : stillFor > 0 ? Math.min(1, api.calm + dt / 2) : Math.max(0, api.calm - dt * 2.5);   // stirred: the ending keeps it alive (#96)
+      api.calm = api.stirred ? 0 : stillFor > 0 ? Math.min(1, api.calm + dt / 2) : Math.max(0, api.calm - dt * 2.5);   // stirred: the ending keeps it alive
       phase += dt * (1 - 0.6 * api.calm);                        // waves and caustics slow down on still water
 
       uniforms.uWater.value.set(shaderLevel, accept, phase, api.calm);
@@ -670,7 +670,7 @@ export function createWater({ scene, renderer, camera, quality, stage, atmo }) {
       if (!(quality.tier >= 1 && quality.p.post)) dropSplit();
       audio?.setWater?.({ level: api.level, tide: api.tide, calm: api.calm });
 
-      mesh.visible = accept >= 0.001 && !api.hidden;     // hidden: the finale's clouds have taken the floor (#96)
+      mesh.visible = accept >= 0.001 && !api.hidden;     // hidden: the finale's clouds have taken the floor
       if (!mesh.visible) { for (const d of drops) { d.s.visible = false; d.t = -1; } if (rt) dropMirror(); return; }
       mesh.position.set(Math.round(camera.position.x), api.level, Math.round(camera.position.z));
       const f = soul?.finale?.spot;

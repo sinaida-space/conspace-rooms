@@ -71,7 +71,7 @@ export class Player {
       present: false, anyFist: false, bothFists: false, pointLeft: false, pointRight: false,
       turnLeft: false, turnRight: false, stopped: false, pinch: false, zoomDelta: 0,
     };
-    this.locked = false; // set true during artwork inspect (#4) — update() becomes a no-op
+    this.locked = false; // set true during artwork inspect — update() becomes a no-op
     this.fov = camera.fov; // gesture zoom target (both palms open + spread/pinch)
 
     this._attach();

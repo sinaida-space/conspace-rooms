@@ -14,7 +14,7 @@ uniform float uTime, uShift, uGlitch;
 uniform vec3 uGrade;     // the walk's pace in colour: amber when slow, cold green when hurrying (pace.js)
 uniform float uVertigo;  // hurrying: the frame breathes and its edges split
 uniform float uCrt;    // how much television: 1 in the dark stages, a quarter in the light
-uniform float uFilm;   // film and an old tube in every stage: grain, a curved glass, gate weave; more in the ending (#96)
+uniform float uFilm;   // film and an old tube in every stage: grain, a curved glass, gate weave; more in the ending
 uniform vec3 uBloom;   // bloom tint: phosphor green in the dark stages, warm white in the light
 // soft edges for whatever is not drawn yet (sketches, ?edge=a|b|c):
 // 1 dusty fog dissolve by depth, 2 dreamy periphery blur, 3 soft silhouettes
@@ -186,7 +186,7 @@ export function createPost(renderer, quality) {
         if (fog) { uniforms.uFogCol.value.copy(fog.color); uniforms.uFogFar.value = fog.isFogExp2 ? 1.52 / fog.density : fog.far; }   // exp2 fog is 90% closed at √ln10 / density
       }
       const acc = window.__app?.zone?.accept ?? 0;
-      uniforms.uBloom.value.set(0.25 + 0.3 * acc, 0.85 - 0.3 * acc, 0.45 + 0.08 * acc);   // green, and in the light a soft (0.55, 0.55, 0.53): no blown halls (#96)
+      uniforms.uBloom.value.set(0.25 + 0.3 * acc, 0.85 - 0.3 * acc, 0.45 + 0.08 * acc);   // green, and in the light a soft (0.55, 0.55, 0.53): no blown halls
       const crt = 1 - 0.75 * acc;                        // the light stage is a quarter as much television
       uniforms.uCrt.value = crt;
       uniforms.uFilm.value += ((window.__app?.soul?.finale ? 1 : 0) - uniforms.uFilm.value) * Math.min(1, dt * 0.5);   // the ending turns into an old reel

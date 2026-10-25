@@ -182,7 +182,7 @@ export function artworkSlots(cx, cz, slots) {
   return chunkArtworkPlan(cx, cz, slots, [0]).map(p => p.slot);
 }
 
-// How big a work hangs (#94). Outside the light the frames keep their old
+// How big a work hangs. Outside the light the frames keep their base
 // width; in the light they grow with the share of works found there, 1.5 m on
 // the long side at first, 2.5 m at the end. A frame takes its size the first
 // time its wall is asked about and keeps it, so a work never grows while

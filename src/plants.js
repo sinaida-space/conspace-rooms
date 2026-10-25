@@ -855,12 +855,12 @@ function protoOf(kind, atmo) {
   }
   return protos[kind];
 }
-// The prototypes of these kinds, built ahead of need (#80): the light asks for
+// The prototypes of these kinds, built ahead of need: the light asks for
 // all ten of its kinds within a few chunks, and building and compiling them in
 // the frame a chunk is dressed cost most of a second. soulpath.js calls this at
 // the crossing into the light, under the tunnel, and compiles what comes back.
 export function warmPlants(kinds, atmo) { return Promise.all(kinds.map(k => protoOf(k, atmo).then(p => p.group))); }
-// Grandmother's plants (#43): the light's own tropics, about two thirds their
+// Grandmother's plants: the light's own tropics, about two thirds their
 // size, in a porcelain pot thrown like her teapot. The leaves are baked into
 // the pot's frame, so their shadow can be cast from the same geometry.
 export const ROOM_PLANTS = TROPICS;

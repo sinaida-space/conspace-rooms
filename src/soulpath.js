@@ -103,7 +103,7 @@ const PORTAL_FAR = 24;           // metres: nor further than this
 const APPEAR = 2.6;              // seconds: a portal coming out of the dark the first time it is seen
 const LOST_FAR = 30;             // metres: a way on (a portal, a work of fear) further than this, out of sight...
 const LOST_FOR = 20;             // seconds: ...for this long, goes out and comes again near the walk
-const FINALE_T = { look: 2.5, rise: 4, say: 5.5, fly: 11, part: 18, arch: 27 };   // seconds into the ending: turn, clouds, the plate, flight, the clouds part, the walk through the arch (#96); slow, one unbroken shot
+const FINALE_T = { look: 2.5, rise: 4, say: 5.5, fly: 11, part: 18, arch: 27 };   // seconds into the ending: turn, clouds, the plate, flight, the clouds part, the walk through the arch; slow, one unbroken shot
 const FINALE_PULL_AT = 3;         // seconds after the arch shows before it starts drawing the visitor in
 const FINALE_PULL_IN = 3;         // seconds the pull takes to reach its pace
 const FINALE_CARRY = 0.55;        // m/s through the tunnel: slow enough to look up at the roses
@@ -520,13 +520,13 @@ export class SoulPath {
     this.chunkStuff = new Map();    // chunk key -> { group, writings[], doors[], kitchen }
     // summoned portals: one plan per target stage (1 fear→memory, 2 →light),
     // set once by _summonPortal and rebuilt into whichever chunk owns it
-    this.stageSeen = [0, 0, 0];     // works seen while in each stage (#34)
+    this.stageSeen = [0, 0, 0];     // works seen while in each stage
     this._stageSeenIds = new Set(); // ids already counted into stageSeen
-    // the light opens (#80): chunks first met there get wider corridors the
+    // the light opens: chunks first met there get wider corridors the
     // more of its works the visitor has noticed (world.js corridorWidth)
     setCorridorWidth(() => this._widthLevel());
     // and its works grow on the same share, 1.5 m to 2.5 m (#94, artworks.js)
-    setArtSize(() => this.stage?.stage === 2 ? 1.6 + 1.6 * this._acceptShare() : null);   // 1.6 m at the portal, 3.2 m by the last (#96)
+    setArtSize(() => this.stage?.stage === 2 ? 1.6 + 1.6 * this._acceptShare() : null);   // 1.6 m at the portal, 3.2 m by the last
     this.summonedPortals = {};      // target -> { x, z, west, cx, cz }
     this.stairwellPlan = null;      // the fear-stage metal door's plan, once summoned
     this._stairDone = false;        // the dream line is said the first time only
@@ -591,7 +591,7 @@ export class SoulPath {
       }
       this._toggleGuide();
     });
-    // PPPPP (the physical key, any layout): the testers' tour (#96). A
+    // PPPPP (the physical key, any layout): the testers' tour. A
     // glowing line on the floor and a run along it, by itself, to every work
     // in turn and through every portal, to the end. Again: it stops.
     this.tour = null; this._fTimes = [];
@@ -934,7 +934,7 @@ export class SoulPath {
           const sh = shadeOf(kp.x, kp.z), hex = n => '#' + n.toString(16).padStart(6, '0');
           if (x1 - x0 > 1.5 && z1 - z0 > 1.5) addRug((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, 0, { field: sh.v[1], dark: sh.v[0], light: hex(sh.fringe) });
         }
-        // a woven runner up to the table (#38): along the most open way that is
+        // a woven runner up to the table: along the most open way that is
         // not the television's, starting past the big rug, stopping short of the wall
         {
           const big = bigRug ? stuff.rugs[stuff.rugs.length - 1] : null, tv = stuff.kitchen.room.tv;
@@ -1109,14 +1109,14 @@ export class SoulPath {
   // ── the finale ─────────────────────────────────────────────────────────
   // The view turns a little toward open floor, and a couple of steps away an
   // arch of roses grows out of it with light pouring through.
-  // The ending (#96). The last work is seen and stays where it hangs; the
+  // The ending. The last work is seen and stays where it hangs; the
   // view lingers on it, then turns to the corridor. Clouds well up from the
   // floor all round and the walls come apart behind them; then there is only
   // cloud, and the visitor flies on through it. The clouds slow, and out of
   // them the arch of roses rises with its path of light; a light plate: it is
   // time to move on. The walk is drawn through the roses to the card.
   _beginFinale() {
-    this.roses.shed(); this.audio?.finale?.(this._lastFound ? parseInt(this._lastFound, 10) - 1 : null);   // its own sound after the waltz's tonic (#94)
+    this.roses.shed(); this.audio?.finale?.(this._lastFound ? parseInt(this._lastFound, 10) - 1 : null);   // its own sound after the waltz's tonic
     const P = this.player;
     // doors, the hospital's furniture and the props stand in the way too
     const segDist = (x, z, a, b) => {
@@ -1163,7 +1163,7 @@ export class SoulPath {
       clouds: false, flown: false, risen: false, said: false, side: null, shown: 0 };
   }
 
-  // Two rows of tall candles leading into the arch over the water (#96):
+  // Two rows of tall candles leading into the arch over the water:
   // one instanced draw for the candles, a soft halo sprite each for the haze
   // round a flame, and their lights handed to the walls' and water's shader
   // (the eight nearest), so they glint in the water like the rest.
@@ -1192,7 +1192,7 @@ export class SoulPath {
     f.candles = { group, halos, lights: sc.lights };
   }
 
-  // The camera in the ending (#96). In the flight it sways and banks a
+  // The camera in the ending. In the flight it sways and banks a
   // little over the clouds; when they part it swings on a Catmull-Rom curve
   // out over the water, round the candles and down onto the path before the
   // arch, looking at the roses all the way, and hands back to the walk there.
@@ -1660,7 +1660,7 @@ export class SoulPath {
 
   // A portal the walk has left far behind, out of sight for a while, is not
   // lost for good: it goes out and is summoned again at a crossing near
-  // wherever the visitor is now, with the same whisper (#53).
+  // wherever the visitor is now, with the same whisper.
   _keepPortalNear(time) {
     const target = this.stage.stage + 1, plan = this.summonedPortals[target], P = this.player;
     if (!plan || this._crossing || this.finale || P.locked) { this._portalLostAt = null; return; }
@@ -1765,7 +1765,7 @@ export class SoulPath {
   }
 
   // The metal door is fear's alone: once the stage has left fear it is taken
-  // away at once, wherever it stands (the crossing hides it) (#43).
+  // away at once, wherever it stands (the crossing hides it).
   _dropStairwell() {
     const plan = this.stairwellPlan;
     if (!plan) return;
@@ -1897,7 +1897,7 @@ export class SoulPath {
 
     // A work shown and walked away from, far and out of sight for a while (or
     // its chunk gone), is hidden again, so the pacing above hangs it anew
-    // near the walk: nobody is left looking for a picture a hundred metres back (#53).
+    // near the walk: nobody is left looking for a picture a hundred metres back.
     const now = this._time ?? 0;
     f.lost ??= new Map();
     for (const key of f.shown) {
@@ -1984,7 +1984,7 @@ export class SoulPath {
     const near = (list, x, z) => { let d = Infinity; for (const p of list) d = Math.min(d, Math.hypot(p.x - x, p.z - z)); return d; };
     const arts = this.artworks.active.filter(a => !a.hidden).map(a => ({ x: a.centerWorld.x, z: a.centerWorld.z, seen: this.seen.has(a.art.id) }));
     const unseen = arts.filter(a => !a.seen);
-    const prox = d => { const k = Math.max(0, Math.min(1, 1 - d / 65)); return k * k * (3 - 2 * k); };   // felt from further off (#53)
+    const prox = d => { const k = Math.max(0, Math.min(1, 1 - d / 65)); return k * k * (3 - 2 * k); };   // felt from further off
     const YELLOW = new THREE.Color(0xffd27a), RED = new THREE.Color(0xff2a14), PALE_WAX = new THREE.Color(0xe6dac0), RED_WAX = new THREE.Color(0x8e1216);
     const items = [], wallAt = [];
     const wardCells = this._wardCells.get(cx + ':' + cz);
@@ -2023,7 +2023,7 @@ export class SoulPath {
       if (this._nearFlammable(cx, cz, x, z) || this._keepOut(cx, cz, x, z, 0.25)) continue;
       items.push({ type: st === 2 ? 'boatCandle' : 'candle', x, z, rot: rnd() * 6.28, flame, wax, spent, tgx, tgz });
     }
-    // The floor under the map (#43): wherever a wall is further than CANDLE_FILL
+    // The floor under the map: wherever a wall is further than CANDLE_FILL
     // from any candle, here or next door, one more is set down, so at least two
     // are always in sight and the way can be read. They take the colour of
     // their place like the rest.
@@ -2095,7 +2095,7 @@ export class SoulPath {
       return out;
     };
     const nWall = Math.round((st === 2 ? 5 : 7) * dens);
-    // the halls too (#43): along the walls of every hall from 4 x 4, about one
+    // the halls too: along the walls of every hall from 4 x 4, about one
     // thing to five cells of its edge, clear of its corners (a plant may stand there)
     const hallWalls = [];
     for (const rm of chunkRooms(cx, cz)) {
@@ -2148,9 +2148,9 @@ export class SoulPath {
     // middle, and in the dead ends of corridors, where nobody has to pass. Fear
     // its pale ficus; grandmother's zone the light's tropics in her porcelain;
     // the light one of its five (the monstera, tropics.js), place to place
-    // the light has twice the green (#80): two a hall, three in a big one, more
+    // the light has twice the green: two a hall, three in a big one, more
     // dead ends, and pots along the walls of its widened corridors
-    const spots = this._hallPlantSpots(cx, cz, free, rp, 1, st >= 1 ? { p: 0.95, side: 4, per: 2 } : { p: 0.8, side: 4 })   // grandmother's zone as green as the light (#96)
+    const spots = this._hallPlantSpots(cx, cz, free, rp, 1, st >= 1 ? { p: 0.95, side: 4, per: 2 } : { p: 0.8, side: 4 })   // grandmother's zone as green as the light
       .concat(this._deadEndSpots(cx, cz, free, rp, st >= 1 ? 3 : 2));
     // (the crossings' three steps of air are kept on the old lane, which the grove never touches)
     const groveFree = (gi, gj) => !solidAtGlobal(gi, gj) && !reserved.has(cellKey(gi, gj)) && !ward?.has(cellKey(gi, gj))
@@ -2226,7 +2226,7 @@ export class SoulPath {
     return out;
   }
 
-  // The dead ends of corridors (#43): an open cell with wall on three sides,
+  // The dead ends of corridors: an open cell with wall on three sides,
   // off the corridor lattice, free with the cell in front of it, gets a plant
   // turned toward the way out, about one dead end in two.
   _deadEndSpots(cx, cz, free, rp, cap = 2) {
@@ -2243,7 +2243,7 @@ export class SoulPath {
     return out.slice(0, cap);
   }
 
-  // The light's widened corridors (#80): pots against the walls of the cells
+  // The light's widened corridors: pots against the walls of the cells
   // the corridor gained, off the old two-cell lane (the way through stays as it
   // was) and off the chunk's seams, where doors stand; a couple more for each
   // level of width, three and a half metres apart and from `taken`.
@@ -2274,7 +2274,7 @@ export class SoulPath {
   _widthLevel() {
     if (this.stage?.stage !== 2) return 0;
     const share = this._acceptShare();
-    return [0.06, 0.22, 0.45].filter(k => share >= k).length;   // wider sooner (#96)
+    return [0.06, 0.22, 0.45].filter(k => share >= k).length;   // wider sooner
   }
 
   // For checks (tests/smoke.mjs): everything flat on the walls of the loaded
@@ -2313,7 +2313,7 @@ export class SoulPath {
     return Math.min(1, this.stageSeen[2] / Math.max(1, left));
   }
 
-  // One rule for everything flat on a wall (#94): nothing over anything else
+  // One rule for everything flat on a wall: nothing over anything else
   // on the same face, its own half width hw plus a hand's gap; and nothing
   // within three steps of a work's frame and placard, on its face or round
   // the corner (artworks.js artworkBusy). busy: the chunk's records so far.
@@ -2354,7 +2354,7 @@ export class SoulPath {
   // A chunk's props are built after its neighbours' candles may already
   // stand: any of those candles now too close to a curtain, a hanging cloth
   // or a plant of this chunk is taken away (hidden, its light dark, never
-  // floated or guttered again), so no flame burns under the cloth (#43).
+  // floated or guttered again), so no flame burns under the cloth.
   _snuffNear(cx, cz) {
     const mine = this._flammable?.get(cx + ':' + cz);
     if (!mine?.length) return;
@@ -3560,7 +3560,7 @@ export class SoulPath {
         if (sw.t >= STAIR_HOLD) {
           sw.phase = 'slam'; sw.t = 0;
           if (sw.cam) {                                   // the view will come round onto the way on
-            // back onto the path, facing the way the visitor was walking, square to the corridor (#43)
+            // back onto the path, facing the way the visitor was walking, square to the corridor
             sw.cam.way = Math.round(sw.cam.yaw0 / (Math.PI / 2)) * (Math.PI / 2);
             sw.cam.yawFrom = P.yaw; sw.cam.pitchFrom = P.pitch; sw.cam.turnT = 0;
           }
@@ -3677,7 +3677,7 @@ export class SoulPath {
       }
       // and the rest of the plain carpets and rugs, ahead of the chunks that will want them
       if (this.stage.stage === 1 && !this._paintedAhead) { this._paintedAhead = true; this._paint.push(...boardPaintJobs()); }
-      // the light's ten plants, built and compiled now, under the tunnel, not in the frame a chunk first wants one (#80)
+      // the light's ten plants, built and compiled now, under the tunnel, not in the frame a chunk first wants one
       if (this.stage.stage === 2 && !this._plantsWarm) {
         this._plantsWarm = true;
         warmPlants(LIGHT_PLANTS.flatMap(n => ['accept-corner:' + n, 'accept-middle:' + n]), this.atmo).then(gs => gs.forEach(g => this._warm(g))).catch(() => {});
@@ -3812,7 +3812,7 @@ export class SoulPath {
     this._updateBeacon(time);
   }
 
-  // Light is the map in fear and in the red rooms (#96): lamps and candles
+  // Light is the map in fear and in the red rooms: lamps and candles
   // burn up near what is still worth finding (unseen works, before the room
   // grandmother's room itself, the portal) and sink low where everything is
   // seen; near the portal every lamp takes on the next zone's light.
@@ -3898,7 +3898,7 @@ export class SoulPath {
     this.audio.nearWork?.(at ? parseInt(at.art.id, 10) - 1 : null);
     // the last work near, in the light: grandmother's waltz, clearer the nearer (#94, music.js)
     // It is heard from further now and from where the work is, by the
-    // walked way round the corners, so headphones can follow it (#96).
+    // walked way round the corners, so headphones can follow it.
     if (this.stage.stage === 2 && !this.finale && this.total - this.seen.size === 1) {
       let last = null, ld = Infinity;
       for (const a of this.artworks.active) {
