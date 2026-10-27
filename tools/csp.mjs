@@ -1,5 +1,5 @@
 // The site's Content-Security-Policy, built from the pages themselves: every
-// inline script (the mirror redirect, the import map, the small module tags)
+// inline script (the GitHub Pages redirect, the import map, the small module tags)
 // is allowed by the hash of its text and by nothing looser. After editing an
 // inline script in any HTML page, run
 //

@@ -6,16 +6,14 @@
 
 ## Links
 
-| | Main site (Vercel) | Mirror (GitHub Pages) |
-|---|---|---|
-| **The labyrinth** | [conspace-rooms.vercel.app](https://conspace-rooms.vercel.app/) | [sinaida-space.github.io/conspace-rooms](https://sinaida-space.github.io/conspace-rooms/?mirror) |
-| **Gallery rider** | [/rider.html](https://conspace-rooms.vercel.app/rider.html?lang=en) | [/rider.html](https://sinaida-space.github.io/conspace-rooms/rider.html?lang=en&mirror) |
-| **Specs** | [/tech.html](https://conspace-rooms.vercel.app/tech.html?lang=en) | [/tech.html](https://sinaida-space.github.io/conspace-rooms/tech.html?lang=en&mirror) |
+| | Site |
+|---|---|
+| **The labyrinth** | [conspace-rooms.vercel.app](https://conspace-rooms.vercel.app/) |
+| **Gallery rider** | [/rider.html](https://conspace-rooms.vercel.app/rider.html?lang=en) |
+| **Specs** | [/tech.html](https://conspace-rooms.vercel.app/tech.html?lang=en) |
 
-Add `?lang=ru` or `?lang=en` to any page for the language. The mirror is a
-backup copy: `?mirror` keeps you on GitHub Pages and the
-browser remembers it. Gesture control works there too: the hand tracker is
-served from the site itself.
+Add `?lang=ru` or `?lang=en` to any page for the language.
+The hand tracker is served from the site itself.
 
 A walk-through web installation by [Sinaida](https://sinaida.eu/) and
 [UVALISS](https://uvaliss.ru/) (Alisa Feer). Eighteen works from the SOULS series
@@ -149,10 +147,9 @@ All asset and module paths are relative, so the site works unmodified under a
 subpath or at a domain root.
 
 The GitHub Pages address (https://sinaida-space.github.io/conspace-rooms/)
-stays on and forwards every page to Vercel: a small script at the top of each
-HTML page redirects any `github.io` host, keeping the path, `?lang` and hash.
-`?mirror` switches the redirect off and is remembered in `localStorage`, so the
-Pages copy works as a mirror; `gallery.html` never redirects.
+stays on and forwards every page to Vercel, which serves the security
+headers: a small script at the top of each HTML page redirects any `github.io`
+host and keeps the path, `?lang` and hash; `gallery.html` never redirects.
 
 ## Soul path
 
@@ -258,7 +255,7 @@ opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 
 - Status: active (maintained by Sinaida Krivchenko)
 - Run locally: `python3 -m http.server 4800`, then open http://localhost:4800/ in Chrome, Edge or Firefox (no build step)
-- Offline / fallback: a GitHub Pages mirror at sinaida-space.github.io/conspace-rooms, kept as a backup copy (`?mirror`)
+- Offline: the gallery build runs from a local folder with no internet (see Gallery mode)
 - Performance tiers: light mode on touch devices runs at reduced quality (tier 0, tighter draw radius, no post-processing, half-resolution artwork textures)
 - Requirements: WebGL2; a webcam is optional and used only for gesture mode (opt-in)
 - Handing over: the rider is rider.html, the specs are tech.html and tech.md; licence terms are in LICENSE, LICENSE-ARTWORK, NOTICE and THIRD-PARTY.md

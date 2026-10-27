@@ -4,10 +4,9 @@
 <meta charset="utf-8">
 <script>
   // Old GitHub Pages link: forward to the Vercel home, keeping the page, ?lang and #hash.
-  // ?mirror keeps the visitor on GitHub Pages and is remembered.
-  var mirror = /[?&]mirror\b/.test(location.search);
-  try { if (mirror) localStorage.setItem('mirror', '1'); mirror = mirror || localStorage.getItem('mirror') === '1'; } catch (e) {}
-  if (location.hostname.endsWith('github.io') && !mirror) {
+  // The Vercel copy carries the security headers, so the Pages copy never plays.
+  try { localStorage.removeItem('mirror'); } catch (e) {}
+  if (location.hostname.endsWith('github.io')) {
     location.replace('https://conspace-rooms.vercel.app' +
       location.pathname.replace(/^\/conspace-rooms/, '') + location.search + location.hash);
   }
@@ -42,8 +41,8 @@
     <li>Аналитики, рекламных трекеров и&nbsp;пикселей третьих сторон.</li>
     <li>Регистрации, входа в&nbsp;аккаунт и&nbsp;форм, собирающих личные данные.</li>
     <li>Cookies для слежки или профилирования.</li>
-    <li>Передачи на&nbsp;сервер того, что вы&nbsp;делаете внутри работы.</li>
   </ul>
+  <p>Изображение с&nbsp;камеры остаётся на&nbsp;вашем устройстве.</p>
 
   <h2>Что хранится и&nbsp;зачем</h2>
   <p>Сайт использует локальное хранилище браузера (это не&nbsp;cookie) только для настроек, которые вы&nbsp;выбираете в&nbsp;самой работе:</p>
@@ -82,7 +81,7 @@
   <p>Ссылки на&nbsp;другие сайты (Instagram, Spotify, сайты авторов) открываются, только если по&nbsp;ним нажать. Дальше действуют правила этих сайтов.</p>
 
   <h2>Хостинг</h2>
-  <p>Сайт размещён на&nbsp;Vercel (Vercel Inc., США). Как любой хостинг, Vercel при каждом запросе обрабатывает технические данные: IP-адрес, адрес страницы, время, тип браузера. Это нужно, чтобы доставить файлы и&nbsp;защитить сервис от&nbsp;атак (законный интерес, ст.&nbsp;6(1)(f) GDPR). Мы эти логи не&nbsp;анализируем, а&nbsp;Vercel Web Analytics и&nbsp;Speed Insights выключены. Данные могут обрабатываться за&nbsp;пределами ЕС. Vercel участвует в&nbsp;EU-US Data Privacy Framework и&nbsp;использует стандартные договорные условия. Подробнее в&nbsp;<a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">политике Vercel</a>.</p>
+  <p>Сайт размещён на&nbsp;Vercel (Vercel Inc., США). Как любой хостинг, Vercel при каждом запросе обрабатывает технические данные: IP-адрес, адрес страницы, время, тип браузера. Это нужно, чтобы доставить файлы и&nbsp;защитить сервис от&nbsp;атак (законный интерес, ст.&nbsp;6(1)(f) GDPR). Картины загружаются по&nbsp;мере приближения к&nbsp;ним, поэтому в&nbsp;этих логах видно и&nbsp;то, какой файл картины запрошен и&nbsp;когда. Мы эти логи не&nbsp;анализируем, а&nbsp;Vercel Web Analytics и&nbsp;Speed Insights выключены. IP-адрес вместе со&nbsp;временем и&nbsp;адресом страницы может указать на&nbsp;конкретного человека, поэтому законы о&nbsp;персональных данных относят этот набор к&nbsp;персональным данным, даже без имени. Сколько их хранить и&nbsp;как защищать, Vercel решает сам по&nbsp;своей <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">политике конфиденциальности</a> и&nbsp;участвует в&nbsp;EU-US Data Privacy Framework. Данные могут обрабатываться за&nbsp;пределами страны, где вы&nbsp;находитесь. Вы&nbsp;вправе узнать, какие данные о&nbsp;вас обрабатываются, попросить исправить или удалить их&nbsp;и&nbsp;возразить против их&nbsp;использования; по&nbsp;логам хостинга пишите в&nbsp;Vercel.</p>
   <p>Старый адрес sinaida-space.github.io/conspace-rooms обслуживает GitHub Pages (GitHub Inc., США). Он&nbsp;только перенаправляет сюда, но&nbsp;GitHub при этом видит те&nbsp;же технические данные запроса, и&nbsp;они тоже могут обрабатываться за&nbsp;пределами ЕС.</p>
 
   <h2>Ваши права</h2>
@@ -108,8 +107,8 @@
     <li>No&nbsp;analytics, no&nbsp;advertising trackers, no&nbsp;third-party marketing pixels.</li>
     <li>No&nbsp;accounts, no&nbsp;login, no&nbsp;forms that collect personal information.</li>
     <li>No&nbsp;cookies for tracking or&nbsp;profiling.</li>
-    <li>Nothing you do inside the experience is&nbsp;sent to&nbsp;a&nbsp;server.</li>
   </ul>
+  <p>Your camera image stays on&nbsp;your device.</p>
 
   <h2>What is stored, and why</h2>
   <p>The site uses your browser’s local storage (not a&nbsp;cookie) only for&nbsp;settings you choose inside the piece:</p>
@@ -148,7 +147,7 @@
   <p>Links to&nbsp;other sites (Instagram, Spotify, the artists’ sites) open only when you click them. From there, those sites’ own policies apply.</p>
 
   <h2>Hosting</h2>
-  <p>The site is&nbsp;hosted on&nbsp;Vercel (Vercel Inc., USA). Like any host, Vercel processes technical data with every request: IP&nbsp;address, page address, time, browser type. It&nbsp;needs this to&nbsp;deliver the files and protect the service from abuse (legitimate interest, GDPR Art.&nbsp;6(1)(f)). We do&nbsp;not analyse these logs, and Vercel Web Analytics and Speed Insights are switched off. This data may be&nbsp;processed outside the EU. Vercel takes part in&nbsp;the EU-US Data Privacy Framework and uses Standard Contractual Clauses. See <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel’s privacy&nbsp;policy</a>.</p>
+  <p>The site is&nbsp;hosted on&nbsp;Vercel (Vercel Inc., USA). Like any host, Vercel processes technical data with every request: IP&nbsp;address, page address, time, browser type. It&nbsp;needs this to&nbsp;deliver the files and protect the service from abuse (legitimate interest, GDPR Art.&nbsp;6(1)(f)). Artworks load as&nbsp;you approach them, so&nbsp;these logs also show which artwork file was requested and when. We do&nbsp;not analyse these logs, and Vercel Web Analytics and Speed Insights are switched off. An&nbsp;IP&nbsp;address, together with the time and the page, can point to&nbsp;a&nbsp;specific person, so&nbsp;data-protection law treats this set as&nbsp;personal data, even though it&nbsp;carries no&nbsp;name. Vercel decides how long to&nbsp;keep it&nbsp;and how to&nbsp;protect&nbsp;it, under its own <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">privacy policy</a>, and takes part in&nbsp;the EU-US Data Privacy Framework. The data may be&nbsp;processed outside the country you are&nbsp;in. You have the right to&nbsp;know what data about you is&nbsp;processed, to&nbsp;have it&nbsp;corrected or&nbsp;deleted, and to&nbsp;object to&nbsp;its use; for these hosting logs, write to&nbsp;Vercel.</p>
   <p>The old address sinaida-space.github.io/conspace-rooms is&nbsp;served by&nbsp;GitHub Pages (GitHub Inc., USA). It&nbsp;only redirects here, but GitHub sees the same technical request data, which may also be&nbsp;processed outside the&nbsp;EU.</p>
 
   <h2>Your rights</h2>
