@@ -11,14 +11,14 @@ govern those parts, not LICENSE or LICENSE-ARTWORK.
 By Alisa Feer (UVALISS), all rights reserved, used with her permission.
 See LICENSE-ARTWORK.
 
-## three.js — `vendor/three.module.js`, `vendor/addons/`
+## three.js r186 — `vendor/three/r186/`
 
 Copyright (c) 2010-2026 three.js authors. SPDX-License-Identifier: MIT
 https://github.com/mrdoob/three.js
 
 ## MediaPipe Tasks Vision — `vendor/mediapipe/`
 
-Version 0.10.14 with its WebAssembly runtime and the hand and face models.
+Version 0.10.35 with its WebAssembly runtime and the hand and face models.
 Copyright Google LLC. Licensed under Apache License 2.0.
 https://github.com/google-ai-edge/mediapipe
 

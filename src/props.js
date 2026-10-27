@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { viewMaterial, nextView, paneAttributes } from './views.js';
 import { sketchParam } from './device.js';
-import { mergeGeometries, mergeVertices } from '../vendor/addons/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from '../vendor/three/r186/addons/BufferGeometryUtils.js';
 import { roundedBox } from './geom.js';
 import { contactShadows } from './shadows.js';
 import { wallBehind, record } from './placement.js';

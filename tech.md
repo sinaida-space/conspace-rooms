@@ -11,7 +11,7 @@ CONSPACE ROOMS is an interactive web installation created by Sinaida Krivchenko 
 ## How it is made
 
 - Vanilla JavaScript modules, no build step, hosted on Vercel.
-- three.js r166 for 3D, bundled with the project. Procedural GLSL materials: the labyrinth uses no texture files.
+- three.js r186 for 3D, bundled with the project. Procedural GLSL materials: the labyrinth uses no texture files.
 - The labyrinth is generated from a seed (the date and time of the visit), so every visit is new.
 - Music and sound are synthesized live with Web Audio. The recordings are Alisa's voice at seven of the works and the yard outside the windows of the light: short cuts of CC0 clips from Freesound (swing by holstebroe, ball by Connorisfine, tram by VasiliiFeshchenko, tram bell by 16HPanskaWillheimova_Sara, carpet beating by ralph.whitehead, sparrows by Kimskell and Profispiesser), listed with links in tech.html.
 - Gesture control uses MediaPipe Tasks Vision in the browser, only after the visitor chooses it.
@@ -26,7 +26,7 @@ Gallery mode runs the piece as an installation, only from a local build on the v
 
 - Project code: Apache License 2.0, © Sinaida Krivchenko.
 - SOULS artworks: © UVALISS (Alisa Feer), all rights reserved.
-- Window views, stairwell pictures and most of the carpets: © Sinaida Krivchenko, made in Midjourney; the rest of the carpets and the runners are drawn in code.
+- Window views, stairwell pictures and most of the carpets: Sinaida Krivchenko, made in Midjourney; the rest of the carpets and the runners are drawn in code.
 - three.js: MIT. MediaPipe: Apache 2.0. Departure Mono: SIL OFL 1.1. Poly Haven models: CC0 1.0.
 
 ## Privacy

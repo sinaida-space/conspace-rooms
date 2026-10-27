@@ -139,7 +139,7 @@ test('the spawn is walkable and its walls face inward', () => {
   }
 });
 
-test('the light opens: a chunk keeps the width it was first met with, and still stitches (#80)', () => {
+test('the light opens: a chunk keeps the width it was first met with, and still stitches', () => {
   // far from the chunks the other tests use, so theirs stay at level 0
   let level = 0;
   setCorridorWidth(() => level);

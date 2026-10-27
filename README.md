@@ -249,7 +249,7 @@ opens straight in Russian. All strings live in `src/i18n.js`. The text pages
 - Two CC0 models from [Poly Haven](https://polyhaven.com/) in `assets/models/` (Old Bed Frame, Wheelchair 01), simplified with glTF-Transform; every other hospital prop is drawn in `src/ward.js`
 - Rough Linen texture, [Poly Haven](https://polyhaven.com/a/rough_linen), CC0, in `assets/textures/linen_*.webp` (weave in grey, normals; 512 px)
 - Monstera Plant by Isa Lousberg, [Poly Pizza](https://poly.pizza/), CC0, in `assets/models/monstera.glb` (its own pot is cut away in `src/plants.js`)
-- [MediaPipe Tasks Vision](https://developers.google.com/mediapipe) 0.10.14 (Apache 2.0) hand landmarker for gesture mode, vendored in `vendor/mediapipe/` with its WebAssembly and both models; loaded lazily, opt-in, and no other host is asked for anything
+- [MediaPipe Tasks Vision](https://developers.google.com/mediapipe) 0.10.35 (Apache 2.0) hand landmarker for gesture mode, vendored in `vendor/mediapipe/` with its WebAssembly and both models; loaded lazily, opt-in, and no other host is asked for anything
 
 ## Support & handoff
 

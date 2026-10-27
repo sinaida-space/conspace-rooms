@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
-import { GLTFLoader } from '../vendor/addons/GLTFLoader.js';
+import { mergeGeometries } from '../vendor/three/r186/addons/BufferGeometryUtils.js';
+import { GLTFLoader } from '../vendor/three/r186/addons/GLTFLoader.js';
 import { shape, ficusBuild, plantLook, plantRng } from './props.js';
 import { CELL, solidAtGlobal } from './world.js';
 import { contactShadows } from './shadows.js';

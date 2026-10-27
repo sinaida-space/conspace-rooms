@@ -30,7 +30,7 @@ const SHOTS = [
     setup: `() => { const p = window.__app.player; p.yaw = Math.PI / 2; p.pitch = 0; }` },
   { file: 'conspace-rooms-still-02-memory-grandmothers-flat.jpg', caption: "grandmother's flat, Memory zone",
     setup: `() => { window.__app.soul._jumpToRoom(); }`, settle: 7000 },
-  // the light near its end: most works found, so the frames hang at their largest (#94);
+  // the light near its end: most works found, so the frames hang at their largest;
   // stand in the corridor a few steps along from the nearest work, looking at it
   { file: 'conspace-rooms-still-03-acceptance.jpg', caption: 'a work by UVALISS in the Acceptance zone',
     setup: `async () => { const a = window.__app, s = a.soul, P = a.player.pos; s.stage.set(2); await new Promise(r => setTimeout(r, 3000));
@@ -44,7 +44,7 @@ const SHOTS = [
       let x = c.x + n.x * k + n.z * along, z = c.z + n.z * k - n.x * along;
       if (solid(x, z)) { x = c.x + n.x * k; z = c.z + n.z * k; }
       P.set(x, z); a.player.vel.set(0, 0); a.player.yaw = Math.atan2(x - c.x, z - c.z); a.player.pitch = 0.04; }`, settle: 7000 },
-  // grandmother's kitchen again in the light, faded, the television and the table under glowing linen (#94)
+  // grandmother's kitchen again in the light, faded, the television and the table under glowing linen
   { file: 'conspace-rooms-still-05-acceptance-kitchen-under-linen.jpg', caption: "grandmother's kitchen under glowing linen, Acceptance zone",
     setup: `async () => { const a = window.__app, s = a.soul, P = a.player.pos; s._jumpToRoom(2); await new Promise(r => setTimeout(r, 2500));
       const v = [...s.chunkStuff.values()].map(st => st.veiled).filter(v => v?.room).sort((p, q) => Math.hypot(p.x - P.x, p.z - P.y) - Math.hypot(q.x - P.x, q.z - P.y))[0];
