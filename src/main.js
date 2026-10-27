@@ -128,13 +128,14 @@ async function boot() {
     camera.updateProjectionMatrix();
   });
 
-  const clock = new THREE.Clock();
+  const timer = new THREE.Timer();
   let elapsed = 0, atmo = null, post = null, audio = null; // not `t`: that name is the translator
   let prevBobSin = 0, prevYaw = 0;
   const dustLight = new THREE.Color();
   const ACC_FOG_0 = new THREE.Color(0xbcafb9), ACC_FOG_1 = new THREE.Color(0xd9d1cd), accFogA = new THREE.Color();
   const frame = () => {
-    const dt = Math.min(clock.getDelta(), 0.05);
+    timer.update();
+    const dt = Math.min(timer.getDelta(), 0.05);
     elapsed += dt;
     quality.govern(dt);
     bugTick(dt);

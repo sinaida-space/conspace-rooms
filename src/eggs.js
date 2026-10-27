@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
+import { mergeGeometries } from '../vendor/three/r186/addons/BufferGeometryUtils.js';
 import { roundedBox } from './geom.js';
 import { t, getLang } from './i18n.js';
 import { calm } from './calm.js';

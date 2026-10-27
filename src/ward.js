@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { GLTFLoader } from '../vendor/addons/GLTFLoader.js';
-import { mergeGeometries, deinterleaveGeometry } from '../vendor/addons/BufferGeometryUtils.js';
+import { GLTFLoader } from '../vendor/three/r186/addons/GLTFLoader.js';
+import { mergeGeometries, deinterleaveGeometry } from '../vendor/three/r186/addons/BufferGeometryUtils.js';
 import { CELL, CHUNK, CEIL_H, CONSPACE_SEED, solidAtGlobal, hash2i, mulberry32, isLampCell } from './world.js';
 import { ORIGIN } from './zones.js';
 import { roundedBox } from './geom.js';

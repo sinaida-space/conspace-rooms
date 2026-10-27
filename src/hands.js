@@ -29,8 +29,8 @@
 //   both palms open (stop) → freezes turning/walking; moving the two open
 //                            palms apart/together zooms in/out (zoomDelta)
 //   thumb-index pinch (either hand) → inspect
-// @mediapipe/tasks-vision 0.10.14 (Apache 2.0), see vendor/mediapipe/README.md
-const MEDIAPIPE = new URL('../vendor/mediapipe/0.10.14/', import.meta.url).href;
+// @mediapipe/tasks-vision 0.10.35 (Apache 2.0), see vendor/mediapipe/README.md
+const MEDIAPIPE = new URL('../vendor/mediapipe/0.10.35/', import.meta.url).href;
 const MODEL_URL = MEDIAPIPE + 'models/hand_landmarker.task';
 const FACE_MODEL_URL = MEDIAPIPE + 'models/blaze_face_short_range.tflite';
 const FACE_EVERY_MS = 250;   // presence needs no more than a few looks a second

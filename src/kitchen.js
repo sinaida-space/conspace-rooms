@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { roundedBox } from './geom.js';
-import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
+import { mergeGeometries } from '../vendor/three/r186/addons/BufferGeometryUtils.js';
 import { CEIL_H, CELL, CHUNK, solidAtGlobal, wallSlots } from './world.js';
 import { t, getLang } from './i18n.js';
 import { mountOrDrop } from './placement.js';

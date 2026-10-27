@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from '../vendor/addons/BufferGeometryUtils.js';
+import { mergeGeometries } from '../vendor/three/r186/addons/BufferGeometryUtils.js';
 import { plantRng } from './props.js';
 import { leafEnvironment } from './plants.js';
 
