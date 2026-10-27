@@ -4,10 +4,9 @@
 <meta charset="utf-8">
 <script>
   // Old GitHub Pages link: forward to the Vercel home, keeping the page, ?lang and #hash.
-  // ?mirror keeps the visitor on GitHub Pages and is remembered.
-  var mirror = /[?&]mirror\b/.test(location.search);
-  try { if (mirror) localStorage.setItem('mirror', '1'); mirror = mirror || localStorage.getItem('mirror') === '1'; } catch (e) {}
-  if (location.hostname.endsWith('github.io') && !mirror) {
+  // The Vercel copy carries the security headers, so the Pages copy never plays.
+  try { localStorage.removeItem('mirror'); } catch (e) {}
+  if (location.hostname.endsWith('github.io')) {
     location.replace('https://conspace-rooms.vercel.app' +
       location.pathname.replace(/^\/conspace-rooms/, '') + location.search + location.hash);
   }
@@ -182,7 +181,7 @@
   <p>Два активных монитора (5&nbsp;дюймов или&nbsp;больше) по&nbsp;бокам экрана, стерео, 70–80&nbsp;дБ в&nbsp;зоне посетителей. Зал должен быть акустически отделён от&nbsp;соседних помещений галереи.</p>
 
   <h2 id="offline-ru">Показ без интернета</h2>
-  <p>Работа автономна: библиотеки, модели распознавания рук, шрифт и&nbsp;звук лежат внутри неё, внешние сервисы ей не&nbsp;нужны. Для показа передаём локальную сборку (архив или&nbsp;флешку). Она запускается на&nbsp;компьютере площадки и&nbsp;работает без сети. На&nbsp;время выставки версия фиксируется: один номер сборки на&nbsp;весь срок, обновления не&nbsp;выходят.</p>
+  <p>Работа автономна: библиотеки, модели распознавания рук, шрифт и&nbsp;звук лежат внутри неё, внешние сервисы ей не&nbsp;нужны. Для показа передаём локальную сборку (архив или&nbsp;флешку). Она запускается на&nbsp;компьютере площадки и&nbsp;работает без сети. На&nbsp;время выставки версия фиксируется: один номер сборки на&nbsp;весь срок, обновления не&nbsp;выходят. К&nbsp;архиву прилагается контрольная сумма SHA-256, по&nbsp;ней площадка проверяет, что получила ту&nbsp;же версию. Сайт работы остаётся для личного просмотра, показы идут только с&nbsp;локальной сборки.</p>
 
   <h2>Питание</h2>
   <dl>
@@ -400,7 +399,7 @@
   <p>Two active monitors (5″ or&nbsp;larger) flanking the screen, stereo, 70–80&nbsp;dB at&nbsp;the visitor zone. The room should be&nbsp;acoustically separated from&nbsp;neighbouring halls.</p>
 
   <h2 id="offline-en">Showing without internet</h2>
-  <p>The piece is&nbsp;self-contained: its libraries, hand-tracking models, font and sound live inside it, and it&nbsp;calls no&nbsp;outside service. For a&nbsp;showing we&nbsp;send a&nbsp;local build (an&nbsp;archive or&nbsp;a&nbsp;USB stick) that runs on&nbsp;the venue’s computer with no&nbsp;network. The version is&nbsp;frozen for the run of&nbsp;the show: one build number throughout, no&nbsp;updates.</p>
+  <p>The piece is&nbsp;self-contained: its libraries, hand-tracking models, font and sound live inside it, and it&nbsp;calls no&nbsp;outside service. For a&nbsp;showing we&nbsp;send a&nbsp;local build (an&nbsp;archive or&nbsp;a&nbsp;USB stick) that runs on&nbsp;the venue’s computer with no&nbsp;network. The version is&nbsp;frozen for the run of&nbsp;the show: one build number throughout, no&nbsp;updates. Each archive comes with its SHA-256 checksum, so&nbsp;the venue can confirm it&nbsp;received the same build. The website stays for personal viewing; showings run from the local build only.</p>
 
   <h2>Power</h2>
   <dl>

@@ -4,11 +4,10 @@
 <meta charset="utf-8">
 <script>
   // Served for any missing path, however deep, so every link below resolves from the site root.
-  // On the GitHub Pages mirror the root is /conspace-rooms/.
-  var mirror = /[?&]mirror\b/.test(location.search);
-  try { if (mirror) localStorage.setItem('mirror', '1'); mirror = mirror || localStorage.getItem('mirror') === '1'; } catch (e) {}
+  // On GitHub Pages the root is /conspace-rooms/; that host only forwards to Vercel.
+  try { localStorage.removeItem('mirror'); } catch (e) {}
   var gh = location.hostname.endsWith('github.io');
-  if (gh && !mirror) {
+  if (gh) {
     location.replace('https://conspace-rooms.vercel.app' +
       location.pathname.replace(/^\/conspace-rooms/, '') + location.search + location.hash);
   }
