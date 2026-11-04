@@ -22,9 +22,9 @@ walk. There is no map and no signage. A rose in the corner grows with every work
 you meet; find all eighteen and an arch of roses rises out of the clouds to let you out. Put on headphones
 and go slowly.
 
-## For entertainment only
+## Content note
 
-CONSPACE ROOMS is for entertainment only. It is not therapy or a psychological or medical service, and nothing in it is advice. What others write about the work is their own view. If you are going through a hard time, we suggest talking to a specialist.
+CONSPACE ROOMS is an artwork, 16+. It holds fear, loss and the memory of loved ones. If something touches you too deeply, talk to someone close or a psychologist. What others write about the work is their own view.
 
 ## What it is about
 
