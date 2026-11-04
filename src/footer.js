@@ -18,7 +18,7 @@ const COPY = {
     more: 'More',
     playlist: 'Companion playlist',
     released: 'October 2026',
-    disclaimer: 'An~artwork. Not~therapy or~a~psychological or~medical service. 16+.',
+    disclaimer: 'An~artwork, 16+. It~holds fear, loss and the memory of~loved ones. If~something touches you too deeply, talk to~someone close or~a~psychologist.',
   },
   ru: {
     tagline: 'Бесконечный лабиринт, в~котором живёт серия~SOULS.',
@@ -33,7 +33,7 @@ const COPY = {
     more: 'Ещё',
     playlist: 'Плейлист к~работе',
     released: 'октябрь 2026',
-    disclaimer: 'Художественная работа. Не~терапия и~не~психологическая или медицинская услуга. 16+.',
+    disclaimer: 'Художественная работа, 16+. Внутри страх, утрата и~память о~близких. Если что-то отзовётся слишком сильно, поговори с~близким человеком или психологом.',
   },
 };
 
