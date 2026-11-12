@@ -80,6 +80,7 @@ const MARK_FADE = 2.5;           // seconds a mark takes to fade once its work i
 const MARK_KEEP = 32;            // metres: marks further behind than this go back to the pool
 const REPATH_EVERY = 0.4;        // seconds
 const SEEN_DIST = 3.2;           // metres: an artwork this close and in view counts as seen
+const SEEN_FAR = 5.0;            // metres: across a hall too, while nothing stands between
 
 const WRITING_Y = 0.72;          // child's height
 const DOOR_WAIT = 2.0;           // seconds of stillness that open a door
@@ -91,7 +92,11 @@ const DOOR_SLAM = 0.22;          // seconds to slam shut
 const PORTAL_SEEN_FEAR = 5;      // works seen in fear before its portal is summoned; fear shows no more than these
 const FEAR_START = 2;            // works hanging in the first corridor, so nobody is lost at the start
 const FEAR_FIND_3 = { writings: 2, things: 3 };   // scrawls and boards, things lying about: then the third work
-const FEAR_TURNS = 2;            // turns of the corridor after the third, before the door and the portal
+const WAY_NEAR = 6;              // metres of walk: the third to the fifth hang no sooner on the way ahead...
+const WAY_FAR = 30;              // ...and no further along it
+const WAY_REACH = 1.8;           // metres: a work this close to the way ahead is passed by it
+const WAY_STEP = 0.3;            // metres per step of the walk foreseen
+const FEAR_TURNS = 2;           // turns of the corridor after the third, before the door and the portal
 const FIND_NEAR = 3.0;           // metres: passing this close, looking its way, a thing counts as found
 const KEEP_STILL = 3, KEEP_LINGER = 9, KEEP_FALLBACK = 3;   // a question kept: seconds still, seconds it stays after; none kept: the last three asked
 const ROOM_STILL = 6;            // seconds standing still in grandmother's room before the clock strikes for you
@@ -481,6 +486,7 @@ export class SoulPath {
     Object.assign(this, { scene, world, player, camera, artworks, audio, post, quality, stage, atmo });
     this._renderer = renderer;                    // for compiling the next stage's shaders under the tunnel (_warmShaders)
     this.ward = createWardKit(atmo, quality);   // what the hospital left behind (fear stage only)
+    player.steerBias = (x, z, axes) => this._steerBias(x, z, axes);   // at a T the walk is led toward the work due
     this._wardCells = new Map();                // chunk key -> cells the island owns
     this._lastStage = stage.stage;
     this._prevPos = { x: player.pos.x, z: player.pos.y };
@@ -635,6 +641,21 @@ export class SoulPath {
       for (const st of this.chunkStuff.values()) for (const b of st.props?.boxes || [])
         if (Math.hypot(b.x - x, b.z - z) < b.r + 1.5) segs.push(...b.segs);
       return segs;
+    };
+    // and a shut door is a wall for the walk's own steering (player.js
+    // _axisClear): holding ▲ the walk turns away from it, never stands at it
+    world.doorAcross = (x, z, fx, fz, dist) => {
+      const x1 = x + fx * dist, z1 = z + fz * dist;
+      for (const d of this._doorsNear(x, z)) {
+        if (d.open) continue;
+        const { a, b } = d.seg;
+        const den = (x1 - x) * (b.z - a.z) - (z1 - z) * (b.x - a.x);
+        if (Math.abs(den) < 1e-9) continue;
+        const t = ((a.x - x) * (b.z - a.z) - (a.z - z) * (b.x - a.x)) / den;
+        const u = ((a.x - x) * (z1 - z) - (a.z - z) * (x1 - x)) / den;
+        if (t >= 0 && t <= 1 && u >= 0 && u <= 1) return true;
+      }
+      return false;
     };
   }
 
@@ -1829,9 +1850,10 @@ export class SoulPath {
   // Fear shows five works. Two hang in the first corridor, so the walk has
   // something to hold on to from the start. The third comes only once the
   // walk has taken in a few scrawls on the walls and a few of the hospital's
-  // things (beds, chairs, trolleys), and appears on a wall somewhere out of
-  // sight, never before the visitor's eyes; the fourth and the fifth each
-  // once the one before is seen. After the fifth
+  // things (beds, chairs, trolleys), and appears out of sight on the way the
+  // walk will take anyway, round its next turn, never before the visitor's
+  // eyes (_wayAhead); the fourth and the fifth the same way, each once the
+  // one before is seen. After the fifth
   // is seen, two more turns of the corridor, and only then the metal door and
   // the portal. A thing counts as found when the walk passes close by,
   // looking its way. Works not found yet are hidden, by instance: the same
@@ -1875,18 +1897,31 @@ export class SoulPath {
     if (this.tour && shownSeen && f.shown.size >= f.unlocked && f.unlocked < PORTAL_SEEN_FEAR) f.unlocked++;   // the testers' tour does not wait on the finds
     if (f.shown.size < f.unlocked && (f.shown.size >= FEAR_START || this._walked > 0.3)) {   // the first two from the first step: the chunks ahead have loaded by then
       const first = f.shown.size < FEAR_START;
+      // every work of fear hangs on the way the walk will take anyway: the
+      // first two in view along it, the third to the fifth round its next
+      // turn. Holding ▲ alone, the corridors lead right to them.
+      const way = !this.tour ? this._wayAhead(this._time ?? 0) : null;
       let best = null, bd = Infinity;
       for (const a of act) {
         if (f.ids.has(a.art.id) || this.seen.has(a.art.id)) continue;
-        const dx = a.centerWorld.x - P.pos.x, dz = a.centerWorld.z - P.pos.y, d = Math.hypot(dx, dz);
-        if (this.tour ? d > 40 : first ? d > 30 : (d < 6 || d > 22)) continue;
+        const dx = a.centerWorld.x - P.pos.x, dz = a.centerWorld.z - P.pos.y;
+        let d = Math.hypot(dx, dz);
+        if (this.tour ? d > 40 : first ? d > 30 : d > WAY_FAR) continue;
         const inSight = this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3);
-        if (!this.tour && !first && (fx * dx + fz * dz) / (d || 1) > 0.2 && inSight) continue;   // never appears in plain view
+        if (way) {
+          if (!first && inSight) continue;                 // never appears in plain view
+          const along = this._alongWay(way, a);            // metres of walk before it is passed
+          // none on the way: as before, somewhere near behind a wall, and the
+          // walk is led to it at each T (_steerBias); one on the way wins
+          const ahead = (fx * dx + fz * dz) / (d || 1) > 0.3;   // the walk goes toward it, not away
+          if (!first) d = along >= WAY_NEAR && along <= WAY_FAR ? along : (d < 6 || d > 22 || !ahead) ? Infinity : 100 + d;
+          if (d === Infinity) continue;
+        }
         // the first two hang where the visitor can see them, ahead of the
         // walk, never behind or to the side; a work behind a wall in the next
         // corridor would leave the walk with nothing, and the third waits on
         // both being seen. With none ahead in sight yet, it waits for one.
-        if (!this.tour && first && (!inSight || (fx * dx + fz * dz) / (d || 1) < 0.35)) continue;
+        if (!this.tour && first && (!inSight || (fx * dx + fz * dz) / (Math.hypot(dx, dz) || 1) < 0.35)) continue;
         if (d < bd) { bd = d; best = a; }
       }
       if (best) {
@@ -1940,6 +1975,78 @@ export class SoulPath {
       (st.ward?.plan.boxes || []).concat(st.beds?.plan.boxes || []).forEach((b, i) => out.push({ key: 'm' + ck + ':' + i, x: b.x, z: b.z, kind: 'things' }));
     }
     return out;
+  }
+
+  // The way the walk takes with ▲ held and nothing else: straight on while
+  // the corridor is open, round a corner where the wall leaves one way only,
+  // kept to the corridor's middle (player.js _rail and _steer). At a T, where
+  // the wall leaves two ways, it follows both: the walk's steering takes the
+  // one that leads to the work due (_steerBias). It ends at a dead end or at
+  // WAY_FAR. Points carry the metres walked to reach them. Foreseen four
+  // times a second.
+  _wayAhead(time) {
+    if (this._way && time - this._way.at < 0.25) return this._way.pts;
+    const P = this.player, yaw = Math.round(P.yaw / (Math.PI / 2)) * (Math.PI / 2);
+    const pts = this._wayFrom(P.pos.x, P.pos.y, Math.round(-Math.sin(yaw)), Math.round(-Math.cos(yaw)));
+    this._way = { at: time, pts };
+    return pts;
+  }
+
+  _wayFrom(x0, z0, dx0, dz0) {
+    const W = this.world;
+    const clear = (x, z, dx, dz, dist) => { if (W.doorAcross?.(x, z, dx, dz, dist)) return false; for (let d = 0.2; d <= dist; d += 0.2) if (!W.isWalkable(x + dx * d, z + dz * d)) return false; return true; };
+    const side = (x, z, dx, dz) => { for (let d = 0.05; d <= 4; d += 0.05) if (!W.isWalkable(x + dx * d, z + dz * d)) return d; return null; };
+    const pts = [], stack = [[x0, z0, dx0, dz0, 0]];
+    while (stack.length && pts.length < 600) {
+      let [x, z, dx, dz, s] = stack.pop();
+      while (s < WAY_FAR) {
+        if (!clear(x, z, dx, dz, 1.6)) {               // a wall ahead: round the corner, or both ways at a T
+          const open = [[dz, -dx], [-dz, dx]].filter(([ox, oz]) => clear(x, z, ox, oz, 2.4));
+          if (!open.length) break;
+          for (const o of open.slice(1)) stack.push([x, z, o[0], o[1], s]);
+          [dx, dz] = open[0];
+        }
+        x += dx * WAY_STEP; z += dz * WAY_STEP; s += WAY_STEP;
+        const a = side(x, z, dz, -dx), b = side(x, z, -dz, dx);   // back to the middle across the way
+        if (a != null && b != null && a + b <= 3) { x += dz * (a - b) / 2; z += -dx * (a - b) / 2; }
+        if (!W.isWalkable(x, z)) break;
+        pts.push({ x, z, s });
+      }
+    }
+    return pts;
+  }
+
+  // player.js _steer at a T: of the open ways (yaw angles), the one with the
+  // shortest way round to the work of fear now due, unseen; null leaves the
+  // walk its own choice. Asked once per T (cached by the cell it is asked from).
+  _steerBias(x, z, axes) {
+    const f = this._fear, st = this.stage.stage;
+    if (st !== 0 || !f) return null;
+    const keyOf = a => a.art.id + '@' + a.centerWorld.x.toFixed(1) + ',' + a.centerWorld.z.toFixed(1);
+    const due = this.artworks.active.find(a => f.shown.has(keyOf(a)) && !this.seen.has(a.art.id));
+    if (!due) return null;
+    const cell = cellOf(x) + ',' + cellOf(z) + ':' + keyOf(due);
+    if (this._bias?.cell === cell) return this._bias.yaw;
+    // the shortest way round the corridors from a step down each branch
+    const tx = cellOf(due.centerWorld.x + due.normal.x * 0.9), tz = cellOf(due.centerWorld.z + due.normal.z * 0.9);
+    const goal = (i, j) => (i === tx && j === tz ? Infinity : -Math.hypot(i - tx, j - tz));
+    let yaw = null, best = Infinity;
+    for (const a of axes) {
+      const gi = cellOf(x - Math.sin(a) * 2 * CELL), gj = cellOf(z - Math.cos(a) * 2 * CELL);
+      if (solidAtGlobal(gi, gj)) continue;
+      const path = this._route(goal, gi, gj, 12000), end = path[path.length - 1];
+      const d = end && end[0] === tx && end[1] === tz ? path.length : Infinity;
+      if (d < best) { best = d; yaw = a; }
+    }
+    this._bias = { cell, yaw };
+    return yaw;
+  }
+
+  // Metres of the way ahead walked before a work is passed, or Infinity.
+  _alongWay(way, a) {
+    const fx = a.centerWorld.x + a.normal.x * 0.6, fz = a.centerWorld.z + a.normal.z * 0.6;   // just in front of the frame
+    for (const p of way) if (Math.hypot(p.x - fx, p.z - fz) < WAY_REACH) return p.s;
+    return Infinity;
   }
 
   // Threshold check, run every frame: cheap when nothing is due.
@@ -3430,7 +3537,8 @@ export class SoulPath {
       if (a.hidden || !a.ready) continue;               // a canvas still dark (its picture on the way) is not a work seen
       const dx = a.centerWorld.x - P.pos.x, dz = a.centerWorld.z - P.pos.y;
       const d = Math.hypot(dx, dz);
-      if (d < SEEN_DIST && (fx * dx + fz * dz) / (d || 1) > 0.5 && !this.seen.has(a.art.id)) { this.seen.add(a.art.id); this._lastFound = a.art.id; }
+      if (d < SEEN_FAR && (fx * dx + fz * dz) / (d || 1) > 0.5 && !this.seen.has(a.art.id)
+        && (d < SEEN_DIST || this._lineOfSight(P.pos.x, P.pos.y, a.centerWorld.x + a.normal.x * 0.3, a.centerWorld.z + a.normal.z * 0.3))) { this.seen.add(a.art.id); this._lastFound = a.art.id; }
     }
     if (this.artworks.inspecting && !this.seen.has(this.artworks.inspecting.art.id)) { this.seen.add(this.artworks.inspecting.art.id); this._lastFound = this.artworks.inspecting.art.id; }
     if (this.seen.size !== this._seenShown) {
@@ -3827,6 +3935,13 @@ export class SoulPath {
         for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) { const k = kitchenPlan(cx + dx, cz + dz); if (k) lures.push({ x: k.x, z: k.z, w: 1 }); }
       }
       lures.sort((a, b) => Math.hypot(a.x - P.pos.x, a.z - P.pos.y) - Math.hypot(b.x - P.pos.x, b.z - P.pos.y));
+      // in fear the lamps also burn up along the scratches' way to the work
+      // due (wayCells): at a crossing the right corridor is the brighter one
+      if (st === 0 && this._markTarget && !this._markTarget.hidden && !this.seen.has(this._markTarget.art.id) && this.wayCells?.length > 6) {
+        const c = this.wayCells, on = [];
+        for (const k of [5, 11, 17]) if (c[k]) on.push({ x: centreOf(c[k][0]), z: centreOf(c[k][1]), w: 1 });
+        lures.splice(0, 0, ...on);
+      }
     }
     const way = st < 2 ? this.summonedPortals[st + 1] : null;
     atmo.setWay(lures.slice(0, 6), way, WAY_COL[st + 1]);
@@ -3871,13 +3986,17 @@ export class SoulPath {
     const voiced = this.artworks.active.filter(a => !a.hidden && VOICED.has(a.art.id))
       .map(a => ({ key: a.chunkKey + ':' + a.art.id, id: a.art.id, x: a.centerWorld.x, z: a.centerWorld.z }));
     alisa.update({ x: P.pos.x, z: P.pos.y }, voiced);
+    // in fear the work due calls from further off and first of all, a note
+    // that says through the walls which way it is (the scratches lead there too)
+    const due = this.stage.stage === 0 && this._markTarget && !this._markTarget.hidden && !this.seen.has(this._markTarget.art.id) ? this._markTarget : null;
     const near = this.artworks.active
       .filter(a => !a.hidden && !alisa.holds(a.chunkKey + ':' + a.art.id, a.art.id))
-      .map(a => ({ a, d: Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y) }))
-      .filter(o => o.d < 30)
+      .map(a => ({ a, d: a === due ? 0 : Math.hypot(a.centerWorld.x - P.pos.x, a.centerWorld.z - P.pos.y) }))
+      .filter(o => o.d < 30 || o.a === due)
       .sort((u, v) => u.d - v.d)
       .slice(0, 4)
       .map(({ a }) => ({
+        due: a === due,
         key: a.chunkKey + ':' + a.art.id,
         index: parseInt(a.art.id, 10) - 1,
         x: a.centerWorld.x, z: a.centerWorld.z,

@@ -49,6 +49,11 @@ body::after {
 }
 .consent-panel {
   border: 1px solid var(--dim); padding: 1.4em 1.6em; max-width: 60ch;
+  box-sizing: border-box; min-width: 0; overflow-wrap: anywhere;   /* a long boot line never pushes it past the screen's edge */
+}
+@media (max-width: 480px) {
+  #lang-gate, #cookie-gate { padding: 4vh 16px; }
+  .consent-panel { padding: 1.1em 1em; }
 }
 #cookie-boot {
   font-size: 0.85em; color: var(--dim); margin-bottom: 1em;

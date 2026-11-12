@@ -46,13 +46,26 @@ test('rooms: one to three per chunk, inside it, each across a corridor band both
   });
 });
 
-test('the corridor lattice is open in every chunk, so chunk edges always stitch', () => {
+test('the corridor lattice is open at every chunk edge and crossing, so chunk edges always stitch', () => {
   eachChunk((cx, cz) => {
     for (const b of BAND) for (let k = 0; k < CHUNK; k++) {
+      if (k >= 6 && k <= 9) continue;                 // the inner stretch may be walled up
       assert.equal(cellSolidLocal(cx, cz, b, k), false);
       assert.equal(cellSolidLocal(cx, cz, k, b), false);
     }
   });
+});
+
+test('some inner stretches of the lattice are walled up, so going straight on meets a wall', () => {
+  let sealed = 0, stretches = 0;
+  eachChunk((cx, cz) => {
+    for (const b of [4, 10]) for (const axis of [0, 1]) {
+      stretches++;
+      const cell = k => (axis ? cellSolidLocal(cx, cz, k, b) : cellSolidLocal(cx, cz, b, k));
+      if ([6, 7, 8, 9].some(cell)) sealed++;
+    }
+  });
+  assert.ok(sealed > 0 && sealed < stretches);
 });
 
 test('global and local solidity agree, negative coordinates too', () => {
@@ -148,6 +161,7 @@ test('the light opens: a chunk keeps the width it was first met with, and still 
     const cx = 200 + lv, cz = -200;
     assert.equal(corridorWidth(cx, cz), lv);
     for (const b of BAND) for (let k = 0; k < CHUNK; k++) {
+      if (lv === 0 && k >= 6 && k <= 9) continue;      // at level 0 the inner stretch may be walled up
       assert.equal(cellSolidLocal(cx, cz, b, k), false);
       assert.equal(cellSolidLocal(cx, cz, k, b), false);
     }
