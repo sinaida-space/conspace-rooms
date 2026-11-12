@@ -38,7 +38,6 @@ const OPENING_REACH = 1.6; // m either side a blocked walk looks for the opening
 const WALL_KEEP = 0.75;    // m: in rooms, a wall closer than this pushes the walk off it
 const ALIGN_RATE = 1.6;    // 1/s, the view settling along the corridor while walking
 const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
-const STEER_SPEED_MIN = 0.3;  // m/s: below this the walk is free to look at a wall
 const STEER_LOOKAHEAD = 1.6;  // m: a wall this close ahead starts the turn
 const STEER_AXIS_CLEAR = 2.4; // m: how far a lattice axis must stay open to count as "open"
 const STEER_RATE = 1.6;       // 1/s, how fast the view eases toward the open way
@@ -202,7 +201,9 @@ export class Player {
     // never straight into a wall: walking forward into one, the view turns
     // softly along the corridor (or round, in a dead end); standing still or
     // turning by mouse/keys the view stays free
-    if (!this.auto && walk > 0 && this.vel.length() > STEER_SPEED_MIN) this._steer(dt);
+    // ▲ held against a wall from a standstill (left facing a work, say) turns too
+    this._steering = false;
+    if (!this.auto && walk > 0) this._steer(dt);
 
     // heading basis (camera faces -Z at yaw 0)
     const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw); // forward
@@ -233,7 +234,7 @@ export class Player {
     if (walk !== 0 && strafe === 0 && !this.auto && dt > 0) {
       const r = this._rail(nx, nz);
       if (r) { nx += r.x * dt; nz += r.z * dt; }
-      const looking = this._keyTurn || performance.now() - (this._lookAt || 0) < 800;
+      const looking = this._keyTurn || this._steering || performance.now() - (this._lookAt || 0) < 800;
       if (Math.abs(this._yawVel) < 0.1 && !looking) {
         const axis = Math.round(this.yaw / (Math.PI / 2)) * (Math.PI / 2);
         this.yaw += wrapAngle(axis - this.yaw) * Math.min(1, dt * ALIGN_RATE);
@@ -327,19 +328,30 @@ export class Player {
       if (diff > backDiff) { backDiff = diff; back = a; }
     }
     let best = null, bestDiff = Infinity;
+    const open = [];
     for (const a of axes) {
       if (a === back) continue;
       const diff = Math.abs(wrapAngle(a - this.yaw));
-      if (diff >= bestDiff) continue;
-      if (this._axisClear(this.pos.x, this.pos.y, -Math.sin(a), -Math.cos(a), STEER_AXIS_CLEAR)) { best = a; bestDiff = diff; }
+      if (!this._axisClear(this.pos.x, this.pos.y, -Math.sin(a), -Math.cos(a), STEER_AXIS_CLEAR)) continue;
+      open.push({ a, diff });
+      if (diff < bestDiff) { best = a; bestDiff = diff; }
+    }
+    // a T, both ways about as near the heading: the walk may be led one way
+    // (soulpath.js _steerBias); otherwise the nearer, as before
+    const tied = open.filter(o => o.diff - bestDiff < 0.35);
+    if (tied.length > 1 && this.steerBias) {
+      const pick = this.steerBias(this.pos.x, this.pos.y, tied.map(o => o.a));
+      if (pick != null) best = pick;
     }
     if (best == null && this._axisClear(this.pos.x, this.pos.y, -Math.sin(back), -Math.cos(back), STEER_AXIS_CLEAR)) best = back; // dead end: turn round
     if (best == null) return;
     this.yaw += wrapAngle(best - this.yaw) * Math.min(1, dt * STEER_RATE);
+    this._steering = true;                         // the turn off a wall: the corridor's own straightening waits
   }
 
   // is the way from (x,z) along (fx,fz) walkable out to `dist`?
   _axisClear(x, z, fx, fz, dist) {
+    if (this.world.doorAcross?.(x, z, fx, fz, dist)) return false;   // a shut door (soulpath.js) is a wall here too
     for (let d = 0.2; d <= dist; d += 0.2) if (!this.world.isWalkable(x + fx * d, z + fz * d)) return false;
     return true;
   }

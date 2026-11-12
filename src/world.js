@@ -121,12 +121,31 @@ export function chunkRooms(cx, cz) {
   return rooms;
 }
 
+// The lattice never runs straight for ever: some of its stretches between two
+// crossings inside a chunk (cells 6..9 of a band) are walled up, so a walk that
+// only goes on ahead meets a wall now and then and has to turn (about one
+// stretch in three; the chunks round the start stay open). `col` is the
+// band's own row or column, `along` the cell along it.
+const SEAL_SHARE = 0.34;
+function sealed(cx, cz, axis, col, along) {
+  if (along < 6 || along > 9) return false;
+  if (cx >= -1 && cx <= 0 && cz >= -1 && cz <= 0) return false;
+  const which = (col < 8 ? 0 : 1) + axis * 2;      // one of the chunk's four stretches
+  return ((hash2i(CONSPACE_SEED ^ 0x5ea1 ^ which, cx, cz) >>> 0) % 1000) / 1000 < SEAL_SHARE;
+}
+
 // ── cell solidity ───────────────────────────────────────────────────────────
 // true = solid wall, false = open (walkable). Local cell (i,j) within chunk.
 export function cellSolidLocal(cx, cz, i, j) {
-  const band = WIDE_BANDS[corridorWidth(cx, cz)];
-  if (band.has(i) || band.has(j)) return false; // corridor lattice
+  const level = corridorWidth(cx, cz), band = WIDE_BANDS[level];
   const rooms = chunkRooms(cx, cz);
+  if (band.has(i) || band.has(j)) {               // corridor lattice
+    const alongJ = band.has(i);                     // a band running along j (its column is i), or along i
+    if (level !== 0 || band.has(i) === band.has(j) || !sealed(cx, cz, alongJ ? 0 : 1, alongJ ? i : j, alongJ ? j : i)) return false;
+    // a sealed stretch: still open where a room takes it in
+    for (const rm of rooms) if (i >= rm.x0 && i <= rm.x1 && j >= rm.y0 && j <= rm.y1) return false;
+    return true;
+  }
   for (let r = 0; r < rooms.length; r++) {
     const rm = rooms[r];
     if (i >= rm.x0 && i <= rm.x1 && j >= rm.y0 && j <= rm.y1) return false;

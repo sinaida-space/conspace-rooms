@@ -431,7 +431,7 @@ export class AudioEngine {
   // Each SOULS piece near the visitor hums its own note (D minor pentatonic,
   // index = artwork number), placed in 3D with a panner. Through a wall the
   // note is muffled by a lowpass; once the work has been seen it quietens.
-  // listener: { x, z, yaw }; sources: [{ key, index, x, z, seen, occluded }]
+  // listener: { x, z, yaw }; sources: [{ key, index, x, z, seen, occluded, due }]
   setArtVoices(listener, sources) {
     if (!this.ctx) return;
     const ctx = this.ctx, now = ctx.currentTime;
@@ -463,9 +463,9 @@ export class AudioEngine {
       this.voices.set(src.key, v);
       v.panner.positionX ? (v.panner.positionX.value = src.x, v.panner.positionZ.value = src.z)
         : v.panner.setPosition(src.x, 1.55, src.z);
-      v.lp.frequency.setTargetAtTime(src.occluded ? 420 : 2600, now, 0.3);
+      v.lp.frequency.setTargetAtTime(src.occluded ? (src.due ? 900 : 420) : 2600, now, 0.3);   // the work due stays clear enough through a wall to tell its side
       const still = 1 + 0.8 * (window.__app?.pace?.slow ?? 0);   // standing still, the works sing louder (pace.js)
-      v.gain.gain.setTargetAtTime(this._silenced ? 0 : (src.seen ? 0.022 : 0.06) * still, now, 0.8);
+      v.gain.gain.setTargetAtTime(this._silenced ? 0 : (src.seen ? 0.022 : src.due ? 0.11 : 0.06) * still, now, 0.8);
     }
   }
 

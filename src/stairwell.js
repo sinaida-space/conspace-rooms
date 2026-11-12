@@ -163,7 +163,31 @@ void main(){
 // An ordinary steel stairwell door, painted over and over in a dull
 // brown-grey: the paint is rough to the eye (grain in every pixel), blistered,
 // rusting through at the handle and along the bottom, scratched. No plaque.
-function metalTex(w, h, { leaf }) {
+// Painting a skin costs ~10 ms on the main thread, too much for the frame that
+// builds a chunk. A few skins of each kind are painted once, in idle time
+// after load, and every stairwell wears one of them on its own texture.
+const SKIN_VARIANTS = 3;
+const skinPool = new Map();   // 'w×h×leaf' -> painted canvases
+function metalTex(w, h, opts) {
+  const key = `${w}×${h}×${!!opts.leaf}`;
+  const pool = skinPool.get(key) || skinPool.set(key, []).get(key);
+  const c = pool.length < SKIN_VARIANTS ? (pool.push(paintMetal(w, h, opts)), pool[pool.length - 1])
+    : pool[Math.floor(Math.random() * pool.length)];
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+const SKIN_LEAF = [256, 584, { leaf: true }], SKIN_FRAME = [64, 512, { leaf: false }];
+if (typeof document !== 'undefined') {
+  const idle = globalThis.requestIdleCallback || (f => setTimeout(f, 800));
+  const paintOne = () => {
+    const kind = [SKIN_LEAF, SKIN_FRAME].find(([w, h, o]) => (skinPool.get(`${w}×${h}×${o.leaf}`)?.length ?? 0) < SKIN_VARIANTS);
+    if (!kind) return;
+    metalTex(...kind).dispose();   // one skin per idle slot, so loading never stalls
+    idle(paintOne);
+  };
+  idle(paintOne);
+}
+function paintMetal(w, h, { leaf }) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d');
   g.fillStyle = leaf ? 'rgb(122,116,106)' : 'rgb(96,92,84)';
@@ -206,8 +230,7 @@ function metalTex(w, h, { leaf }) {
     d[i] += n; d[i + 1] += n; d[i + 2] += n;
   }
   g.putImageData(img, 0, 0);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
-  return t;
+  return c;
 }
 
 // Lit per facet: the corridor's tubes from above and in front, every face of
@@ -278,8 +301,8 @@ export function buildStairwell(atmo, imgUrl) {
   g.add(dw.group);
   const pivot = dw.pivot, door = dw.door;
   // reskin as plain rough steel, lit face by face
-  const leafSkin = metalMat(metalTex(256, 584, { leaf: true }));
-  const frameSkin = metalMat(metalTex(64, 512, { leaf: false }));
+  const leafSkin = metalMat(metalTex(...SKIN_LEAF));
+  const frameSkin = metalMat(metalTex(...SKIN_FRAME));
   const skins = [leafSkin, frameSkin];
   const bulbAt = new THREE.Vector3();
   door.material.map?.dispose(); door.material.dispose(); door.material = leafSkin;
