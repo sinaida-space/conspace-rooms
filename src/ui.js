@@ -182,7 +182,8 @@ export class UI {
       captions.onChange(sync); sync();
     }
     const enter = $('btn-enter');
-    if (enter) enter.disabled = true;
+    // ВОЙТИ stays clickable while dimmed: a press before a choice points at the choice
+    if (enter) enter.setAttribute('aria-disabled', 'true');
     const buttons = Array.from(document.querySelectorAll('#mode-select button'));
     const hasWebcam = !!navigator.mediaDevices?.getUserMedia;
     buttons.forEach(btn => {
@@ -206,12 +207,27 @@ export class UI {
         buttons.forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
         this.selectedMode = btn.dataset.mode;
-        if (enter) enter.disabled = false;
+        if (enter) enter.removeAttribute('aria-disabled');
         this._syncTrain();
         // the choice is made: bring ВОЙТИ into view
         $('btn-enter')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
       });
     });
+  }
+
+  // ВОЙТИ pressed with no way to walk chosen: scroll up to the choice and make it twitch
+  _nudgeModes() {
+    const title = $('controls-title');
+    const modes = $('mode-select');
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    (title || modes)?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    [title, modes].forEach(el => {
+      if (!el) return;
+      el.classList.remove('nudge');
+      void el.offsetWidth; // restart the animation on repeated presses
+      el.classList.add('nudge');
+    });
+    modes?.querySelector('button')?.focus({ preventScroll: true });
   }
 
   // Тренировка stands beside ВОЙТИ only when gestures are chosen (and a camera exists)
@@ -247,7 +263,7 @@ export class UI {
   waitForEnter() {
     return new Promise(res => {
       const go = training => () => {
-        if (!this.selectedMode) return;
+        if (!this.selectedMode) { this._nudgeModes(); return; }
         let cameraStream = null;
         if (this.selectedMode === 'hands' && navigator.mediaDevices?.getUserMedia) {
           cameraStream = navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' } });

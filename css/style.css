@@ -278,6 +278,17 @@ body::after {
 }
 .btn-enter:hover { background: var(--accent); color: var(--bg); }
 .btn-enter:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+.btn-enter[aria-disabled="true"] { opacity: 0.35; cursor: default; }
+.btn-enter[aria-disabled="true"]:hover { background: transparent; color: var(--accent); }
+/* ВОЙТИ pressed before a choice: the title flashes and the ways to walk shake */
+@keyframes nudge-shake { 0%,100% { transform: none; } 20%,60% { transform: translateX(-6px); } 40%,80% { transform: translateX(6px); } }
+@keyframes nudge-flash { 0%,100% { color: var(--fg); } 25%,75% { color: var(--accent); text-shadow: 0 0 8px var(--accent); } }
+.controls-title.nudge { animation: nudge-flash 0.9s ease-in-out 0.3s; }
+#mode-select.nudge button { animation: nudge-shake 0.45s ease-in-out 0.3s 2; border-color: var(--accent); }
+@media (prefers-reduced-motion: reduce) {
+  #mode-select.nudge button { animation: none; }
+  .controls-title.nudge { animation-duration: 1.4s; }
+}
 
 
 .toast {
