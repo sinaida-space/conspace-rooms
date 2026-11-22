@@ -37,7 +37,8 @@ const server = http.createServer(async (req, res) => {
   const file = join(ROOT, path.endsWith('/') ? path + 'index.html' : path);
   if (!file.startsWith(ROOT)) { res.writeHead(403).end(); return; }
   try {
-    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-store' }).end(await readFile(file));
+    const body = await readFile(file);
+    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-store' }).end(body);
   } catch { res.writeHead(404).end(); }
 });
 await new Promise(ok => server.listen(0, '127.0.0.1', ok));

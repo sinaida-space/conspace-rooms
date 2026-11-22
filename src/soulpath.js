@@ -89,14 +89,16 @@ const DOOR_EVERY = 0.0625;       // chance per chunk edge: about one door in eig
 const DOOR_SWING = 1.15;         // radians the door gives way
 const DOOR_HOLD = 4.2;           // seconds the light pours out before the door slams
 const DOOR_SLAM = 0.22;          // seconds to slam shut
-const PORTAL_SEEN_FEAR = 5;      // works seen in fear before its portal is summoned; fear shows no more than these
+const PORTAL_SEEN_FEAR = 3;      // works seen in fear before its portal is summoned; fear shows no more than these
 const FEAR_START = 2;            // works hanging in the first corridor, so nobody is lost at the start
 const FEAR_FIND_3 = { writings: 2, things: 3 };   // scrawls and boards, things lying about: then the third work
 const WAY_NEAR = 6;              // metres of walk: the third to the fifth hang no sooner on the way ahead...
 const WAY_FAR = 30;              // ...and no further along it
 const WAY_REACH = 1.8;           // metres: a work this close to the way ahead is passed by it
 const WAY_STEP = 0.3;            // metres per step of the walk foreseen
-const FEAR_TURNS = 2;           // turns of the corridor after the third, before the door and the portal
+const FEAR_TURNS = 0;           // turns of the corridor after the last work, before the door and the portal
+const FEAR_NEXT_WAIT = 25;      // seconds after a work is seen: the next one is due even without the finds
+const FEAR_MAX = 180;           // seconds in fear: the portal opens whatever has been seen, nobody is kept longer
 const FIND_NEAR = 3.0;           // metres: passing this close, looking its way, a thing counts as found
 const KEEP_STILL = 3, KEEP_LINGER = 9, KEEP_FALLBACK = 3;   // a question kept: seconds still, seconds it stays after; none kept: the last three asked
 const ROOM_STILL = 6;            // seconds standing still in grandmother's room before the clock strikes for you
@@ -1847,15 +1849,15 @@ export class SoulPath {
   }
 
   // ── fear, paced ────────────────────────────────────────────────────────
-  // Fear shows five works. Two hang in the first corridor, so the walk has
-  // something to hold on to from the start. The third comes only once the
-  // walk has taken in a few scrawls on the walls and a few of the hospital's
-  // things (beds, chairs, trolleys), and appears out of sight on the way the
-  // walk will take anyway, round its next turn, never before the visitor's
-  // eyes (_wayAhead); the fourth and the fifth the same way, each once the
-  // one before is seen. After the fifth
-  // is seen, two more turns of the corridor, and only then the metal door and
-  // the portal. A thing counts as found when the walk passes close by,
+  // Fear shows three works, about two or three minutes of walking. Two hang
+  // in the first corridor, so the walk has something to hold on to from the
+  // start. The third comes once the walk has taken in a few scrawls and a few
+  // of the hospital's things (beds, chairs, trolleys), or FEAR_NEXT_WAIT
+  // seconds after the first two are seen, whichever is sooner, and appears
+  // out of sight on the way the walk will take anyway, round its next turn,
+  // never before the visitor's eyes (_wayAhead). Once the third is seen the
+  // metal door and the portal come at once; after FEAR_MAX seconds in fear
+  // they come whatever has been seen. A thing counts as found when the walk passes close by,
   // looking its way. Works not found yet are hidden, by instance: the same
   // picture may hang in several chunks.
   // Grandmother's zone holds five new works: once they are seen, any unseen
@@ -1877,7 +1879,7 @@ export class SoulPath {
       if (this._fear?.hiding) { for (const a of act) { a.hidden = false; if (a.sub) a.sub.visible = true; } this._fear.hiding = false; }
       return;
     }
-    const f = this._fear ||= { shown: new Set(), ids: new Set(), found: new Set(), writings: 0, things: 0, unlocked: FEAR_START, at2: 0, turns: 0, axis: null, hiding: true };
+    const f = this._fear ||= { shown: new Set(), ids: new Set(), found: new Set(), writings: 0, things: 0, unlocked: FEAR_START, at2: 0, t0: this._time ?? 0, turns: 0, axis: null, hiding: true };
     const keyOf = a => a.art.id + '@' + a.centerWorld.x.toFixed(1) + ',' + a.centerWorld.z.toFixed(1);
     for (const a of act) { const on = f.shown.has(keyOf(a)); a.hidden = !on; if (a.sub) a.sub.visible = on; }
 
@@ -1892,7 +1894,10 @@ export class SoulPath {
 
     // the next work is due
     const shownSeen = [...f.ids].every(id => this.seen.has(id));
-    if (f.unlocked === 2 && shownSeen && f.shown.size >= 2 && f.writings >= FEAR_FIND_3.writings && f.things >= FEAR_FIND_3.things) f.unlocked = 3;
+    if (!shownSeen || f.shown.size < f.unlocked) f.at2 = 0;
+    else if (!f.at2) f.at2 = this._time ?? 0;              // everything shown is seen: the wait for the next starts
+    const waited = f.at2 && (this._time ?? 0) - f.at2 >= FEAR_NEXT_WAIT;
+    if (f.unlocked === 2 && shownSeen && f.shown.size >= 2 && (waited || (f.writings >= FEAR_FIND_3.writings && f.things >= FEAR_FIND_3.things))) f.unlocked = 3;
     else if (f.unlocked >= 3 && f.unlocked < PORTAL_SEEN_FEAR && shownSeen && f.shown.size >= f.unlocked) f.unlocked++;   // the fourth and fifth, one at a time
     if (this.tour && shownSeen && f.shown.size >= f.unlocked && f.unlocked < PORTAL_SEEN_FEAR) f.unlocked++;   // the testers' tour does not wait on the finds
     if (f.shown.size < f.unlocked && (f.shown.size >= FEAR_START || this._walked > 0.3)) {   // the first two from the first step: the chunks ahead have loaded by then
@@ -1951,8 +1956,7 @@ export class SoulPath {
 
     // The metal door onto the stairwell (#43, _preplaceStairwell) stands down
     // the corridor ahead after the first work and again, once the first is out of
-    // sight, after the third. After the fifth work turns
-    // count toward the portal.
+    // sight, after the third.
     if ((this._stairCount || 0) === 1 && this.stageSeen[0] === 3) this._retireStairwell();
     if (speed > 0.5) {
       const axis = ((Math.round(P.yaw / (Math.PI / 2)) % 4) + 4) % 4;
@@ -2066,7 +2070,8 @@ export class SoulPath {
       }
       if (pl) return;
     }
-    if (st === 0 && !this.summonedPortals[1] && this.stageSeen[0] >= PORTAL_SEEN_FEAR && (this._fear?.turns ?? FEAR_TURNS) >= FEAR_TURNS) this._summonPortal(1, time);
+    if (st === 0 && !this.summonedPortals[1] && ((this.stageSeen[0] >= PORTAL_SEEN_FEAR && (this._fear?.turns ?? FEAR_TURNS) >= FEAR_TURNS)
+        || (this._fear && time - this._fear.t0 >= FEAR_MAX))) this._summonPortal(1, time);
     else if (st === 0 && this.summonedPortals[1] && !this.stairwellPlan && time - (this._stairTry || 0) > 1) {
       // no wall for the metal door on the first try: look again from wherever the walk is now
       this._stairTry = time;
