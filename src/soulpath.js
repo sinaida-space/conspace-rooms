@@ -31,6 +31,7 @@ import { mountOrDrop } from './placement.js';
 import { buildStairwell } from './stairwell.js';
 import { TUNNEL_TIMES } from './tunnel.js';
 import { createBeacon } from './beacon.js';
+import { createLightRoad } from './lightroad.js';
 import { createCloudSea } from './cloudsea.js';
 
 // ── conspace-rooms · soulpath.js ────────────────────────────────────────────
@@ -74,8 +75,8 @@ const MARK_POOL = 28;             // marks stay where they were scratched, so th
 const CANDLE_NEAR = 12;          // metres: candles within this of a work tell whether it is seen
 const CANDLE_FILL = 1.8;          // metres: no stretch of wall further than this from a candle
 const CANDLE_CURTAIN_GAP = 1.4;  // metres: no flame this close to a window and its curtains
-const CANDLE_DIE = 2.6;          // seconds a candle gutters before it is only an ember
-const EMBER = new THREE.Color(0x2e0c04);
+const CANDLE_DIE = 2.6;          // seconds a candle flickers before it turns lilac
+const EMBER = new THREE.Color(0x8f82dc);   // a candle by works already seen: a cool lilac flame, so the way back reads as 'been here'
 const MARK_FADE = 2.5;           // seconds a mark takes to fade once its work is seen
 const MARK_KEEP = 32;            // metres: marks further behind than this go back to the pool
 const REPATH_EVERY = 0.4;        // seconds
@@ -99,6 +100,9 @@ const WAY_STEP = 0.3;            // metres per step of the walk foreseen
 const FEAR_TURNS = 0;           // turns of the corridor after the last work, before the door and the portal
 const FEAR_NEXT_WAIT = 25;      // seconds after a work is seen: the next one is due even without the finds
 const FEAR_MAX = 180;           // seconds in fear: the portal opens whatever has been seen, nobody is kept longer
+const MEMORY_MAX = 240;         // seconds in grandmother's zone: the room counts as found and the way into the light opens
+const LIGHT_MAX = 360;          // seconds in the light: the ending plays; works not found stay unseen
+const WALK_MAX = 810;           // seconds from the first step: the ending plays wherever the walk is, so a visit stays under 15 minutes
 const FIND_NEAR = 3.0;           // metres: passing this close, looking its way, a thing counts as found
 const KEEP_STILL = 3, KEEP_LINGER = 9, KEEP_FALLBACK = 3;   // a question kept: seconds still, seconds it stays after; none kept: the last three asked
 const ROOM_STILL = 6;            // seconds standing still in grandmother's room before the clock strikes for you
@@ -552,6 +556,7 @@ export class SoulPath {
     const driedGeo = new THREE.PlaneGeometry(0.72, 0.36);
     const driedMats = [0, 1].map(k => new THREE.MeshBasicMaterial({ map: driedTexture(k), color: 0xd8cfbe, fog: false, transparent: true,   // pale like paper in the half-dark
       alphaTest: 0.15, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+    this.lightRoad = createLightRoad(scene, glowTexture(), centreOf);   // acceptance: warm lights along the way to the next work
     this.marks = Array.from({ length: MARK_POOL }, () => {
       const m = new THREE.Mesh(markGeo, this.markMat.clone());   // own opacity, shared texture
       m.visible = false;
@@ -1038,7 +1043,7 @@ export class SoulPath {
   // grandmother's rooms as it is built (shown for the call: only what is
   // visible is compiled).
   _warmShaders() {
-    if (!this._warmPending || !window.__app?.tunnel?.covering) return;
+    if (!this._warmPending || !window.__app?.tunnel?.thick) return;
     this._warmPending = false;
     this._warm(this.scene);
   }
@@ -1059,7 +1064,7 @@ export class SoulPath {
   // just dressed a chunk; the chunk is still far off in the fog by then.
   _stepPaint() {
     if (this._dressed) { this._dressed = false; return; }
-    const until = performance.now() + (window.__app?.tunnel?.covering ? 12 : 4);   // in the portal's flight nothing is drawn: paint more
+    const until = performance.now() + (window.__app?.tunnel?.thick ? 12 : 4);   // the crossing's fog stands thickest: paint more
     while (this._paint.length && performance.now() < until) this._paint.shift()();
   }
 
@@ -1550,23 +1555,19 @@ export class SoulPath {
     }
   }
 
-  // The crossing: the tunnel closes in over the world (tunnel.js), the stage
-  // changes while it hides everything, the walk is held still, and the throat
-  // opens onto the new stage. Without the tunnel (no WebGL extras) at once.
+  // The crossing: the fog thickens round the visitor (tunnel.js), the stage
+  // changes while it stands thickest, and it thins onto the new stage. The
+  // walk goes on through it. Without WebGL extras at once.
   _cross(target) {
     const tunnel = window.__app?.tunnel, P = this.player;
     if (!tunnel) { this.audio?.chime(); if (this.stage.go(target)) this.post?.burst(1.6); return; }
     this.audio?.crossing(target, TUNNEL_TIMES);           // inhale, heartbeats, exhale, and the new place answers
     this._crossing = true;
     if (this.artworks.inspecting) this.artworks._closeInspect();
-    const held = !P.locked;
-    if (held) { P.locked = true; P.vel.set(0, 0); }
-    this.post?.burst(0.8);
+    this.post?.burst(0.5);
     tunnel.start(this.stage.stage, target, () => {
-      if (this.stage.go(target)) this.stage.t = 0.4;      // most of the blend happens unseen: the throat opens onto the new look
-      this.post?.burst(1.2);
+      this.stage.go(target);                              // the colours blend over 2.5 s while the fog thins: the new place shows through
     }, () => {
-      if (held) P.locked = false;
       this._crossing = false;
       this._prevPos = { x: P.pos.x, z: P.pos.y };
     });
@@ -2056,6 +2057,7 @@ export class SoulPath {
   // Threshold check, run every frame: cheap when nothing is due.
   _maybeSummonPortal(time) {
     const st = this.stage.stage;
+    if (st !== this._stageNow) { this._stageNow = st; this._stageT0 = time; }   // each zone's own clock
     // ?dream=1|2|3 (a sketch to judge): the metal door at once, the visitor set before it
     if (DREAM_PREVIEW && st === 0) {
       if (!this.summonedPortals[1]) this._summonPortal(1, time);
@@ -2078,7 +2080,11 @@ export class SoulPath {
       this._summonStairwell(this.summonedPortals[1], cellOf(this.player.pos.x), cellOf(this.player.pos.y));
     }
     else if (st === 1 && !this.summonedPortals[2] && this.visitedRoom && this.stageSeen[1] >= PORTAL_SEEN_MEMORY) this._summonPortal(2, time);
+    else if (st === 1 && !this.summonedPortals[2] && time - this._stageT0 >= MEMORY_MAX) { this.visitedRoom = true; this._summonPortal(2, time); }
     this._keepPortalNear(time);
+    // the light is kept no longer than LIGHT_MAX, the whole walk no longer than WALK_MAX
+    if (!this.finale && !this._timeUp && (st === 2 && time - this._stageT0 >= LIGHT_MAX
+        || this._fear && time - this._fear.t0 >= WALK_MAX)) { this._timeUp = true; this._timeUpFinale(); }
   }
 
   // Candles along the walls are the map. Their colour tells how close you are:
@@ -3033,6 +3039,17 @@ export class SoulPath {
     }, wait);
   }
 
+  // Time is up: the ending plays as 00000 does, but only the works the
+  // visitor really found count as seen.
+  _timeUpFinale() {
+    if (this.finale) return;
+    if (this.artworks.inspecting) this.artworks._closeInspect();
+    this.player.auto = null;
+    const wait = this.stage.set(2) ? 2600 : 0;          // the stage blend takes 2.5 s
+    this.post?.burst(1.4);
+    setTimeout(() => { if (!this.finale) this._beginFinale(); }, wait);
+  }
+
   // ── guide ──────────────────────────────────────────────────────────────
   _toggleGuide() {
     if (this.guide) {
@@ -3518,6 +3535,9 @@ export class SoulPath {
     this.petals.update(dt, time);
     this._time = time;
     this._tickMarks(time);
+    // the light's road: only in acceptance, only toward a work still unseen
+    const roadOn = this.stage.stage === 2 && !this.finale && !!this._markTarget && !this._markTarget.hidden && !this.seen.has(this._markTarget.art.id);
+    this.lightRoad.update(dt, time, this.wayCells, roadOn);
     this.glowPetals.update(dt, time, this.marks, this._water(), this.stage.stage === 2 && !this.finale, this.player.pos, this._petalObstacles());
     this._shadowLight = (this._shadowLight ?? 0) + ((this.stage.stage === 2 ? 1 : 0) - (this._shadowLight ?? 0)) * Math.min(1, dt);
     setShadowLight(this._shadowLight);
@@ -3948,13 +3968,19 @@ export class SoulPath {
         lures.splice(0, 0, ...on);
       }
     }
+    // in the light the lamps burn up along the road to the next work (lightroad.js)
+    if (st === 2 && !this.finale && this._markTarget && !this.seen.has(this._markTarget.art.id)) {
+      const c = this.wayCells || [];
+      for (const k of [4, 10, 16, 22, 28]) if (c[k]) lures.push({ x: centreOf(c[k][0]), z: centreOf(c[k][1]), w: 1 });
+      lures.push({ x: this._markTarget.centerWorld.x, z: this._markTarget.centerWorld.z, w: 1 });
+    }
     const way = st < 2 ? this.summonedPortals[st + 1] : null;
     atmo.setWay(lures.slice(0, 6), way, WAY_COL[st + 1]);
     // each candle near the visitor burns by the same rule
     for (const c of this._nearCandles || []) {
       let k = way ? Math.max(0, 1 - Math.hypot(way.x - c.x, way.z - c.z) / 22) : 0;
       for (const l of lures) k = Math.max(k, Math.max(0, Math.min(1, (15 - Math.hypot(l.x - c.x, l.z - c.z)) / 12)));
-      c.k = st < 2 ? 0.55 + 0.75 * k : 1;
+      c.k = st < 2 ? 0.55 + 0.75 * k : 0.7 + 0.6 * k;   // in the light too: brighter along the road, never dark
     }
   }
 

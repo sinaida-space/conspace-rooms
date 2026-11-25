@@ -157,12 +157,14 @@ async function boot() {
         // the light stage: a lilac pearl at the portal, milk once every work is found
         const accFog = accFogA.copy(ACC_FOG_0).lerp(ACC_FOG_1, window.__app.water?.progress ?? 0).getHex();
         mixZone(scene.fog.color, zone, 0x0e1f14, 0x030905, accFog);
+        window.__app.tunnel?.tintFog?.(scene.fog.color);    // a crossing: the fog lights up in the coming zone's haze
         const base = quality.tier === 0 ? 1.5 : 1;
         scene.fog.density = base * (0.03 * zone.fear + 0.045 * zone.memory + 0.06 * zone.accept    // the light stage stands in milky fog,
           * (1 - 0.4 * (window.__app.soul?._acceptShare() ?? 0)));                                // thinning as its corridors widen
         const vanish = window.__app.vanish ?? 0;           // the finale: the haze swells while the walls go, then thins over open water
         if (vanish > 0) scene.fog.density *= 1 + 1.6 * Math.sin(Math.PI * vanish) - 0.35 * vanish;
         scene.fog.density *= window.__app.finaleFog ?? 1;     // the arch on the water stands in a little more haze
+        scene.fog.density *= window.__app.tunnel?.fog ?? 1;  // a crossing: the fog swallows the walls, then gives the new ones back
         renderer.setClearColor(scene.fog.color);
       }
       if (atmo) atmo.update(dt, elapsed, camera.position, zone);
@@ -198,7 +200,7 @@ async function boot() {
       if (post) post.render(scene, camera, dt, elapsed, speed);
       else renderer.render(scene, camera);
     }
-    window.__app.tunnel?.render(dt);
+    window.__app.tunnel?.render(dt, scene.fog?.color);
     window.__app.clip?.frame();   // copy the frame while the drawing buffer still holds it
     bugFrame();
   };
@@ -219,7 +221,7 @@ async function boot() {
   post = createPost(renderer, quality);
   addEventListener('resize', () => post.resize());
   window.__app.post = post;
-  window.__app.tunnel = (await import('./tunnel.js')).createTunnel(renderer);   // the crossing between stages
+  window.__app.tunnel = (await import('./tunnel.js')).createTunnel(renderer);   // the crossing between stages: a veil of fog
 
   const { AudioEngine } = await import('./audio.js');
   audio = new AudioEngine();
